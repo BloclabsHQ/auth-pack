@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "blockauth"
+version = "0.1.0"
+description = "Auth package for internal usage"
+authors = ["darkprinx <rctushar07@gmail.com>"]
+license = "All Rights Reserved"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+django = "5.1.4"
+pyjwt = "2.9.0"
+requests = "2.32.3"
+djangorestframework = "3.15.2"
+setuptools = "^75.6.0"
+drf-spectacular="0.28.0"
+drf-spectacular-sidecar="2024.12.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

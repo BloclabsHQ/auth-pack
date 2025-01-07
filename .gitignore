@@ -1,0 +1,9 @@
+.idea
+.venv
+venv
+env
+main.py
+*.pyc
+dist
+/block_inter_auth.egg-info
+identifier.sqlite
