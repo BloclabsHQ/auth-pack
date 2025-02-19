@@ -59,11 +59,17 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 ## Installation
 
 #### Direct Installation
-To install the package, you can use pip or poetry. It's recommended to install the package in a virtual environment.
-
-```sh
-pip install git+https://github.com/Mad-Genius-Tech/auth-pack.git
+To install the package, we prefer poetry. It's recommended to install the package in a virtual environment. Also make sure to add ssh to your github account.
+With Poetry add dependency like below in `pyproject.toml` file:
 ```
+[tool.poetry.dependencies]
+...
+blockauth = { git = "git@github.com:BloclabsHQ/auth-pack.git", branch = "dev" }  # <---- give your prefered branch
+...
+```
+Then run the command
+`poetry update`
+
 
 #### Editable Mode
 To install the package in **editable mode**, you can clone the repository and install it in the virtual environment.
