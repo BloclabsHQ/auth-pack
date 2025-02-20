@@ -6,31 +6,31 @@ from rest_framework.settings import APISettings
 
 
 # django configuration
-def django_configure():
-    from django.conf import settings
+# def django_configure():
+#     from django.conf import settings
+#
+#     if not settings.configured:
+#         settings.configure(
+#             SECRET_KEY="open-secret",
+#             INSTALLED_APPS=(
+#                 "django.contrib.admin",
+#                 "django.contrib.auth",
+#                 "django.contrib.contenttypes",
+#                 "django.contrib.sessions",
+#                 "django.contrib.sites",
+#                 "django.contrib.staticfiles",
+#                 "rest_framework",
+#                 "blockauth",
+#             ),
+#         )
+#
+#     try:
+#         import django
+#         django.setup()
+#     except AttributeError:
+#         pass
 
-    if not settings.configured:
-        settings.configure(
-            SECRET_KEY="open-secret",
-            INSTALLED_APPS=(
-                "django.contrib.admin",
-                "django.contrib.auth",
-                "django.contrib.contenttypes",
-                "django.contrib.sessions",
-                "django.contrib.sites",
-                "django.contrib.staticfiles",
-                "rest_framework",
-                "blockauth",
-            ),
-        )
-
-    try:
-        import django
-        django.setup()
-    except AttributeError:
-        pass
-
-django_configure()
+# django_configure()
 
 USER_SETTINGS = getattr(settings, "BLOCK_AUTH_SETTINGS", dict())
 
@@ -77,7 +77,7 @@ IMPORT_STRINGS = (
 auth_settings = APISettings(user_settings=None, defaults=DEFAULTS, import_strings=IMPORT_STRINGS)
 
 def reload_api_settings(**kwargs) -> None:
-    setting = kwargs["setting"]
+    setting = kwargs.get("setting")
     if setting == "BLOCK_AUTH_SETTINGS":
         auth_settings.reload()
 

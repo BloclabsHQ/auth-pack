@@ -245,6 +245,7 @@ AUTH_USER_MODEL = 'app_name.CustomUser'
 
 Make migration related commands in console to reflect database tables related to the app.
 ```shell
+python manage.py makemigrations
 python manage.py migrate
 ```
 
