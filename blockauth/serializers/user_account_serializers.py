@@ -69,10 +69,12 @@ class PasswordlessLoginSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
     verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='link')
     login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
+    preferred_login_url = serializers.URLField(help_text="Verification code will be provided with this frontend login link", required=False)
 
     def validate(self, data):
         method = data.get('method')
         login_id = data.get('login_id')
+        verification_type = data.get('verification_type')
 
         # validate email or phone number format
         if method == 'email':
@@ -83,6 +85,9 @@ class PasswordlessLoginSerializer(serializers.Serializer):
         elif method == "sms":
             if not is_valid_phone_number(login_id):
                 raise ValidationError({'login_id': "enter a valid phone number."})
+
+        if verification_type == 'link' and not data.get('preferred_login_url'):
+            raise ValidationError({'preferred_login_url': "this field is required for 'link' verification type."})
         return data
 
 

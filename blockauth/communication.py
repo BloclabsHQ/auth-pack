@@ -7,7 +7,8 @@ class CommunicationPurpose:
     """
     This class contains the purpose of the communication.
     """
-    OTP_REQUEST = "otp_request"
+    PASSWORDLESS_LOGIN = "passwordless_login"
+    OTP_REQUEST = "otp_request" # todo: need to replace this
     PASSWORD_CHANGE = "password_change"
 
 
@@ -29,5 +30,5 @@ class BaseCommunication(ABC):
 class DummyCommunication(BaseCommunication):
     def communicate(self, purpose: str, context: dict) -> None:
         logger.info(
-            f"Communication class called with context: {context}.Developers will write logic to fulfill the purpose"
+            f"Communication class called with context: {context} for {purpose} purpose. Developers will write logic to fulfill the purpose"
         )

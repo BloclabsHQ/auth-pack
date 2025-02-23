@@ -1,5 +1,7 @@
 import logging
+from datetime import timedelta
 
+import jwt
 from django.contrib.auth import authenticate, get_user_model
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -178,7 +180,7 @@ class PasswordlessLoginView(APIView):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
             wait_time = int(self.rate_limit_handler.wait())
             return Response(
-                data={"detail": f"OTP rate limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -188,11 +190,25 @@ class PasswordlessLoginView(APIView):
         method, login_id, verification_type = data['method'], data['login_id'], data['verification_type']
 
         try:
-            # otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            # otp_instance = OTP.objects.create(identifier=data['email'], otp_code=otp_code, subject=OTPSubject.LOGIN)
-            #
-            # context = model_to_json(otp_instance)
-            # self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
+            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
+            OTP.objects.create(identifier=login_id, otp_code=otp_code, subject=OTPSubject.LOGIN)
+            context = {**data, 'otp_code': otp_code}
+
+            if verification_type == 'link':
+                secret = get_config('SECRET_KEY')
+                payload = {
+                    "payload": {'login_id': login_id, 'otp_code': otp_code},
+                    "exp": timezone.now() + timedelta(minutes=5),
+                    "iat": timezone.now(),
+                }
+                code = jwt.encode(payload, secret, algorithm='HS256')
+                login_url = f'{data['preferred_login_url']}?code={code}'
+
+                context['login_url'] = login_url
+                context.pop('otp_code')
+                context.pop('preferred_login_url')
+
+            self.communication_class.communicate(purpose=CommunicationPurpose.PASSWORDLESS_LOGIN, context=context)
             return Response({'message': f'{verification_type} sent via {method}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)

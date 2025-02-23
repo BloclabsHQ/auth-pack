@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import jwt
 from django.utils import timezone
@@ -19,11 +19,12 @@ class AbstractToken:
 
 
 class Token(AbstractToken):
+    """Auth token class"""
     def __init__(self, secret_key=get_config('SECRET_KEY'), algorithm=get_config('ALGORITHM')):
         self.secret_key = secret_key
         self.algorithm = algorithm
 
-    def generate_token(self, user_id: int, token_type: str, token_lifetime: datetime):
+    def generate_token(self, user_id: int, token_type: str, token_lifetime: timedelta):
         payload = {
             "user_id": user_id,
             "exp": timezone.now() + token_lifetime,
