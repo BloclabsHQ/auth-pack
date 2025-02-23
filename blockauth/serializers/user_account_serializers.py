@@ -4,9 +4,11 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, OTPRequestEmailSerializer
+from django.core.validators import EmailValidator
 import logging
 
 from blockauth.utils.generics import get_password_help_text
+from blockauth.utils.validators import is_valid_phone_number
 
 _User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -51,12 +53,38 @@ class BasicLoginSerializer(serializers.Serializer):
 
         email = data.get('email')
         user = _User.objects.filter(email=email).first()
+        if not user:
+            raise ValidationError({'detail': 'Incorrect email'})
+
         if user and not user.password:
             raise ValidationError({
                 'detail': 'Passwordless account. Please login via passwordless method, social account or reset password.'
             })
 
         return data
+
+"""passwordless login related serializers"""
+
+class PasswordlessLoginSerializer(serializers.Serializer):
+    method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
+    verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='link')
+    login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
+
+    def validate(self, data):
+        method = data.get('method')
+        login_id = data.get('login_id')
+
+        # validate email or phone number format
+        if method == 'email':
+            try:
+                EmailValidator()(login_id)
+            except Exception:
+                raise ValidationError({'login_id': "enter a valid email address."})
+        elif method == "sms":
+            if not is_valid_phone_number(login_id):
+                raise ValidationError({'login_id': "enter a valid phone number."})
+        return data
+
 
 """account password related serializers"""
 

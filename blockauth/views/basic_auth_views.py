@@ -8,7 +8,6 @@ from rest_framework.exceptions import ValidationError, APIException, Authenticat
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
 from blockauth.communication import CommunicationPurpose
 from blockauth.models.otp import OTP, OTPSubject
 from blockauth.schemas.account_settings import password_change_schema, email_change_schema, email_change_confirm_schema
@@ -19,8 +18,9 @@ from blockauth.schemas.signup import signup_schema, signup_resend_otp_schema, si
 from blockauth.serializers.otp_serializers import OTPRequestEmailSerializer, OTPVerifyEmailSerializer
 from blockauth.serializers.user_account_serializers import PasswordChangeSerializer, \
     EmailChangeConfirmationEmailSerializer, \
-    PasswordResetConfirmationEmailSerializer, BasicLoginSerializer, EmailChangeOTPRequestSerializer, \
-    SignUpRequestSerializer, SignUpResendOTPSerializer, RefreshTokenSerializer
+    PasswordResetConfirmationEmailSerializer, EmailChangeOTPRequestSerializer, \
+    SignUpRequestSerializer, SignUpResendOTPSerializer, RefreshTokenSerializer, \
+    PasswordlessLoginSerializer, BasicLoginSerializer
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.rate_limiter import OTPRequestThrottle
@@ -166,10 +166,10 @@ class BasicAuthLoginView(APIView):
 
 class PasswordlessLoginView(APIView):
     """
-    ### Request an OTP for passwordless login with email.
+    ### Send an OTP/Login Link for passwordless login with email.
     """
     permission_classes = (AllowAny,)
-    serializer_class = OTPRequestEmailSerializer
+    serializer_class = PasswordlessLoginSerializer
     rate_limit_handler = OTPRequestThrottle()
     communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
@@ -185,14 +185,15 @@ class PasswordlessLoginView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        method, login_id, verification_type = data['method'], data['login_id'], data['verification_type']
 
         try:
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            otp_instance = OTP.objects.create(identifier=data['email'], otp_code=otp_code, subject=OTPSubject.LOGIN)
-
-            context = model_to_json(otp_instance)
-            self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
-            return Response({'message': 'OTP request sent.'}, status=status.HTTP_200_OK)
+            # otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
+            # otp_instance = OTP.objects.create(identifier=data['email'], otp_code=otp_code, subject=OTPSubject.LOGIN)
+            #
+            # context = model_to_json(otp_instance)
+            # self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
+            return Response({'message': f'{verification_type} sent via {method}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()

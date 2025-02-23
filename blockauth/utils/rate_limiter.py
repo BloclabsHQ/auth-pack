@@ -25,14 +25,14 @@ class OTPRequestThrottle(BaseThrottle):
         self.key = None
 
     def get_cache_key(self, request, subject):
-        identifier = request.data.get('email')
+        login_id = request.data.get('login_id')
         ip_address = request.META.get('REMOTE_ADDR')
 
         # No throttling if email, subject, or IP address is missing
-        if not identifier or not subject or not ip_address:
+        if not login_id or not subject or not ip_address:
             return None
 
-        return f"otp_throttle_{identifier}_{subject}_{ip_address}"
+        return f"otp_throttle_{login_id}_{subject}_{ip_address}"
 
     def allow_request(self, request, subject):
         self.key = self.get_cache_key(request, subject)

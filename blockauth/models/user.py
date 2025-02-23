@@ -1,3 +1,4 @@
+import base64
 import uuid
 
 from django.contrib.auth.models import AbstractUser
@@ -14,13 +15,21 @@ class BlockUser(AbstractUser):
     with this app functionalities.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
+    # identifier = models.CharField(max_length=64, unique=True, blank=True, null=True, help_text='unique key to identify user')
+    email = models.EmailField(unique=True, blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
     is_verified = models.BooleanField(default=False)
     username = None
 
-    USERNAME_FIELD = 'email'
+    USERNAME_FIELD = 'id'
     REQUIRED_FIELDS = ["first_name"]
 
     class Meta:
         managed = False
         abstract = True
+
+    # def save(self, *args, **kwargs):
+    #     if not self.identifier:
+    #         uuid_bytes = uuid.uuid4().bytes
+    #         self.identifier = base64.urlsafe_b64encode(uuid_bytes).rstrip(b'=').decode('utf-8')
+    #     super().save(*args, **kwargs)
