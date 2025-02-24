@@ -22,7 +22,7 @@ from blockauth.serializers.user_account_serializers import PasswordChangeSeriali
     EmailChangeConfirmationEmailSerializer, \
     PasswordResetConfirmationEmailSerializer, EmailChangeOTPRequestSerializer, \
     SignUpRequestSerializer, SignUpResendOTPSerializer, RefreshTokenSerializer, \
-    PasswordlessLoginSerializer, BasicLoginSerializer
+    PasswordlessLoginSerializer, BasicLoginSerializer, PasswordlessLoginConfirmationSerializer
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.rate_limiter import OTPRequestThrottle
@@ -168,13 +168,14 @@ class BasicAuthLoginView(APIView):
 
 class PasswordlessLoginView(APIView):
     """
-    ### Send an OTP/Login Link for passwordless login with email.
+    ### Send an OTP/Login Link for passwordless login with email/phone number.
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
     rate_limit_handler = OTPRequestThrottle()
     communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
+    # todo: adjust schema
     @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
@@ -193,20 +194,10 @@ class PasswordlessLoginView(APIView):
             otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
             OTP.objects.create(identifier=login_id, otp_code=otp_code, subject=OTPSubject.LOGIN)
             context = {**data, 'otp_code': otp_code}
+            context.pop('preferred_login_url')
 
             if verification_type == 'link':
-                secret = get_config('SECRET_KEY')
-                payload = {
-                    "payload": {'login_id': login_id, 'otp_code': otp_code},
-                    "exp": timezone.now() + timedelta(minutes=5),
-                    "iat": timezone.now(),
-                }
-                code = jwt.encode(payload, secret, algorithm='HS256')
-                login_url = f'{data['preferred_login_url']}?code={code}'
-
-                context['login_url'] = login_url
-                context.pop('otp_code')
-                context.pop('preferred_login_url')
+                context['login_url'] = f'{data['preferred_login_url']}?code={otp_code}&login_id={login_id}'
 
             self.communication_class.communicate(purpose=CommunicationPurpose.PASSWORDLESS_LOGIN, context=context)
             return Response({'message': f'{verification_type} sent via {method}.'}, status=status.HTTP_200_OK)
@@ -217,24 +208,29 @@ class PasswordlessLoginView(APIView):
 
 class PasswordlessLoginConfirmView(APIView):
     """
-    ### Verify OTP to login & get access token & refresh token.
+    ### Verify otp code for login & get access token & refresh token.
     """
     permission_classes = (AllowAny,)
-    serializer_class = OTPVerifyEmailSerializer
+    serializer_class = PasswordlessLoginConfirmationSerializer
 
+    # todo: adjust schema
     @extend_schema(summary='Confirm Passwordless Login', tags=['Login'], **passwordless_login_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['email'], otp_code=data['otp_code'], subject=OTPSubject.LOGIN)
+        OTP.validate_otp(identifier=data['login_id'], otp_code=data['code'], subject=OTPSubject.LOGIN)
         try:
-            user, created = _User.objects.get_or_create(email=data['email'], defaults={'is_verified': True})
+            email, phone_number = data.get('email'), data.get('phone_number')
+            if email:
+                user, created = _User.objects.get_or_create(email=email, defaults={'is_verified': True})
+            else:
+                user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={'is_verified': True})
             user.last_login = timezone.now()
             user.save()
 
-            user_data = model_to_json(user)
+            user_data = model_to_json(user, remove_fields=('password',))
 
             if created:
                 post_sign_up_trigger = get_config('POST_SIGNUP_TRIGGER')()

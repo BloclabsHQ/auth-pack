@@ -67,9 +67,12 @@ class BasicLoginSerializer(serializers.Serializer):
 
 class PasswordlessLoginSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
-    verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='link')
+    verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='otp')
     login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
-    preferred_login_url = serializers.URLField(help_text="Verification code will be provided with this frontend login link", required=False)
+    preferred_login_url = serializers.URLField(
+        help_text="Verification info will be provided with login link. Required if verification_type is 'link'",
+        required=False
+    )
 
     def validate(self, data):
         method = data.get('method')
@@ -90,6 +93,22 @@ class PasswordlessLoginSerializer(serializers.Serializer):
             raise ValidationError({'preferred_login_url': "this field is required for 'link' verification type."})
         return data
 
+class PasswordlessLoginConfirmationSerializer(serializers.Serializer):
+    login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
+    code = serializers.CharField(help_text="Verification code received")
+
+    def validate(self, data):
+        login_id = data.get('login_id')
+
+        # validate email or phone number format
+        try:
+            EmailValidator()(login_id)
+            data['email'] = login_id
+        except Exception:
+            if not is_valid_phone_number(login_id):
+                raise ValidationError({'login_id': "invalid email or phone number."})
+            data['phone_number'] = login_id
+        return data
 
 """account password related serializers"""
 
