@@ -3,7 +3,8 @@ from django.utils.text import format_lazy
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
-from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, OTPRequestEmailSerializer
+from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, \
+    OTPRequestSerializer
 from django.core.validators import EmailValidator
 import logging
 
@@ -15,30 +16,44 @@ logger = logging.getLogger(__name__)
 
 """account basic auth related serializers"""
 
-class SignUpRequestSerializer(OTPRequestEmailSerializer):
+class SignUpRequestSerializer(OTPRequestSerializer):
     password = serializers.CharField(
         write_only=True, required=True, validators=[validate_password],
         help_text=format_lazy(get_password_help_text()),
     )
 
     def validate(self, data):
-        email = data.get('email')
-        if _User.objects.filter(email=email).exists():
-            logger.info(f"Email {email} already in use")
-            raise ValidationError({'email': 'Request cannot be processed'})
+        super().validate(data)
+
+        identifier = data.get('identifier')
+        if data.get('email') and _User.objects.filter(email=identifier).exists():
+            logger.info(f"Email {identifier} already in use")
+            raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
+
+        if data.get('phone_number') and _User.objects.filter(phone_number=identifier).exists():
+            logger.info(f"Phone number {identifier} already in use")
+            raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
+
         return data
 
-class SignUpResendOTPSerializer(OTPRequestEmailSerializer):
+class SignUpResendOTPSerializer(OTPRequestSerializer):
     def validate(self, data):
-        email = data.get('email')
-        user = _User.objects.filter(email=email).first()
-        if not user:
-            logger.info(f"User with email:{email} does not exist")
-            raise ValidationError({'email': 'Request cannot be processed'})
+        super().validate(data)
 
-        if user.is_verified:
-            logger.info(f"User with email:{email} is already verified")
-            raise ValidationError({'email': 'Request cannot be processed'})
+        identifier = data.get('identifier')
+        user = _User.objects.filter(email=identifier).first()
+        if data.get('email') and user:
+            logger.info(f"Email {identifier} already in use")
+            raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
+
+        if data.get('phone_number') and user:
+            logger.info(f"Phone number {identifier} already in use")
+            raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
+
+        if user and user.is_verified:
+            logger.info(f"User with identifier {identifier} is already verified")
+            raise ValidationError({'detail': 'request can not be processed.'})
+
         return data
 
 class BasicLoginSerializer(serializers.Serializer):
@@ -65,49 +80,24 @@ class BasicLoginSerializer(serializers.Serializer):
 
 """passwordless login related serializers"""
 
-class PasswordlessLoginSerializer(serializers.Serializer):
-    method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
-    verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='otp')
-    login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
-    preferred_login_url = serializers.URLField(
-        help_text="Verification info will be provided with login link. Required if verification_type is 'link'",
-        required=False
-    )
-
-    def validate(self, data):
-        method = data.get('method')
-        login_id = data.get('login_id')
-        verification_type = data.get('verification_type')
-
-        # validate email or phone number format
-        if method == 'email':
-            try:
-                EmailValidator()(login_id)
-            except Exception:
-                raise ValidationError({'login_id': "enter a valid email address."})
-        elif method == "sms":
-            if not is_valid_phone_number(login_id):
-                raise ValidationError({'login_id': "enter a valid phone number."})
-
-        if verification_type == 'link' and not data.get('preferred_login_url'):
-            raise ValidationError({'preferred_login_url': "this field is required for 'link' verification type."})
-        return data
+class PasswordlessLoginSerializer(OTPRequestSerializer):
+    pass
 
 class PasswordlessLoginConfirmationSerializer(serializers.Serializer):
-    login_id = serializers.CharField(max_length=100, help_text="Email or Phone number")
+    identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
     code = serializers.CharField(help_text="Verification code received")
 
     def validate(self, data):
-        login_id = data.get('login_id')
+        identifier = data.get('identifier')
 
         # validate email or phone number format
         try:
-            EmailValidator()(login_id)
-            data['email'] = login_id
+            EmailValidator()(identifier)
+            data['email'] = identifier
         except Exception:
-            if not is_valid_phone_number(login_id):
-                raise ValidationError({'login_id': "invalid email or phone number."})
-            data['phone_number'] = login_id
+            if not is_valid_phone_number(identifier):
+                raise ValidationError({'identifier': "invalid email or phone number."})
+            data['phone_number'] = identifier
         return data
 
 """account password related serializers"""
@@ -147,7 +137,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 """account email related serializers"""
 
-class EmailChangeOTPRequestSerializer(OTPRequestEmailSerializer):
+class EmailChangeOTPRequestSerializer(OTPRequestSerializer):
     current_password = serializers.CharField(
         write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
     )

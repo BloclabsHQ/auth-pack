@@ -8,8 +8,9 @@ class CommunicationPurpose:
     This class contains the purpose of the communication.
     """
     PASSWORDLESS_LOGIN = "passwordless_login"
-    OTP_REQUEST = "otp_request" # todo: need to replace this
+    SIGN_UP = "sign_up"
     PASSWORD_CHANGE = "password_change"
+    OTP_RESEND = "otp_resend"
 
 
 class BaseCommunication(ABC):

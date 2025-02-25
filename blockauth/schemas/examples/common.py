@@ -84,7 +84,7 @@ otp_rate_limit_exceed = OpenApiExample(
     name='otp_rate_limit_exceed',
     summary='OTP rate limit exceed',
     value={
-        "detail": "OTP rate limit exceeded. Please try again after x seconds."
+        "detail": "Request limit exceeded. Please try again after x seconds."
     }
 )
 

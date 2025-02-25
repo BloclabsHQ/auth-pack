@@ -1,7 +1,4 @@
 import logging
-from datetime import timedelta
-
-import jwt
 from django.contrib.auth import authenticate, get_user_model
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -17,7 +14,7 @@ from blockauth.schemas.login import basic_login_schema, passwordless_login_schem
     refresh_token_schema
 from blockauth.schemas.password_reset import password_reset_schema, password_reset_confirm_schema
 from blockauth.schemas.signup import signup_schema, signup_resend_otp_schema, signup_confirm_schema
-from blockauth.serializers.otp_serializers import OTPRequestEmailSerializer, OTPVerifyEmailSerializer
+from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, OTPRequestSerializer
 from blockauth.serializers.user_account_serializers import PasswordChangeSerializer, \
     EmailChangeConfirmationEmailSerializer, \
     PasswordResetConfirmationEmailSerializer, EmailChangeOTPRequestSerializer, \
@@ -30,6 +27,23 @@ from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
 _User = get_user_model()
+_communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
+
+
+# todo: move this to a separate module
+def send_otp(data, subject, purpose):
+    otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
+    OTP.objects.create(identifier=data['identifier'], otp_code=otp_code, subject=subject)
+
+    # send OTP to user via email/sms etc
+    method, identifier, verification_type = data['method'], data['identifier'], data['verification_type']
+    context = {**data, 'otp_code': otp_code}
+
+    if verification_type == 'link':
+        context['verification_url'] = f'{data['verification_url']}?code={otp_code}&identifier={identifier}'
+
+    _communication_class.communicate(purpose=purpose, context=context)
+
 
 class SignUpView(APIView):
     """
@@ -37,7 +51,6 @@ class SignUpView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpRequestSerializer
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
     @extend_schema(summary='Signup', tags=['Signup'], **signup_schema)
     def post(self, request):
@@ -47,19 +60,17 @@ class SignUpView(APIView):
 
         try:
             pre_signup_trigger = get_config('PRE_SIGNUP_TRIGGER')()
-            pre_signup_trigger.trigger(context={'data': data})
+            pre_signup_trigger.trigger(context=data)
 
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            otp_instance = OTP.objects.create(identifier=data['email'], otp_code=otp_code, subject=OTPSubject.SIGNUP)
+            send_otp(data, OTPSubject.SIGNUP, CommunicationPurpose.SIGN_UP)
 
-            # send OTP to user via email/sms etc
-            context = model_to_json(otp_instance)
-            self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
-
-            user = _User.objects.create(email=data['email'])
+            if data.get('email'):
+                user = _User.objects.create(email=data['email'])
+            else:
+                user = _User.objects.create(phone_number=data['phone_number'])
             user.set_password(data['password'])
             user.save()
-            return Response({'message': 'OTP request sent.'}, status=status.HTTP_200_OK)
+            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -71,7 +82,6 @@ class SignUpResendOTPView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
     rate_limit_handler = OTPRequestThrottle()
 
     @extend_schema(summary='Resend OTP for Signup', tags=['Signup'], **signup_resend_otp_schema)
@@ -79,22 +89,16 @@ class SignUpResendOTPView(APIView):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
             wait_time = int(self.rate_limit_handler.wait())
             return Response(
-                data={"detail": f"OTP rate limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-
         try:
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            otp_instance = OTP.objects.create(identifier=data['email'], otp_code=otp_code, subject=OTPSubject.SIGNUP)
-
-            # send OTP to user via developer's communication class
-            context = model_to_json(otp_instance)
-            self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
-            return Response({'message': 'OTP request sent.'}, status=status.HTTP_200_OK)
+            send_otp(data, OTPSubject.SIGNUP, CommunicationPurpose.OTP_RESEND)
+            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -173,7 +177,6 @@ class PasswordlessLoginView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
     rate_limit_handler = OTPRequestThrottle()
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
     # todo: adjust schema
     @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
@@ -188,19 +191,9 @@ class PasswordlessLoginView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        method, login_id, verification_type = data['method'], data['login_id'], data['verification_type']
-
         try:
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            OTP.objects.create(identifier=login_id, otp_code=otp_code, subject=OTPSubject.LOGIN)
-            context = {**data, 'otp_code': otp_code}
-            context.pop('preferred_login_url')
-
-            if verification_type == 'link':
-                context['login_url'] = f'{data['preferred_login_url']}?code={otp_code}&login_id={login_id}'
-
-            self.communication_class.communicate(purpose=CommunicationPurpose.PASSWORDLESS_LOGIN, context=context)
-            return Response({'message': f'{verification_type} sent via {method}.'}, status=status.HTTP_200_OK)
+            send_otp(data, OTPSubject.LOGIN, CommunicationPurpose.PASSWORDLESS_LOGIN)
+            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -220,7 +213,7 @@ class PasswordlessLoginConfirmView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['login_id'], otp_code=data['code'], subject=OTPSubject.LOGIN)
+        OTP.validate_otp(identifier=data['identifier'], otp_code=data['code'], subject=OTPSubject.LOGIN)
         try:
             email, phone_number = data.get('email'), data.get('phone_number')
             if email:
@@ -279,16 +272,15 @@ class PasswordResetView(APIView):
     ### Request password reset & get OTP.
     """
     permission_classes = (AllowAny,)
-    serializer_class = OTPRequestEmailSerializer
+    serializer_class = OTPRequestSerializer
     rate_limit_handler = OTPRequestThrottle()
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
     @extend_schema(summary='Reset Password', tags=['Password Reset'], **password_reset_schema)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.PASSWORD_RESET):
             wait_time = int(self.rate_limit_handler.wait())
             return Response(
-                data={"detail": f"OTP rate limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -303,7 +295,7 @@ class PasswordResetView(APIView):
             )
 
             context = model_to_json(otp_instance)
-            self.communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
+            _communication_class.communicate(purpose=CommunicationPurpose.OTP_REQUEST, context=context)
             return Response({'message': 'OTP request sent.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -340,7 +332,6 @@ class PasswordChangeView(APIView):
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
     @extend_schema(summary='Change Password', tags=['Account Settings'], **password_change_schema)
     def post(self, request):
@@ -354,7 +345,7 @@ class PasswordChangeView(APIView):
             user.save()
 
             # send email/sms notification to user
-            self.communication_class.communicate(purpose=CommunicationPurpose.PASSWORD_CHANGE, context={})
+            _communication_class.communicate(purpose=CommunicationPurpose.PASSWORD_CHANGE, context={})
             return Response({'message': 'Password has been changed successfully.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -368,14 +359,13 @@ class EmailChangeView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeOTPRequestSerializer
     rate_limit_handler = OTPRequestThrottle()
-    communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
     @extend_schema(summary='Change Account Email', tags=['Account Settings'], **email_change_schema)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.EMAIL_CHANGE):
             wait_time = int(self.rate_limit_handler.wait())
             return Response(
-                data={"detail": f"OTP rate limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -389,7 +379,7 @@ class EmailChangeView(APIView):
                 identifier=data['email'], otp_code=otp_code, subject=OTPSubject.EMAIL_CHANGE
             )
             context = model_to_json(otp_instance)
-            self.communication_class.communicate(context=context, purpose=CommunicationPurpose.OTP_REQUEST)
+            _communication_class.communicate(context=context, purpose=CommunicationPurpose.OTP_REQUEST)
             return Response({'message': 'OTP request sent.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
