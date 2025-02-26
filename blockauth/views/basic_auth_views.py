@@ -14,12 +14,13 @@ from blockauth.schemas.login import basic_login_schema, passwordless_login_schem
     refresh_token_schema
 from blockauth.schemas.password_reset import password_reset_schema, password_reset_confirm_schema
 from blockauth.schemas.signup import signup_schema, signup_resend_otp_schema, signup_confirm_schema
-from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, OTPRequestSerializer
+from blockauth.serializers.otp_serializers import OTPRequestSerializer
 from blockauth.serializers.user_account_serializers import PasswordChangeSerializer, \
     EmailChangeConfirmationEmailSerializer, \
     PasswordResetConfirmationEmailSerializer, EmailChangeOTPRequestSerializer, \
     SignUpRequestSerializer, SignUpResendOTPSerializer, RefreshTokenSerializer, \
-    PasswordlessLoginSerializer, BasicLoginSerializer, PasswordlessLoginConfirmationSerializer
+    PasswordlessLoginSerializer, BasicLoginSerializer, PasswordlessLoginConfirmationSerializer, \
+    SignUpConfirmationSerializer
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.rate_limiter import OTPRequestThrottle
@@ -109,25 +110,29 @@ class SignUpConfirmView(APIView):
     ### Verify OTP to signup
     """
     permission_classes = (AllowAny,)
-    serializer_class = OTPVerifyEmailSerializer
+    serializer_class = SignUpConfirmationSerializer
 
     @extend_schema(summary='Confirm Signup', tags=['Signup'], **signup_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        OTP.validate_otp(identifier=data['email'], otp_code=data['otp_code'], subject=OTPSubject.SIGNUP)
+        OTP.validate_otp(identifier=data['identifier'], otp_code=data['code'], subject=OTPSubject.SIGNUP)
 
         try:
-            user = _User.objects.get(email=data['email'])
+            email, phone_number = data.get('email'), data.get('phone_number')
+            if email:
+                user = _User.objects.get(email=email)
+            else:
+                user = _User.objects.get(phone_number=phone_number)
             user.is_verified = True
             user.save()
 
-            user_data = model_to_json(user)
+            user_data = model_to_json(user, remove_fields=('password',))
 
             post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
-            post_signup_trigger.trigger(context={'user': user_data})
-            return Response(data={'message': 'Sign up succesful'}, status=status.HTTP_200_OK)
+            post_signup_trigger.trigger(context=user_data)
+            return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -144,21 +149,14 @@ class BasicAuthLoginView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-
-        email = serializer.validated_data.get('email')
-        password = serializer.validated_data.get('password')
-        user = authenticate(email=email, password=password)
-        if user is None:
-            raise ValidationError({"detail": "username or password incorrect"})
-
-        if not user.is_verified:
-            raise ValidationError({"detail": "Account is not verified. Complete signup process or login via passwordless method"})
+        data = serializer.validated_data
 
         try:
+            user = data['user']
             user.last_login = timezone.now()
             user.save()
 
-            user_data = model_to_json(user)
+            user_data = model_to_json(user, remove_fields=('password',))
 
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})

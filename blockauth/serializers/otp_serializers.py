@@ -40,6 +40,18 @@ class OTPRequestSerializer(serializers.Serializer):
         return data
 
 
-class OTPVerifyEmailSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=100, help_text="Email to send OTP")
-    otp_code = serializers.CharField(max_length=get_config("OTP_LENGTH"), help_text="OTP received")
+class OTPVerifySerializer(serializers.Serializer):
+    identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
+    code = serializers.CharField(help_text="Verification code received")
+
+    def validate(self, data):
+        identifier = data.get('identifier')
+        # validate email or phone number format
+        try:
+            EmailValidator()(identifier)
+            data['email'] = identifier
+        except Exception:
+            if not is_valid_phone_number(identifier):
+                raise ValidationError({'identifier': "invalid email or phone number."})
+            data['phone_number'] = identifier
+        return data

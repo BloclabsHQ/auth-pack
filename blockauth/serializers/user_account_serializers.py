@@ -1,13 +1,11 @@
 from django.contrib.auth import get_user_model
+from django.core.validators import EmailValidator
 from django.utils.text import format_lazy
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
-from blockauth.serializers.otp_serializers import OTPVerifyEmailSerializer, \
-    OTPRequestSerializer
-from django.core.validators import EmailValidator
+from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 import logging
-
 from blockauth.utils.generics import get_password_help_text
 from blockauth.utils.validators import is_valid_phone_number
 
@@ -27,11 +25,11 @@ class SignUpRequestSerializer(OTPRequestSerializer):
 
         identifier = data.get('identifier')
         if data.get('email') and _User.objects.filter(email=identifier).exists():
-            logger.info(f"Email {identifier} already in use")
+            logger.info(f"Email: {identifier} already in use")
             raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
 
         if data.get('phone_number') and _User.objects.filter(phone_number=identifier).exists():
-            logger.info(f"Phone number {identifier} already in use")
+            logger.info(f"Phone number: {identifier} already in use")
             raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
 
         return data
@@ -41,13 +39,15 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         super().validate(data)
 
         identifier = data.get('identifier')
-        user = _User.objects.filter(email=identifier).first()
-        if data.get('email') and user:
-            logger.info(f"Email {identifier} already in use")
+        query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
+        user = _User.objects.filter(**query_params).first()
+
+        if data.get('email') and not user:
+            logger.info(f"Email: {identifier} does not exists")
             raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
 
-        if data.get('phone_number') and user:
-            logger.info(f"Phone number {identifier} already in use")
+        if data.get('phone_number') and not user:
+            logger.info(f"Phone number: {identifier} does not exists")
             raise ValidationError({'identifier': 'the provided identifier is not acceptable.'})
 
         if user and user.is_verified:
@@ -56,8 +56,15 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
 
         return data
 
+class SignUpConfirmationSerializer(OTPVerifySerializer):
+    pass
+
+
+
+"""basic login related serializers"""
+
 class BasicLoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
+    identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
     password = serializers.CharField(
         write_only=True, required=True, validators=[validate_password],
         help_text=format_lazy(get_password_help_text()),
@@ -66,30 +73,7 @@ class BasicLoginSerializer(serializers.Serializer):
     def validate(self, data):
         super().validate(data)
 
-        email = data.get('email')
-        user = _User.objects.filter(email=email).first()
-        if not user:
-            raise ValidationError({'detail': 'Incorrect email'})
-
-        if user and not user.password:
-            raise ValidationError({
-                'detail': 'Passwordless account. Please login via passwordless method, social account or reset password.'
-            })
-
-        return data
-
-"""passwordless login related serializers"""
-
-class PasswordlessLoginSerializer(OTPRequestSerializer):
-    pass
-
-class PasswordlessLoginConfirmationSerializer(serializers.Serializer):
-    identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
-    code = serializers.CharField(help_text="Verification code received")
-
-    def validate(self, data):
         identifier = data.get('identifier')
-
         # validate email or phone number format
         try:
             EmailValidator()(identifier)
@@ -98,11 +82,44 @@ class PasswordlessLoginConfirmationSerializer(serializers.Serializer):
             if not is_valid_phone_number(identifier):
                 raise ValidationError({'identifier': "invalid email or phone number."})
             data['phone_number'] = identifier
+
+        # validate user or password existence
+        query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
+        user = _User.objects.filter(**query_params).first()
+        if not user:
+            raise ValidationError({'detail': 'Incorrect identifier'})
+
+        # if user and not user.password:
+        #     raise ValidationError({
+        #         'detail': 'Passwordless account. Please login via passwordless method, social account or reset password.'
+        #     })
+
+
+        if not user.check_password(data['password']):
+            raise ValidationError({"detail": "Incorrect password"})
+
+        if not user.is_verified:
+            raise ValidationError(
+                {"detail": "Account is not verified. Complete signup process or login via passwordless method"})
+
+        data['user'] = user
         return data
 
-"""account password related serializers"""
 
-class PasswordResetConfirmationEmailSerializer(OTPVerifyEmailSerializer):
+
+"""passwordless login related serializers"""
+
+class PasswordlessLoginSerializer(OTPRequestSerializer):
+    pass
+
+class PasswordlessLoginConfirmationSerializer(OTPVerifySerializer):
+    pass
+
+
+
+"""account password related serializers"""
+# todo: need to check the serializer
+class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
     new_password = serializers.CharField(
         write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
     )
@@ -135,8 +152,9 @@ class PasswordChangeSerializer(serializers.Serializer):
         return data
 
 
-"""account email related serializers"""
 
+"""account email related serializers"""
+# todo: need to check the serializer
 class EmailChangeOTPRequestSerializer(OTPRequestSerializer):
     current_password = serializers.CharField(
         write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
@@ -152,7 +170,8 @@ class EmailChangeOTPRequestSerializer(OTPRequestSerializer):
             raise ValidationError({'current_password': 'Incorrect password'})
         return data
 
-class EmailChangeConfirmationEmailSerializer(OTPVerifyEmailSerializer):
+# todo: need to check the serializer
+class EmailChangeConfirmationEmailSerializer(OTPVerifySerializer):
     new_email = serializers.EmailField(help_text='New email to replace the current email')
 
     def validate(self, data):
