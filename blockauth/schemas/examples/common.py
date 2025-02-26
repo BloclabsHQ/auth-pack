@@ -36,7 +36,7 @@ common_empty_email_otp = OpenApiExample(
         "email": [
             "This field is required."
         ],
-        "otp_code": [
+        "code": [
             "This field is required."
         ]
     }
@@ -68,7 +68,7 @@ invalid_otp = OpenApiExample(
     name='invalid_otp',
     summary='Invalid OTP',
     value={
-        "otp_code": "Invalid OTP."
+        "code": "Invalid OTP."
     }
 )
 
@@ -76,7 +76,7 @@ expired_otp = OpenApiExample(
     name='expired_otp',
     summary='Expired OTP',
     value={
-        "otp_code": "OTP has expired."
+        "code": "OTP has expired."
     }
 )
 

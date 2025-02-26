@@ -49,7 +49,7 @@ signup_confirm_empty_input = OpenApiExample(
         "email": [
             "This field is required."
         ],
-        "otp_code": [
+        "code": [
             "This field is required."
         ]
     }

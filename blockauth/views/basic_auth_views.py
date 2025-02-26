@@ -33,15 +33,15 @@ _communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
 
 # todo: move this to a separate module
 def send_otp(data, subject, purpose):
-    otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
-    OTP.objects.create(identifier=data['identifier'], otp_code=otp_code, subject=subject)
+    code = OTP.generate_otp(get_config('OTP_LENGTH'))
+    OTP.objects.create(identifier=data['identifier'], code=code, subject=subject)
 
     # send OTP to user via email/sms etc
     method, identifier, verification_type = data['method'], data['identifier'], data['verification_type']
-    context = {**data, 'otp_code': otp_code}
+    context = {**data, 'code': code}
 
     if verification_type == 'link':
-        context['verification_url'] = f'{data['verification_url']}?code={otp_code}&identifier={identifier}'
+        context['verification_url'] = f'{data['verification_url']}?code={code}&identifier={identifier}'
 
     _communication_class.communicate(purpose=purpose, context=context)
 
@@ -117,7 +117,7 @@ class SignUpConfirmView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        OTP.validate_otp(identifier=data['identifier'], otp_code=data['code'], subject=OTPSubject.SIGNUP)
+        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.SIGNUP)
 
         try:
             email, phone_number = data.get('email'), data.get('phone_number')
@@ -211,7 +211,7 @@ class PasswordlessLoginConfirmView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['identifier'], otp_code=data['code'], subject=OTPSubject.LOGIN)
+        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.LOGIN)
         try:
             email, phone_number = data.get('email'), data.get('phone_number')
             if email:
@@ -287,9 +287,9 @@ class PasswordResetView(APIView):
         data = serializer.validated_data
 
         try:
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
+            code = OTP.generate_otp(get_config('OTP_LENGTH'))
             otp_instance = OTP.objects.create(
-                identifier=data['email'], otp_code=otp_code, subject=OTPSubject.PASSWORD_RESET
+                identifier=data['email'], code=code, subject=OTPSubject.PASSWORD_RESET
             )
 
             context = model_to_json(otp_instance)
@@ -313,7 +313,7 @@ class PasswordResetConfirmView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['email'], otp_code=data['otp_code'], subject=OTPSubject.PASSWORD_RESET)
+        OTP.validate_otp(identifier=data['email'], code=data['code'], subject=OTPSubject.PASSWORD_RESET)
         try:
             user = _User.objects.get(email=data['email'])
             user.set_password(data['new_password'])
@@ -372,9 +372,9 @@ class EmailChangeView(APIView):
         data = serializer.validated_data
 
         try:
-            otp_code = OTP.generate_otp(get_config('OTP_LENGTH'))
+            code = OTP.generate_otp(get_config('OTP_LENGTH'))
             otp_instance = OTP.objects.create(
-                identifier=data['email'], otp_code=otp_code, subject=OTPSubject.EMAIL_CHANGE
+                identifier=data['email'], code=code, subject=OTPSubject.EMAIL_CHANGE
             )
             context = model_to_json(otp_instance)
             _communication_class.communicate(context=context, purpose=CommunicationPurpose.OTP_REQUEST)
@@ -397,7 +397,7 @@ class EmailChangeConfirmView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['email'], otp_code=data['otp_code'], subject=OTPSubject.EMAIL_CHANGE)
+        OTP.validate_otp(identifier=data['email'], code=data['code'], subject=OTPSubject.EMAIL_CHANGE)
         try:
             user = request.user
             user.email = data['new_email']

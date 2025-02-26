@@ -39,7 +39,7 @@ signup_confirm_schema = {
                 'type': 'object',
                 'properties': {
                     'email': {'type': 'array', 'items': {'type': 'string'}},
-                    'otp_code': {'type': 'array', 'items': {'type': 'string'}}
+                    'code': {'type': 'array', 'items': {'type': 'string'}}
                 }
             },
             examples=[

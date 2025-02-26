@@ -17,23 +17,23 @@ class OTPSubject(models.TextChoices):
 
 class OTP(models.Model):
     identifier = models.CharField(max_length=100, help_text="Email to send OTP")
-    otp_code = models.CharField(max_length=12)
+    code = models.CharField(max_length=12)
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     subject = models.CharField(max_length=30, choices=OTPSubject.choices)
 
     @classmethod
-    def validate_otp(cls, identifier: str, subject: str, otp_code: str) -> None:
+    def validate_otp(cls, identifier: str, subject: str, code: str) -> None:
         otp_instance = cls.objects.filter(
             identifier=identifier,
             subject=subject,
-        ).values('otp_code', 'created_at', 'is_used').order_by('-created_at').first()
+        ).values('code', 'created_at', 'is_used').order_by('-created_at').first()
 
-        if not otp_instance or otp_instance['otp_code'] != otp_code:
-            raise ValidationError({"otp_code": "Invalid OTP"})
+        if not otp_instance or otp_instance['code'] != code:
+            raise ValidationError({"code": "Invalid OTP"})
 
         if timezone.now() > otp_instance['created_at'] + get_config('OTP_VALIDITY') or otp_instance['is_used']:
-            raise ValidationError({"otp_code": "OTP has expired."})
+            raise ValidationError({"code": "OTP has expired."})
         cls.clear_otp(identifier, subject)
 
     @classmethod
