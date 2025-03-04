@@ -28,7 +28,10 @@ class OTPRequestThrottle(BaseThrottle):
         identifier = request.data.get('identifier')
         ip_address = request.META.get('REMOTE_ADDR')
 
-        # No throttling if email, subject, or IP address is missing
+        if not identifier and request.user:
+            identifier = request.user.id.hex
+
+        # No throttling if identifier, subject, or IP address is missing
         if not identifier or not subject or not ip_address:
             return None
 

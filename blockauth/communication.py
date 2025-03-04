@@ -10,6 +10,8 @@ class CommunicationPurpose:
     PASSWORDLESS_LOGIN = "passwordless_login"
     SIGN_UP = "sign_up"
     PASSWORD_CHANGE = "password_change"
+    EMAIL_CHANGE = "email_change"
+    PASSWORD_RESET = "password_reset"
     OTP_RESEND = "otp_resend"
 
 

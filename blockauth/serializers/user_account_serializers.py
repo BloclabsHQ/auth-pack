@@ -6,6 +6,8 @@ from rest_framework.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 import logging
+
+from blockauth.utils.config import get_config
 from blockauth.utils.generics import get_password_help_text
 from blockauth.utils.validators import is_valid_phone_number
 
@@ -119,6 +121,26 @@ class PasswordlessLoginConfirmationSerializer(OTPVerifySerializer):
 
 """account password related serializers"""
 # todo: need to check the serializer
+
+class PasswordResetRequestSerializer(OTPRequestSerializer):
+    def validate(self, data):
+        super().validate(data)
+
+        identifier = data.get('identifier')
+        query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
+        user = _User.objects.filter(**query_params).first()
+
+        if data.get('email') and not user:
+            logger.info(f"Email: {identifier} does not exists")
+            raise ValidationError({'detail': 'invalid request.'})
+
+        if data.get('phone_number') and not user:
+            logger.info(f"Phone number: {identifier} does not exists")
+            raise ValidationError({'detail': 'invalid request.'})
+
+        return data
+
+
 class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
     new_password = serializers.CharField(
         write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
@@ -155,10 +177,12 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 """account email related serializers"""
 # todo: need to check the serializer
-class EmailChangeOTPRequestSerializer(OTPRequestSerializer):
+class EmailChangeRequestSerializer(serializers.Serializer):
+    new_email = serializers.EmailField(help_text='New email to replace the current email')
     current_password = serializers.CharField(
         write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
     )
+    verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='otp')
 
     def validate(self, data):
         current_password = data.get('current_password')
@@ -168,19 +192,18 @@ class EmailChangeOTPRequestSerializer(OTPRequestSerializer):
 
         if not self.context['request'].user.check_password(current_password):
             raise ValidationError({'current_password': 'Incorrect password'})
-        return data
 
-# todo: need to check the serializer
-class EmailChangeConfirmationEmailSerializer(OTPVerifySerializer):
-    new_email = serializers.EmailField(help_text='New email to replace the current email')
-
-    def validate(self, data):
-        new_email = data.get('new_email')
-        if _User.objects.filter(email=new_email).exists():
-            logger.info(f"Email {new_email} already in use")
+        if _User.objects.filter(email=data['new_email']).exists():
+            logger.info(f"Email {data['new_email']} already in use")
             raise ValidationError({'new_email': 'Can''t use this email'})
+
+        if data['verification_type'] == 'link':
+            get_config('CLIENT_APP_URL')   # internally raise 500 if not configured
         return data
 
+
+class EmailChangeConfirmationSerializer(OTPVerifySerializer):
+    pass
 
 class RefreshTokenSerializer(serializers.Serializer):
     refresh = serializers.CharField(help_text="Refresh token to get new access token", required=True)

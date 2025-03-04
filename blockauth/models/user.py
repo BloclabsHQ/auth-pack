@@ -1,6 +1,5 @@
-import base64
 import uuid
-
+from blockauth.utils.config import get_config
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -20,7 +19,7 @@ class BlockUser(AbstractUser):
     is_verified = models.BooleanField(default=False)
     username = None
 
-    USERNAME_FIELD = 'id'
+    USERNAME_FIELD = get_config('USER_ID_FIELD')
     REQUIRED_FIELDS = ["first_name"]
 
     class Meta:

@@ -13,10 +13,6 @@ class OTPRequestSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
     verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='otp')
     identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
-    verification_url = serializers.URLField(
-        help_text="Verification info will be sent with this url. Required if verification_type is 'link'",
-        required=False
-    )
 
     def validate(self, data):
         method = data.get('method')
@@ -35,8 +31,8 @@ class OTPRequestSerializer(serializers.Serializer):
                 raise ValidationError({'identifier': "enter a valid phone number."})
             data['phone_number'] = identifier
 
-        if verification_type == 'link' and not data.get('verification_url'):
-            raise ValidationError({'verification_url': "this field is required for 'link' verification type."})
+        if verification_type == 'link':
+            get_config('CLIENT_APP_URL')   # internally raise 500 if not configured
         return data
 
 

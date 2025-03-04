@@ -4,34 +4,6 @@ from django.conf import settings
 from django.core.signals import setting_changed
 from rest_framework.settings import APISettings
 
-
-# django configuration
-# def django_configure():
-#     from django.conf import settings
-#
-#     if not settings.configured:
-#         settings.configure(
-#             SECRET_KEY="open-secret",
-#             INSTALLED_APPS=(
-#                 "django.contrib.admin",
-#                 "django.contrib.auth",
-#                 "django.contrib.contenttypes",
-#                 "django.contrib.sessions",
-#                 "django.contrib.sites",
-#                 "django.contrib.staticfiles",
-#                 "rest_framework",
-#                 "blockauth",
-#             ),
-#         )
-#
-#     try:
-#         import django
-#         django.setup()
-#     except AttributeError:
-#         pass
-
-# django_configure()
-
 USER_SETTINGS = getattr(settings, "BLOCK_AUTH_SETTINGS", dict())
 
 DEFAULTS = {
@@ -51,7 +23,7 @@ DEFAULTS = {
     "PRE_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPreSignupTrigger',
     "POST_LOGIN_TRIGGER": 'blockauth.triggers.DummyPostLoginTrigger',
 
-    # other utill classes
+    # other util classes
     "DEFAULT_COMMUNICATION_CLASS": "blockauth.communication.DummyCommunication",
 }
 

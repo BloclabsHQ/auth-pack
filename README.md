@@ -129,15 +129,18 @@ own class and add the class path in the settings. Details disccussed in the [Uti
 
 ```python
 BLOCK_AUTH_SETTINGS = {
+    "CLIENT_APP_URL": "http://localhost:3000", # this is the URL of the client app which will communicate with the backend API
+    
     "ACCESS_TOKEN_LIFETIME": timedelta(seconds=3600),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ALGORITHM": "HS256",
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",   # Field name in the user model which will be used as user id in the JWT token
+    
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
     "OTP_REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
-    
+        
     "AUTH_PROVIDERS": {
         "GOOGLE": {
             "CLIENT_ID": os.getenv('GOOGLE_CLIENT_ID'),
