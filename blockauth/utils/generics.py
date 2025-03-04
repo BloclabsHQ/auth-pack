@@ -6,7 +6,7 @@ from django.forms import model_to_dict
 
 _DEFAULT_FIELDS_TO_REMOVE = ['password', 'groups', 'user_permissions']
 
-def model_to_json(model_instance: object, remove_fields: tuple[str] = ()) -> dict:
+def model_to_json(model_instance, remove_fields: tuple[str] = ()) -> dict:
     """
     Convert model instance to json/dict.
     :param model_instance: model instance

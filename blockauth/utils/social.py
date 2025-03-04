@@ -8,7 +8,7 @@ from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 _User = get_user_model()
 
-def social_login(email: str, name: str, provider_data: dict[str]) -> Response:
+def social_login(email: str, name: str, provider_data: dict) -> Response:
     user, created = _User.objects.get_or_create(email=email, defaults={'first_name': name, 'email': email, 'is_verified': True})
     user.last_login = timezone.now()
     user.save()

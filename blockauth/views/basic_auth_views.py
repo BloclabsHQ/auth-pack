@@ -7,7 +7,7 @@ from rest_framework.exceptions import APIException, AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from blockauth.communication import CommunicationPurpose
+from blockauth.notification import send_otp, NotificationEvent
 from blockauth.models.otp import OTP, OTPSubject
 from blockauth.schemas.account_settings import password_change_schema, email_change_schema, email_change_confirm_schema
 from blockauth.schemas.login import basic_login_schema, passwordless_login_schema, passwordless_login_confirm_schema, \
@@ -27,23 +27,6 @@ from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
 _User = get_user_model()
-# todo: change communication function params
-_communication_class = get_config('DEFAULT_COMMUNICATION_CLASS')()
-
-
-# todo: move this to a separate module
-def send_otp(data, subject, purpose):
-    code = OTP.generate_otp(get_config('OTP_LENGTH'))
-    OTP.objects.create(identifier=data['identifier'], code=code, subject=subject)
-
-    # send OTP to user via email/sms etc
-    method, identifier, verification_type = data['method'], data['identifier'], data['verification_type']
-    context = {**data, 'code': code}
-
-    if verification_type == 'link' and get_config('CLIENT_APP_URL'):
-        context['verification_url'] = f'{get_config('CLIENT_APP_URL')}/{purpose}/verify?code={code}&identifier={identifier}'
-
-    _communication_class.communicate(purpose=purpose, context=context)
 
 
 class SignUpView(APIView):
@@ -63,7 +46,7 @@ class SignUpView(APIView):
             pre_signup_trigger = get_config('PRE_SIGNUP_TRIGGER')()
             pre_signup_trigger.trigger(context=data)
 
-            send_otp(data, OTPSubject.SIGNUP, CommunicationPurpose.SIGN_UP)
+            send_otp(data=data, subject=OTPSubject.SIGNUP)
 
             if data.get('email'):
                 user = _User.objects.create(email=data['email'])
@@ -98,7 +81,7 @@ class SignUpResendOTPView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         try:
-            send_otp(data, OTPSubject.SIGNUP, CommunicationPurpose.OTP_RESEND)
+            send_otp(data, OTPSubject.SIGNUP)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -176,7 +159,6 @@ class PasswordlessLoginView(APIView):
     serializer_class = PasswordlessLoginSerializer
     rate_limit_handler = OTPRequestThrottle()
 
-    # todo: adjust schema
     @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
@@ -190,7 +172,7 @@ class PasswordlessLoginView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         try:
-            send_otp(data, OTPSubject.LOGIN, CommunicationPurpose.PASSWORDLESS_LOGIN)
+            send_otp(data, OTPSubject.LOGIN)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -204,7 +186,6 @@ class PasswordlessLoginConfirmView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
 
-    # todo: adjust schema
     @extend_schema(summary='Confirm Passwordless Login', tags=['Login'], **passwordless_login_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
@@ -287,7 +268,7 @@ class PasswordResetView(APIView):
         data = serializer.validated_data
 
         try:
-            send_otp(data, OTPSubject.PASSWORD_RESET, CommunicationPurpose.PASSWORD_RESET)
+            send_otp(data, OTPSubject.PASSWORD_RESET)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -309,18 +290,22 @@ class PasswordResetConfirmView(APIView):
 
         OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.PASSWORD_RESET)
         try:
-            email, phone_number = data.get('email'), data.get('phone_number')
+            email, phone_number, method = data.get('email'), data.get('phone_number'), None
             if email:
                 user = _User.objects.get(email=email)
-                context = {'method': 'email', 'identifier': email}
+                context = {'identifier': email}
+                method = 'email'
             else:
                 user = _User.objects.get(phone_number=phone_number)
-                context = {'method': 'sms', 'identifier': phone_number}
+                context = {'identifier': phone_number}
+                method = 'sms'
+
             user.set_password(data['new_password'])
             user.save()
 
             # send notification to user
-            _communication_class.communicate(purpose=CommunicationPurpose.PASSWORD_CHANGE, context=context)
+            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
+            communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_RESET, context=context)
             return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -340,26 +325,30 @@ class PasswordChangeView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         user = request.user
-
+        method = None
         try:
             user.set_password(data['new_password'])
             user.save()
 
             # send notification to user
             if user.email:
-                context = {'method': 'email', 'identifier': user.email}
+                context = {'identifier': user.email}
+                method = 'email'
             else:
                 context = {'method': 'sms', 'identifier': user.phone_number}
-            _communication_class.communicate(purpose=CommunicationPurpose.PASSWORD_CHANGE, context=context)
+                method = 'sms'
+
+            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
+            communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_CHANGE, context=context)
             return Response({'message': 'Password has been changed successfully.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
 
-# todo: Notify the old email with a rollback option if the change was unauthorized.
+
 class EmailChangeView(APIView):
     """
-    ### Request for email change with current password confirmation & get OTP.
+    ### Request for email change with new email & current password confirmation & get OTP.
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
@@ -385,7 +374,7 @@ class EmailChangeView(APIView):
             context['method'] = 'email'
             context['verification_type'] = data['verification_type']
 
-            send_otp(context, OTPSubject.EMAIL_CHANGE, CommunicationPurpose.EMAIL_CHANGE)
+            send_otp(context, OTPSubject.EMAIL_CHANGE)
             return Response({'message': f'{data['verification_type']} has been sent to the email.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
@@ -394,7 +383,7 @@ class EmailChangeView(APIView):
 
 class EmailChangeConfirmView(APIView):
     """
-    ### Confirm email change via code confirmation
+    ### Confirm email change via code confirmation & notify to old email
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
@@ -408,8 +397,13 @@ class EmailChangeConfirmView(APIView):
         OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.EMAIL_CHANGE)
         try:
             user = request.user
+            old_email = user.email
             user.email = data['identifier']
             user.save()
+
+            # send notification to user
+            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
+            communication_class.notify(method='email', event=NotificationEvent.SUCCESS_EMAIL_CHANGE, context={'identifier': old_email})
             return Response({'message': 'Email has been changed successfully.'}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)

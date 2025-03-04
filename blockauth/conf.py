@@ -24,7 +24,7 @@ DEFAULTS = {
     "POST_LOGIN_TRIGGER": 'blockauth.triggers.DummyPostLoginTrigger',
 
     # other util classes
-    "DEFAULT_COMMUNICATION_CLASS": "blockauth.communication.DummyCommunication",
+    "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
 }
 
 
@@ -40,7 +40,7 @@ for key, val in USER_SETTINGS.items():
     DEFAULTS[key] = val
 
 IMPORT_STRINGS = (
-    "DEFAULT_COMMUNICATION_CLASS",
+    "DEFAULT_NOTIFICATION_CLASS",
     "POST_SIGNUP_TRIGGER",
     "PRE_SIGNUP_TRIGGER",
     "POST_LOGIN_TRIGGER",

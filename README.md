@@ -124,7 +124,7 @@ If you do not add them then the social auth URLs related to the providers won't 
 See the following [Video tutorials](#social-providers-login-mechanism-google-linkedin-facebook-etc) to create OAuth client id & client secret._
 - _**DEFAULT_TRIGGER_CLASSES** has default classes implemented within blockauth package. It's recommended to implement
 own class and add the class path in the settings. Details disccussed in the [Utility Classes](#utility-classes) section._ 
-- _**DEFAULT_COMMUNICATION_CLASS** has default class implemented within blockauth package. It's recommended to implement
+- _**DEFAULT_NOTIFICATION_CLASS** has default class implemented within blockauth package. It's recommended to implement
 own class and add the class path in the settings. Details disccussed in the [Utility Classes](#utility-classes) section._
 
 ```python
@@ -159,14 +159,14 @@ BLOCK_AUTH_SETTINGS = {
         }
     },
     
-    # don't need to add DEFAULT_TRIGGER_CLASSES & DEFAULT_COMMUNICATION_CLASS object if you want to use default classes
+    # don't need to add DEFAULT_TRIGGER_CLASSES & DEFAULT_NOTIFICATION_CLASS object if you want to use default classes
     "DEFAULT_TRIGGER_CLASSES": {
         "POST_SIGNUP_TRIGGER": 'path.to.your.Class',
         "PRE_SIGNUP_TRIGGER": 'path.to.your.Class',
         "POST_LOGIN_TRIGGER": 'path.to.your.Class',
     },
     
-    "DEFAULT_COMMUNICATION_CLASS": "path.to.your.Class",
+    "DEFAULT_NOTIFICATION_CLASS": "path.to.your.Class",
 }
 ```
 
@@ -306,7 +306,7 @@ Providers:
    - Validate the email and password. Also checks whether the email is already registered or not.
    - Calls the `PRE_SIGNUP_TRIGGER` class with validated data to perform any pre-signup actions. _(This class should be implemented in the project. Currently, a dummy class is used by default.)_
    - Generates an OTP.
-   - Calls the `DEFAULT_COMMUNICATION_CLASS` class with OTP information to send the OTP to the user. _(This class should be implemented in the project. Currently, a dummy class is used by default.)_
+   - Calls the `DEFAULT_NOTIFICATION_CLASS` class with OTP information to send the OTP to the user. _(This class should be implemented in the project. Currently, a dummy class is used by default.)_
    - User created with email & password and `is_verified=False` by default.
 2. The user confirms the signup by calling `auth/signup/confirm` with email and OTP. It will do the following:
    - Validate the OTP and email.
@@ -322,7 +322,7 @@ Token validity can be configured in the settings.
 1. The user requests to `auth/login/passwordless` with email. It will do the following:
    - Validate the email.
    - Generates an OTP.
-   - Calls the `DEFAULT_COMMUNICATION_CLASS` class with OTP information to send the OTP to the user.
+   - Calls the `DEFAULT_NOTIFICATION_CLASS` class with OTP information to send the OTP to the user.
 2. The user confirms the login by calling `auth/login/passwordless/confirm` with email and OTP. It will do the following:
    - Validate the OTP and email.
    - If the user is not found in the database, a new user is created with the email only and `is_verified=True`. Then calls the `POST_SIGNUP_TRIGGER` class with user information to perform any post-signup actions.
@@ -337,7 +337,7 @@ Token validity can be configured in the settings.
 1. The user requests to `auth/password/reset` with email. It will do the following:
    - Validate the email.
    - Generates an OTP.
-   - Calls the `DEFAULT_COMMUNICATION_CLASS` class with OTP information to send the OTP to the user.
+   - Calls the `DEFAULT_NOTIFICATION_CLASS` class with OTP information to send the OTP to the user.
 2. The user confirms the password reset by calling `auth/password/reset/confirm` with email, OTP, and new password. It will do the following:
    - Validate the OTP, email and new password.
    - Update the user password with the new password.
@@ -347,7 +347,7 @@ Token validity can be configured in the settings.
 1. The user requests to `auth/email/change` with current email and password. It will do the following:
    - Validate the current email and password.
    - Generates an OTP.
-   - Calls the `DEFAULT_COMMUNICATION_CLASS` class with OTP information to send the OTP to the user.
+   - Calls the `DEFAULT_NOTIFICATION_CLASS` class with OTP information to send the OTP to the user.
 2. The user confirms the email change by calling `auth/email/change/confirm` with current email, new email, and OTP. It will do the following:
    - Validate the current email, new email, and OTP.
    - Update the user email with the new email.
@@ -380,7 +380,7 @@ Then calls the `POST_SIGNUP_TRIGGER` class with **provider name, user data from 
 
 ## Utility Classes
 ### Communication Class
-This class is used to send message to the user. The default class is `blockauth.utils.communication.DummyCommunication`. 
+This class is used to send message to the user. The default class is `blockauth.utils.communication.DummyNotification`. 
 Which is a dummy class and prints the message to the console. 
 
 Developers have to implement their own class by inheriting the `blockauth.utils.communication.BaseCommunicationClass` and set the path in the settings.
@@ -395,10 +395,12 @@ Currently, the communication class is integrated in the following APIs:
 - `auth/email/change`: To send OTP for email change.
 
 **Usage example**
-```python
-from blockauth.communication import BaseCommunication
 
-class CustomCommunication(BaseCommunication):
+```python
+from blockauth.notification import BaseNotification
+
+
+class CustomCommunication(BaseNotification):
     def communicate(self, purpose: str, context: dict) -> None:
         """
        :param purpose: should be used to identify the purpose of the communication.

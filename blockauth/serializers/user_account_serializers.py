@@ -120,7 +120,6 @@ class PasswordlessLoginConfirmationSerializer(OTPVerifySerializer):
 
 
 """account password related serializers"""
-# todo: need to check the serializer
 
 class PasswordResetRequestSerializer(OTPRequestSerializer):
     def validate(self, data):
@@ -176,7 +175,6 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 
 """account email related serializers"""
-# todo: need to check the serializer
 class EmailChangeRequestSerializer(serializers.Serializer):
     new_email = serializers.EmailField(help_text='New email to replace the current email')
     current_password = serializers.CharField(
