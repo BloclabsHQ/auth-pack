@@ -91,12 +91,6 @@ class BasicLoginSerializer(serializers.Serializer):
         if not user:
             raise ValidationError({'detail': 'Incorrect identifier'})
 
-        # if user and not user.password:
-        #     raise ValidationError({
-        #         'detail': 'Passwordless account. Please login via passwordless method, social account or reset password.'
-        #     })
-
-
         if not user.check_password(data['password']):
             raise ValidationError({"detail": "Incorrect password"})
 
@@ -193,15 +187,24 @@ class EmailChangeRequestSerializer(serializers.Serializer):
 
         if _User.objects.filter(email=data['new_email']).exists():
             logger.info(f"Email {data['new_email']} already in use")
-            raise ValidationError({'new_email': 'Can''t use this email'})
+            raise ValidationError({'detail': 'Can not proceed request.'})
 
         if data['verification_type'] == 'link':
             get_config('CLIENT_APP_URL')   # internally raise 500 if not configured
         return data
 
 
-class EmailChangeConfirmationSerializer(OTPVerifySerializer):
-    pass
+class EmailChangeConfirmationSerializer(serializers.Serializer):
+    identifier = serializers.CharField(max_length=100, help_text="New email to replace the current email")
+    code = serializers.CharField(help_text="Verification code received")
+
+    def validate(self, data):
+        identifier = data.get('identifier')
+        try:
+            EmailValidator()(identifier)
+        except Exception:
+            raise ValidationError({'identifier': "Enter a valid email address."})
+        return data
 
 class RefreshTokenSerializer(serializers.Serializer):
     refresh = serializers.CharField(help_text="Refresh token to get new access token", required=True)

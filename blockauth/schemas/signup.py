@@ -1,9 +1,9 @@
 from drf_spectacular.utils import OpenApiResponse
 
-from blockauth.schemas.examples.common import common_invalid_email_password, common_empty_email_password, \
-    common_empty_email, common_invalid_email
+from blockauth.schemas.examples.common import common_invalid_identifier_password, common_empty_identifier_password, \
+    common_invalid_identifier, common_empty_identifier
 from blockauth.schemas.examples.common import invalid_otp, expired_otp
-from blockauth.schemas.examples.signup import sign_up_email_already_in_use, \
+from blockauth.schemas.examples.signup import sign_up_identifier_already_in_use, \
     signup_user_not_found, signup_resend_otp_rate_limit, signup_confirm_empty_input
 from blockauth.schemas.factory import CustomOpenApiResponse
 
@@ -13,17 +13,11 @@ signup_schema = {
         500: CustomOpenApiResponse(status=500),
         400: OpenApiResponse(
             description='Invalid request',
-            response={
-                'type': 'object',
-                'properties': {
-                    'email': {'type': 'array', 'items': {'type': 'string'}},
-                    'password': {'type': 'array', 'items': {'type': 'string'}}
-                }
-            },
+            response={'type': 'object'},
             examples=[
-                common_invalid_email_password,
-                common_empty_email_password,
-                sign_up_email_already_in_use
+                common_invalid_identifier_password,
+                common_empty_identifier_password,
+                sign_up_identifier_already_in_use
             ]
         )
     }
@@ -35,16 +29,10 @@ signup_confirm_schema = {
         500: CustomOpenApiResponse(status=500),
         400: OpenApiResponse(
             description='Invalid request',
-            response={
-                'type': 'object',
-                'properties': {
-                    'email': {'type': 'array', 'items': {'type': 'string'}},
-                    'code': {'type': 'array', 'items': {'type': 'string'}}
-                }
-            },
+            response={'type': 'object'},
             examples=[
                 signup_confirm_empty_input,
-                common_invalid_email,
+                common_invalid_identifier,
                 invalid_otp,
                 expired_otp
             ]
@@ -58,16 +46,12 @@ signup_resend_otp_schema = {
         500: CustomOpenApiResponse(status=500),
         400: OpenApiResponse(
             description='Invalid request',
-            response={
-                'type': 'object',
-                'properties': {
-                    'email': {'type': 'array', 'items': {'type': 'string'}}
-                }
-            },
+            response={'type': 'object'},
             examples=[
-                common_empty_email,
+                common_invalid_identifier,
+                common_empty_identifier,
                 signup_user_not_found,
-                sign_up_email_already_in_use
+                sign_up_identifier_already_in_use
             ]
         ),
         429: OpenApiResponse(

@@ -9,11 +9,23 @@ login_passwordless_account = OpenApiExample(
     }
 )
 
-login_incorrect_email_password = OpenApiExample(
-    name='login_incorrect_email_password',
-    summary='Incorrect email & password',
+login_incorrect_identifier = OpenApiExample(
+    name='login_incorrect_identifier',
+    summary='Incorrect identifier',
     value={
-        "detail": "username or password incorrect"
+        "detail": [
+            "Incorrect identifier"
+        ]
+    }
+)
+
+login_incorrect_password = OpenApiExample(
+    name='login_incorrect_password',
+    summary='Incorrect password',
+    value={
+        "detail": [
+            "Incorrect password"
+        ]
     }
 )
 
@@ -21,13 +33,15 @@ login_signup_incomplete = OpenApiExample(
     name='login_signup_incomplete',
     summary='Incomplete signup',
     value={
-        "detail": "Account is not verified. Complete signup process or login via passwordless method."
+        "detail": [
+            "Account is not verified. Complete signup process or login via passwordless method"
+        ]
     }
 )
 
 
 basic_login_schema_examples = [
-    login_passwordless_account,
-    login_incorrect_email_password,
+    login_incorrect_identifier,
+    login_incorrect_password,
     login_signup_incomplete
 ]

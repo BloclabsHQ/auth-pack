@@ -4,7 +4,7 @@ password_reset_empty_input = OpenApiExample(
     name='password_reset_empty_input',
     summary='Empty input',
     value={
-        "email": [
+        "identifier": [
             "This field is required."
         ],
         "code": [

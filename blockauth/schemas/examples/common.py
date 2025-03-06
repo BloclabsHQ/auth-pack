@@ -1,12 +1,12 @@
 from drf_spectacular.utils import OpenApiExample
 
-"""email & others"""
-common_invalid_email_password = OpenApiExample(
-    name='common_invalid_email_password',
-    summary='Invalid email & password',
+"""identifier & others"""
+common_invalid_identifier_password = OpenApiExample(
+    name='common_invalid_identifier_password',
+    summary='Invalid identifier & password',
     value={
-        "email": [
-            "Enter a valid email address."
+        "identifier": [
+            "enter a valid email address / phone number."
         ],
         "password": [
             "This password is too short. It must contain at least 8 characters.",
@@ -16,11 +16,11 @@ common_invalid_email_password = OpenApiExample(
     }
 )
 
-common_empty_email_password = OpenApiExample(
-    name='common_empty_email_password',
-    summary='Empty email & password',
+common_empty_identifier_password = OpenApiExample(
+    name='common_empty_identifier_password',
+    summary='Empty identifier & password',
     value={
-        "email": [
+        "identifier": [
             "This field is required."
         ],
         "password": [
@@ -29,11 +29,11 @@ common_empty_email_password = OpenApiExample(
     }
 )
 
-common_empty_email_otp = OpenApiExample(
-    name='common_empty_email_otp',
-    summary='Empty email & otp',
+common_empty_identifier_otp = OpenApiExample(
+    name='common_empty_identifier_otp',
+    summary='Empty identifier & otp',
     value={
-        "email": [
+        "identifier": [
             "This field is required."
         ],
         "code": [
@@ -42,22 +42,22 @@ common_empty_email_otp = OpenApiExample(
     }
 )
 
-common_empty_email = OpenApiExample(
-    name='common_empty_email',
-    summary='Empty email',
+common_invalid_identifier = OpenApiExample(
+    name='common_invalid_identifier',
+    summary='Invalid identifier',
     value={
-        "email": [
-            "This field is required."
+        "identifier": [
+            "invalid email or phone number."
         ]
     }
 )
 
-common_invalid_email = OpenApiExample(
-    name='common_invalid_email',
-    summary='Invalid email',
+common_empty_identifier = OpenApiExample(
+    name='common_empty_identifier',
+    summary='Invalid identifier',
     value={
-        "email": [
-            "Enter a valid email address."
+        "identifier": [
+            "This field is required."
         ]
     }
 )

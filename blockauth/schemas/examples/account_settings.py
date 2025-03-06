@@ -75,7 +75,7 @@ email_change_empty_input = OpenApiExample(
     name='email_change_empty_input',
     summary='Empty input',
     value={
-        "email": [
+        "new_email": [
             "This field is required."
         ],
         "password": [
@@ -88,7 +88,7 @@ email_change_invalid_input = OpenApiExample(
     name='common_invalid_email_password',
     summary='Invalid email & password',
     value={
-        "email": [
+        "new_email": [
             "Enter a valid email address."
         ],
         "current_password": [
@@ -119,6 +119,16 @@ email_change_passwordless_account = OpenApiExample(
     }
 )
 
+email_change_cant_use_email = OpenApiExample(
+    name='email_change_cant_use_email',
+    summary='Can not proceed request',
+    value={
+        "detail": [
+            "Can not proceed request."
+        ]
+    }
+)
+
 email_change_bad_request_examples = [
     email_change_empty_input,
     email_change_invalid_input,
@@ -131,15 +141,12 @@ email_change_confirm_empty_input = OpenApiExample(
     name='email_change_confirm_empty_input',
     summary='Empty input',
     value={
-        "email": [
+        "identifier": [
             "This field is required."
         ],
         "code": [
             "This field is required."
         ],
-        "new_email": [
-            "This field is required."
-        ]
     }
 )
 
@@ -147,10 +154,7 @@ email_change_confirm_invalid_input = OpenApiExample(
     name='email_change_confirm_invalid_input',
     summary='Invalid input',
     value={
-        "email": [
-            "Enter a valid email address."
-        ],
-        "new_email": [
+        "identifier": [
             "Enter a valid email address."
         ]
     }
@@ -160,8 +164,8 @@ email_change_confirm_invalid_new_email = OpenApiExample(
     name='email_change_confirm_invalid_new_email',
     summary='Can not use New Email if already used',
     value={
-        "new_email": [
-            "Can't use this email"
+        "identifier": [
+            "Can't use this email."
         ]
     }
 )

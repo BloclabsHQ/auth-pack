@@ -1,9 +1,9 @@
 from blockauth.schemas.examples.login import basic_login_schema_examples
 from blockauth.schemas.examples.common import invalid_otp, expired_otp, empty_refresh_token, \
-    token_expired, token_invalid, token_invalid_signature
+    token_expired, token_invalid, token_invalid_signature, common_invalid_identifier, common_empty_identifier
 from blockauth.schemas.factory import CustomOpenApiResponse
-from blockauth.schemas.examples.common import common_empty_email_password, common_invalid_email_password, common_empty_email, \
-    otp_rate_limit_exceed, common_empty_email_otp
+from blockauth.schemas.examples.common import common_empty_identifier_password, common_invalid_identifier_password, \
+    otp_rate_limit_exceed, common_empty_identifier_otp
 
 basic_login_schema = {
     'responses': {
@@ -21,8 +21,8 @@ basic_login_schema = {
         400: CustomOpenApiResponse(
             status=400,
             examples=[
-                common_invalid_email_password,
-                common_empty_email_password,
+                common_invalid_identifier_password,
+                common_empty_identifier_password,
             ] + basic_login_schema_examples
         )
     }
@@ -35,7 +35,8 @@ passwordless_login_schema = {
         400: CustomOpenApiResponse(
             status=400,
             examples=[
-                common_empty_email,
+                common_invalid_identifier,
+                common_empty_identifier
             ]
         ),
         429: CustomOpenApiResponse(
@@ -63,7 +64,7 @@ passwordless_login_confirm_schema = {
         400: CustomOpenApiResponse(
             status=400,
             examples=[
-                common_empty_email_otp,
+                common_empty_identifier_otp,
                 invalid_otp,
                 expired_otp
             ]
