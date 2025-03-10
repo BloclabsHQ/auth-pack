@@ -1,7 +1,9 @@
 import uuid
-from blockauth.utils.config import get_config
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+
+from blockauth.utils.config import get_config
 
 
 class BlockUser(AbstractUser):

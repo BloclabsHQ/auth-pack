@@ -4,6 +4,7 @@ import string
 from django.db import models
 from django.utils import timezone
 from rest_framework.serializers import ValidationError
+
 from blockauth.utils.config import get_config
 
 

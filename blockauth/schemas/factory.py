@@ -27,7 +27,14 @@ class CustomOpenApiResponse(OpenApiResponse):
             return {
                 'description': description or 'Invalid request',
                 'response': response or {
-                    'type': 'object',
+                    "type": "object",
+                    "properties": {
+                        "error_code": {"type": "string"},
+                        "detail": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                        },
+                    },
                 },
                 'examples': examples
             }

@@ -1,9 +1,4 @@
-from blockauth.schemas.examples.login import basic_login_schema_examples
-from blockauth.schemas.examples.common import invalid_otp, expired_otp, empty_refresh_token, \
-    token_expired, token_invalid, token_invalid_signature, common_invalid_identifier, common_empty_identifier
 from blockauth.schemas.factory import CustomOpenApiResponse
-from blockauth.schemas.examples.common import common_empty_identifier_password, common_invalid_identifier_password, \
-    otp_rate_limit_exceed, common_empty_identifier_otp
 
 basic_login_schema = {
     'responses': {
@@ -17,14 +12,15 @@ basic_login_schema = {
                 }
             }
         ),
+        400: CustomOpenApiResponse(status=400),
         500: CustomOpenApiResponse(status=500),
-        400: CustomOpenApiResponse(
-            status=400,
-            examples=[
-                common_invalid_identifier_password,
-                common_empty_identifier_password,
-            ] + basic_login_schema_examples
-        )
+        # 400: CustomOpenApiResponse(
+        #     status=400,
+        #     examples=[
+        #         common_invalid_identifier_password,
+        #         common_empty_identifier_password,
+        #     ] + basic_login_schema_examples
+        # )
     }
 }
 
@@ -32,18 +28,19 @@ passwordless_login_schema = {
     'responses': {
         200: CustomOpenApiResponse(status=200),
         500: CustomOpenApiResponse(status=500),
-        400: CustomOpenApiResponse(
-            status=400,
-            examples=[
-                common_invalid_identifier,
-                common_empty_identifier
-            ]
-        ),
+        400: CustomOpenApiResponse(status=400),
+        # 400: CustomOpenApiResponse(
+        #     status=400,
+        #     examples=[
+        #         common_invalid_identifier,
+        #         common_empty_identifier
+        #     ]
+        # ),
         429: CustomOpenApiResponse(
             status=429,
-            examples=[
-                otp_rate_limit_exceed
-            ]
+            # examples=[
+            #     otp_rate_limit_exceed
+            # ]
         )
     }
 }
@@ -61,14 +58,15 @@ passwordless_login_confirm_schema = {
             }
         ),
         500: CustomOpenApiResponse(status=500),
-        400: CustomOpenApiResponse(
-            status=400,
-            examples=[
-                common_empty_identifier_otp,
-                invalid_otp,
-                expired_otp
-            ]
-        )
+        400: CustomOpenApiResponse(status=400),
+        # 400: CustomOpenApiResponse(
+        #     status=400,
+        #     examples=[
+        #         common_empty_identifier_otp,
+        #         invalid_otp,
+        #         expired_otp
+        #     ]
+        # )
     }
 }
 
@@ -85,19 +83,20 @@ refresh_token_schema = {
             }
         ),
         500: CustomOpenApiResponse(status=500),
+        400: CustomOpenApiResponse(status=400),
         401: CustomOpenApiResponse(
             status=401,
-            examples=[
-                token_expired,
-                token_invalid,
-                token_invalid_signature
-            ]
+            # examples=[
+            #     token_expired,
+            #     token_invalid,
+            #     token_invalid_signature
+            # ]
         ),
-        400: CustomOpenApiResponse(
-            status=400,
-            examples=[
-                empty_refresh_token,
-            ]
-        )
+        # 400: CustomOpenApiResponse(
+        #     status=400,
+        #     examples=[
+        #         empty_refresh_token,
+        #     ]
+        # )
     }
 }

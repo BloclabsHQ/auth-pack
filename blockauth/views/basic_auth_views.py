@@ -1,4 +1,5 @@
 import logging
+
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -7,8 +8,9 @@ from rest_framework.exceptions import APIException, AuthenticationFailed, Valida
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from blockauth.notification import send_otp, NotificationEvent
+
 from blockauth.models.otp import OTP, OTPSubject
+from blockauth.notification import send_otp, NotificationEvent
 from blockauth.schemas.account_settings import password_change_schema, email_change_schema, email_change_confirm_schema
 from blockauth.schemas.login import basic_login_schema, passwordless_login_schema, passwordless_login_confirm_schema, \
     refresh_token_schema
@@ -32,7 +34,7 @@ _User = get_user_model()
 
 class SignUpView(APIView):
     """
-    ### Sign up with identifier (email/phone number) and password. Internally it will send an otp to the user's contact.
+    Sign up with identifier (email/phone number) and password. Internally it will send an otp to the user's contact.
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpRequestSerializer

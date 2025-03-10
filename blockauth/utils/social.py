@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
+
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS

@@ -1,6 +1,5 @@
 from drf_spectacular.utils import OpenApiParameter
 from blockauth.schemas.factory import CustomOpenApiResponse
-from blockauth.schemas.examples.social_auth import social_authorization_code, social_invalid_auth_config, social_user_info_missing
 
 """Google"""
 
@@ -8,7 +7,10 @@ google_auth_login_schema ={
     'responses': {
         301: CustomOpenApiResponse(status=301),
         500: CustomOpenApiResponse(status=500),
-        400: CustomOpenApiResponse(status=400, examples=[social_invalid_auth_config])
+        400: CustomOpenApiResponse(
+            status=400,
+            # examples=[social_invalid_auth_config]
+        )
     }
 }
 
@@ -25,11 +27,11 @@ google_auth_callback_schema ={
         200: CustomOpenApiResponse(status=200),
         500: CustomOpenApiResponse(status=500),
         400: CustomOpenApiResponse(status=400,
-            examples=[
-                social_authorization_code,
-                social_invalid_auth_config,
-                social_user_info_missing
-            ]
+            # examples=[
+            #     social_authorization_code,
+            #     social_invalid_auth_config,
+            #     social_user_info_missing
+            # ]
         )
     }
 }
@@ -42,9 +44,9 @@ facebook_auth_login_schema ={
         301: CustomOpenApiResponse(status=301),
         500: CustomOpenApiResponse(status=500),
         400: CustomOpenApiResponse(status=400,
-            examples=[
-                social_invalid_auth_config
-            ]
+            # examples=[
+            #     social_invalid_auth_config
+            # ]
         )
     }
 }
@@ -70,11 +72,11 @@ facebook_auth_callback_schema ={
         ),
         500: CustomOpenApiResponse(status=500),
         400:CustomOpenApiResponse(status=400,
-            examples=[
-                social_authorization_code,
-                social_invalid_auth_config,
-                social_user_info_missing
-            ]
+            # examples=[
+            #     social_authorization_code,
+            #     social_invalid_auth_config,
+            #     social_user_info_missing
+            # ]
         )
     }
 }
@@ -87,9 +89,9 @@ linkedin_auth_login_schema ={
         301: CustomOpenApiResponse(status=301),
         500: CustomOpenApiResponse(status=500),
         400:CustomOpenApiResponse(status=400,
-            examples=[
-                social_invalid_auth_config
-            ]
+            # examples=[
+            #     social_invalid_auth_config
+            # ]
         )
     }
 }
@@ -114,11 +116,11 @@ linkedin_auth_callback_schema ={
             }
         ),
         400:CustomOpenApiResponse(status=400,
-            examples=[
-                social_authorization_code,
-                social_invalid_auth_config,
-                social_user_info_missing
-            ]
+            # examples=[
+            #     social_authorization_code,
+            #     social_invalid_auth_config,
+            #     social_user_info_missing
+            # ]
         ),
         500: CustomOpenApiResponse(status=500)
     }

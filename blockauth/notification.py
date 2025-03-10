@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 
-from blockauth.models import OTP
+from blockauth.models.otp import OTP
 from blockauth.utils.config import get_config
 
 logger = logging.getLogger(__name__)
