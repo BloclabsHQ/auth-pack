@@ -22,7 +22,7 @@ _User = get_user_model()
 
 class FacebookAuthLoginView(APIView):
     """
-    ### Redirects user to Facebook's OAuth 2.0 authorization endpoint.
+    Redirects user to Facebook's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
 
@@ -49,7 +49,7 @@ class FacebookAuthLoginView(APIView):
 
 class FacebookAuthCallbackView(APIView):
     """
-    ### Handles Facebook OAuth2 callback, exchanges the code for a Facebook token, and returns JWT tokens.
+    Handles Facebook OAuth2 callback, exchanges the code for a Facebook token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
 

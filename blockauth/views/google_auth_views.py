@@ -20,7 +20,7 @@ _User = get_user_model()
 
 class GoogleAuthLoginView(APIView):
     """
-    ### Redirects user to Google's OAuth 2.0 authorization endpoint.
+    Redirects user to Google's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
 
@@ -45,7 +45,7 @@ class GoogleAuthLoginView(APIView):
 
 class GoogleAuthCallbackView(APIView):
     """
-    ### Handles Google OAuth2 callback, exchanges the code for a Google token, and returns JWT tokens.
+    Handles Google OAuth2 callback, exchanges the code for a Google token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
 

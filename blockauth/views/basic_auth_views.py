@@ -67,7 +67,7 @@ class SignUpView(APIView):
 
 class SignUpResendOTPView(APIView):
     """
-    ### Resend otp for signup.
+    Resend otp for signup.
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
@@ -97,7 +97,7 @@ class SignUpResendOTPView(APIView):
 
 class SignUpConfirmView(APIView):
     """
-    ### Verify otp to signup
+    Verify otp to signup
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpConfirmationSerializer
@@ -133,7 +133,7 @@ class SignUpConfirmView(APIView):
 
 class BasicAuthLoginView(APIView):
     """
-    ### Login via identifier(email/phone number) & password and get access token & refresh token.
+    Login via identifier(email/phone number) & password and get access token & refresh token.
     """
     permission_classes = (AllowAny,)
     serializer_class = BasicLoginSerializer
@@ -166,7 +166,7 @@ class BasicAuthLoginView(APIView):
 
 class PasswordlessLoginView(APIView):
     """
-    ### Send an otp/Login Link for passwordless login with email/phone number.
+    Send an otp/Login Link for passwordless login with email/phone number.
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
@@ -196,7 +196,7 @@ class PasswordlessLoginView(APIView):
 
 class PasswordlessLoginConfirmView(APIView):
     """
-    ### Verify otp for login & get access token & refresh token.
+    Verify otp for login & get access token & refresh token.
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
@@ -240,7 +240,7 @@ class PasswordlessLoginConfirmView(APIView):
 
 class AuthRefreshTokenView(APIView):
     """
-    ### Get new access token using the refresh token.
+    Get new access token using the refresh token.
     """
     permission_classes = (AllowAny,)
     serializer_class = RefreshTokenSerializer
@@ -270,7 +270,7 @@ class AuthRefreshTokenView(APIView):
 
 class PasswordResetView(APIView):
     """
-    ### Request password reset & get otp.
+    Request password reset & get otp.
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetRequestSerializer
@@ -302,7 +302,7 @@ class PasswordResetView(APIView):
 
 class PasswordResetConfirmView(APIView):
     """
-    ### Confirm password reset
+    Confirm password reset
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetConfirmationEmailSerializer
@@ -347,8 +347,8 @@ class PasswordResetConfirmView(APIView):
 
 class PasswordChangeView(APIView):
     """
-    ### Change password as a logged-in user
-    #### Login required
+    Change password as a logged-in user
+    Login required
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
@@ -393,8 +393,8 @@ class PasswordChangeView(APIView):
 
 class EmailChangeView(APIView):
     """
-    ### Request for email change with new email & current password confirmation & get otp.
-    #### Login required
+    Request for email change with new email & current password confirmation & get otp.
+    Login required
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
@@ -432,8 +432,8 @@ class EmailChangeView(APIView):
 
 class EmailChangeConfirmView(APIView):
     """
-    ### Confirm email change via code confirmation & notify to old email
-    #### Login required
+    Confirm email change via code confirmation & notify to old email
+    Login required
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer

@@ -21,7 +21,7 @@ _User = get_user_model()
 
 class LinkedInAuthLoginView(APIView):
     """
-    ### Redirects user to Linkedins's OAuth 2.0 authorization endpoint.
+    Redirects user to Linkedins's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
 
@@ -45,7 +45,7 @@ class LinkedInAuthLoginView(APIView):
 
 class LinkedInAuthCallbackView(APIView):
     """
-    ### Handles LinkedIn OAuth2 callback, exchanges the code for a LinkedIn token, and returns JWT tokens.
+    Handles LinkedIn OAuth2 callback, exchanges the code for a LinkedIn token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
 
