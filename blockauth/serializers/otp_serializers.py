@@ -1,13 +1,11 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from django.core.validators import EmailValidator
-from blockauth.utils.config import get_config
 from rest_framework.exceptions import ValidationError
-
+from blockauth.utils.config import get_config
 from blockauth.utils.validators import is_valid_phone_number
 
 _User = get_user_model()
-
 
 class OTPRequestSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
@@ -25,10 +23,10 @@ class OTPRequestSerializer(serializers.Serializer):
                 EmailValidator()(identifier)
                 data['email'] = identifier
             except Exception:
-                raise ValidationError({'identifier': "enter a valid email address."})
+                raise ValidationError(detail={'identifier': "enter a valid email address."}, code=4001)
         elif method == "sms":
             if not is_valid_phone_number(identifier):
-                raise ValidationError({'identifier': "enter a valid phone number."})
+                raise ValidationError(detail={'identifier': "enter a valid phone number."}, code=4001)
             data['phone_number'] = identifier
 
         if verification_type == 'link':
@@ -48,6 +46,6 @@ class OTPVerifySerializer(serializers.Serializer):
             data['email'] = identifier
         except Exception:
             if not is_valid_phone_number(identifier):
-                raise ValidationError({'identifier': "invalid email or phone number."})
+                raise ValidationError(detail={'identifier': "invalid email or phone number."}, code=4001)
             data['phone_number'] = identifier
         return data

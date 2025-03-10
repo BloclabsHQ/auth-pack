@@ -139,7 +139,7 @@ BLOCK_AUTH_SETTINGS = {
     
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
-    "OTP_REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
+    "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (identifier, subject, and IP address)
         
     "AUTH_PROVIDERS": {
         "GOOGLE": {
@@ -457,7 +457,7 @@ class CustomPostLoginTrigger(BaseTrigger):
 ```
 
 ## Rate Limiting
-Rate limiting is implemented for OTP requests currently. The rate limit is based on the number of requests and the duration.
+Rate limiting is implemented for requests currently. The rate limit is based on the number of requests and the duration.
 The rate limit can be configured in the settings.
 
 ## License

@@ -16,7 +16,7 @@ DEFAULTS = {
 
     "OTP_VALIDITY": timedelta(minutes=1),
     "OTP_LENGTH": 6,
-    "OTP_REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
+    "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
 
     # Trigger classes
     "POST_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPostSignupTrigger',

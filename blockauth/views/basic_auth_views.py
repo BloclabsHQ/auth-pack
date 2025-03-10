@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.exceptions import APIException, AuthenticationFailed
+from rest_framework.exceptions import APIException, AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,8 +21,9 @@ from blockauth.serializers.user_account_serializers import PasswordChangeSeriali
     PasswordlessLoginSerializer, BasicLoginSerializer, PasswordlessLoginConfirmationSerializer, \
     SignUpConfirmationSerializer, PasswordResetRequestSerializer
 from blockauth.utils.config import get_config
+from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json
-from blockauth.utils.rate_limiter import OTPRequestThrottle
+from blockauth.utils.rate_limiter import RequestThrottle
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
@@ -39,10 +40,10 @@ class SignUpView(APIView):
     @extend_schema(summary='Signup', tags=['Signup'], **signup_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
             pre_signup_trigger = get_config('PRE_SIGNUP_TRIGGER')()
             pre_signup_trigger.trigger(context=data)
 
@@ -55,6 +56,8 @@ class SignUpView(APIView):
             user.set_password(data['password'])
             user.save()
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -66,7 +69,7 @@ class SignUpResendOTPView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
-    rate_limit_handler = OTPRequestThrottle()
+    rate_limit_handler = RequestThrottle()
 
     @extend_schema(summary='Resend OTP to Signup', tags=['Signup'], **signup_resend_otp_schema)
     def post(self, request):
@@ -78,11 +81,13 @@ class SignUpResendOTPView(APIView):
             )
 
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
             send_otp(data, OTPSubject.SIGNUP)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -98,11 +103,12 @@ class SignUpConfirmView(APIView):
     @extend_schema(summary='Confirm Signup', tags=['Signup'], **signup_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.SIGNUP)
 
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+            OTP.validate_otp(identifier=data["identifier"], code=data["code"], subject=OTPSubject.SIGNUP)
+
             email, phone_number = data.get('email'), data.get('phone_number')
             if email:
                 user = _User.objects.get(email=email)
@@ -116,6 +122,8 @@ class SignUpConfirmView(APIView):
             post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
             post_signup_trigger.trigger(context=user_data)
             return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -131,10 +139,11 @@ class BasicAuthLoginView(APIView):
     @extend_schema(summary='Basic Login', tags=['Login'], **basic_login_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
             user = data['user']
             user.last_login = timezone.now()
             user.save()
@@ -146,6 +155,8 @@ class BasicAuthLoginView(APIView):
 
             access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=user.id.hex)
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -157,7 +168,7 @@ class PasswordlessLoginView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
-    rate_limit_handler = OTPRequestThrottle()
+    rate_limit_handler = RequestThrottle()
 
     @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
     def post(self, request):
@@ -169,11 +180,13 @@ class PasswordlessLoginView(APIView):
             )
 
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
             send_otp(data, OTPSubject.LOGIN)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -189,17 +202,20 @@ class PasswordlessLoginConfirmView(APIView):
     @extend_schema(summary='Confirm Passwordless Login', tags=['Login'], **passwordless_login_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.LOGIN)
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
+            OTP.validate_otp(identifier=data["identifier"], code=data["code"], subject=OTPSubject.LOGIN)
+
             email, phone_number = data.get('email'), data.get('phone_number')
             if email:
                 user, created = _User.objects.get_or_create(email=email, defaults={'is_verified': True})
             else:
                 user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={'is_verified': True})
             user.last_login = timezone.now()
+            user.is_verified = True
             user.save()
 
             user_data = model_to_json(user, remove_fields=('password',))
@@ -213,6 +229,8 @@ class PasswordlessLoginConfirmView(APIView):
 
             access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=user.id.hex)
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -228,7 +246,9 @@ class AuthRefreshTokenView(APIView):
     @extend_schema(summary='Regenerate Access Token', tags=['Login'], **refresh_token_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            raise ValidationErrorWithCode(detail=serializer.errors)
+
         refresh_token = serializer.validated_data.get('refresh')
 
         token = AUTH_TOKEN_CLASS()
@@ -252,7 +272,7 @@ class PasswordResetView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetRequestSerializer
-    rate_limit_handler = OTPRequestThrottle()
+    rate_limit_handler = RequestThrottle()
 
     @extend_schema(summary='Reset Password', tags=['Password Reset'], **password_reset_schema)
     def post(self, request):
@@ -264,12 +284,15 @@ class PasswordResetView(APIView):
             )
 
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
             send_otp(data, OTPSubject.PASSWORD_RESET)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -285,11 +308,17 @@ class PasswordResetConfirmView(APIView):
     @extend_schema(summary='Confirm Password Reset', tags=['Password Reset'], **password_reset_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.PASSWORD_RESET)
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
+            OTP.validate_otp(
+                identifier=data["identifier"],
+                code=data["code"],
+                subject=OTPSubject.PASSWORD_RESET,
+            )
+
             email, phone_number, method = data.get('email'), data.get('phone_number'), None
             if email:
                 user = _User.objects.get(email=email)
@@ -307,6 +336,8 @@ class PasswordResetConfirmView(APIView):
             communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
             communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_RESET, context=context)
             return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -319,15 +350,24 @@ class PasswordChangeView(APIView):
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
+    rate_limit_handler = RequestThrottle()
 
     @extend_schema(summary='Change Password', tags=['Account Settings'], **password_change_schema)
     def post(self, request):
+        if not self.rate_limit_handler.allow_request(request, 'password_change'):
+            wait_time = int(self.rate_limit_handler.wait())
+            return Response(
+                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = self.serializer_class(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        user = request.user
-        method = None
+
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+            user = request.user
+
             user.set_password(data['new_password'])
             user.save()
 
@@ -342,6 +382,8 @@ class PasswordChangeView(APIView):
             communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
             communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_CHANGE, context=context)
             return Response({'message': 'Password has been changed successfully.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -354,7 +396,7 @@ class EmailChangeView(APIView):
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
-    rate_limit_handler = OTPRequestThrottle()
+    rate_limit_handler = RequestThrottle()
 
     @extend_schema(summary='Change Account Email', tags=['Account Settings'], **email_change_schema)
     def post(self, request):
@@ -366,10 +408,11 @@ class EmailChangeView(APIView):
             )
 
         serializer = self.serializer_class(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
             code = OTP.generate_otp(get_config('OTP_LENGTH'))
             otp_instance = OTP.objects.create(identifier=data['new_email'], code=code, subject=OTPSubject.EMAIL_CHANGE)
             context = model_to_json(otp_instance)
@@ -378,6 +421,8 @@ class EmailChangeView(APIView):
 
             send_otp(context, OTPSubject.EMAIL_CHANGE)
             return Response({'message': f'{data['verification_type']} has been sent to the email.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -394,11 +439,17 @@ class EmailChangeConfirmView(APIView):
     @extend_schema(summary='Confirm Account Email Change', tags=['Account Settings'], **email_change_confirm_schema)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
 
-        OTP.validate_otp(identifier=data['identifier'], code=data['code'], subject=OTPSubject.EMAIL_CHANGE)
         try:
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
+            OTP.validate_otp(
+                identifier=data["identifier"],
+                code=data["code"],
+                subject=OTPSubject.EMAIL_CHANGE,
+            )
+
             user = request.user
             old_email = user.email
             user.email = data['identifier']
@@ -408,6 +459,8 @@ class EmailChangeConfirmView(APIView):
             communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
             communication_class.notify(method='email', event=NotificationEvent.SUCCESS_EMAIL_CHANGE, context={'identifier': old_email})
             return Response({'message': 'Email has been changed successfully.'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()

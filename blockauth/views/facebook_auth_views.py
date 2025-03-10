@@ -33,7 +33,7 @@ class FacebookAuthLoginView(APIView):
         callback_url = get_config('FACEBOOK_REDIRECT_URI')
 
         if not all([facebook_client_id, callback_url]):
-            raise ValidationError(social_invalid_auth_config.value)
+            raise ValidationError(social_invalid_auth_config.value, 4020)
 
         facebook_login_url = 'https://www.facebook.com/v11.0/dialog/oauth?'
         params = {

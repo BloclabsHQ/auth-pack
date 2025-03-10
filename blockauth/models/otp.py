@@ -3,8 +3,7 @@ import string
 
 from django.db import models
 from django.utils import timezone
-from rest_framework.exceptions import ValidationError
-
+from rest_framework.serializers import ValidationError
 from blockauth.utils.config import get_config
 
 
@@ -30,10 +29,10 @@ class OTP(models.Model):
         ).values('code', 'created_at', 'is_used').order_by('-created_at').first()
 
         if not otp_instance or otp_instance['code'] != code:
-            raise ValidationError({"code": "Invalid OTP"})
+            raise ValidationError(detail={"code": "invalid otp"}, code=4010)
 
         if timezone.now() > otp_instance['created_at'] + get_config('OTP_VALIDITY') or otp_instance['is_used']:
-            raise ValidationError({"code": "OTP has expired."})
+            raise ValidationError(detail={"code": "otp has expired."}, code=4011)
         cls.clear_otp(identifier, subject)
 
     @classmethod

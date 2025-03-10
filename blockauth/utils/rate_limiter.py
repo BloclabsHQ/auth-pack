@@ -6,11 +6,11 @@ from rest_framework.throttling import BaseThrottle
 from blockauth.utils.config import get_config
 
 
-class OTPRequestThrottle(BaseThrottle):
+class RequestThrottle(BaseThrottle):
     """
-    Limits OTP request to a specific email, subject & IP address.
+    Limits request to a specific identifier, subject & IP address.
     """
-    rate = get_config('OTP_REQUEST_LIMIT')
+    rate = get_config('REQUEST_LIMIT')
     cache = default_cache
     timer = time.time
 
@@ -35,7 +35,7 @@ class OTPRequestThrottle(BaseThrottle):
         if not identifier or not subject or not ip_address:
             return None
 
-        return f"otp_throttle_{identifier}_{subject}_{ip_address}"
+        return f"auth_throttle_{identifier}_{subject}_{ip_address}"
 
     def allow_request(self, request, subject):
         self.key = self.get_cache_key(request, subject)

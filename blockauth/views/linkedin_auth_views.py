@@ -32,7 +32,7 @@ class LinkedInAuthLoginView(APIView):
         callback_url = get_config('LINKEDIN_REDIRECT_URI')
 
         if not all([linkedin_client_id, callback_url]):
-            raise ValidationError({"detail": "Auth provider settings for linkedin is not properly configured"})
+            raise ValidationError({"detail": "Auth provider settings for linkedin is not properly configured"}, 4020)
 
         linkein_auth_url = (
             f"https://www.linkedin.com/oauth/v2/authorization?response_type=code"
@@ -58,10 +58,10 @@ class LinkedInAuthCallbackView(APIView):
         callback_url = get_config('LINKEDIN_REDIRECT_URI')
 
         if not code:
-            raise ValidationError(social_authorization_code.value)
+            raise ValidationError(social_authorization_code.value, 4020)
 
         if not all([linkedin_client_id, linkedin_client_secret, callback_url]):
-            raise ValidationError(social_invalid_auth_config.value)
+            raise ValidationError(social_invalid_auth_config.value, 4020)
 
         # Exchange authorization code for access token
         token_url = 'https://www.linkedin.com/oauth/v2/accessToken'
@@ -93,7 +93,7 @@ class LinkedInAuthCallbackView(APIView):
         user_info = user_info_response.json()
         email, name = user_info.get('email'), user_info.get('name')
         if not email or not name:
-            raise ValidationError(social_user_info_missing.value)
+            raise ValidationError(social_user_info_missing.value, 4020)
 
         try:
             provider_data = {'provider': 'linkedin', 'user_info': user_info}

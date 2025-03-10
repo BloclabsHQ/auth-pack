@@ -28,7 +28,7 @@ class GoogleAuthLoginView(APIView):
         callback_url = get_config('GOOGLE_REDIRECT_URI')
 
         if not all([google_client_id, callback_url]):
-            raise ValidationError(social_invalid_auth_config.value)
+            raise ValidationError(social_invalid_auth_config.value, 4020)
 
         google_auth_url = (
             "https://accounts.google.com/o/oauth2/v2/auth?"
@@ -55,10 +55,10 @@ class GoogleAuthCallbackView(APIView):
         callback_url = get_config('GOOGLE_REDIRECT_URI')
 
         if not code:
-            raise ValidationError(social_authorization_code.value)
+            raise ValidationError(social_authorization_code.value, 4020)
 
         if not all([google_client_id, google_client_secret, callback_url]):
-            raise ValidationError(social_invalid_auth_config.value)
+            raise ValidationError(social_invalid_auth_config.value, 4020)
 
         # Exchange authorization code for access token
         token_url = 'https://www.googleapis.com/oauth2/v4/token'
@@ -93,7 +93,7 @@ class GoogleAuthCallbackView(APIView):
         user_info = user_info_response.json()
         email, name = user_info.get('email'), user_info.get('name')
         if not email or not name:
-            raise ValidationError(social_user_info_missing.value)
+            raise ValidationError(social_user_info_missing.value, 4020)
 
         try:
             provider_data = {'provider': 'google', 'user_info': user_info}
