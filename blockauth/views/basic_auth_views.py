@@ -49,14 +49,14 @@ class SignUpView(APIView):
             pre_signup_trigger = get_config('PRE_SIGNUP_TRIGGER')()
             pre_signup_trigger.trigger(context=data)
 
-            send_otp(data=data, subject=OTPSubject.SIGNUP)
-
             if data.get('email'):
                 user = _User.objects.create(email=data['email'])
             else:
                 user = _User.objects.create(phone_number=data['phone_number'])
             user.set_password(data['password'])
             user.save()
+
+            send_otp(data=data, subject=OTPSubject.SIGNUP)
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             raise ValidationErrorWithCode(detail=e.detail)
