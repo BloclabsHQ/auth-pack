@@ -1,6 +1,4 @@
 import logging
-
-from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -45,7 +43,7 @@ class JWTAuthentication(BaseAuthentication):
         return self._get_user(payload), validated_token
 
     def _get_user(self, payload):
-        user_model = get_user_model()
+        user_model = get_config('BLOCK_AUTH_USER_MODEL')
         try:
             user_id_field = get_config('USER_ID_FIELD')
             user_id = payload["user_id"]

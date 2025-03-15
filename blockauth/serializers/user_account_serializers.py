@@ -1,4 +1,3 @@
-from django.contrib.auth import get_user_model
 from django.core.validators import EmailValidator
 from django.utils.text import format_lazy
 from rest_framework import serializers
@@ -11,7 +10,7 @@ from blockauth.utils.config import get_config
 from blockauth.utils.generics import get_password_help_text
 from blockauth.utils.validators import is_valid_phone_number
 
-_User = get_user_model()
+_User = get_config('BLOCK_AUTH_USER_MODEL')
 logger = logging.getLogger(__name__)
 
 """account basic auth related serializers"""

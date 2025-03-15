@@ -1,6 +1,4 @@
 import logging
-
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -29,7 +27,7 @@ from blockauth.utils.rate_limiter import RequestThrottle
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
-_User = get_user_model()
+_User = get_config('BLOCK_AUTH_USER_MODEL')
 
 
 class SignUpView(APIView):

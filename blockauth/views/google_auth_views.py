@@ -1,7 +1,6 @@
 import logging
 
 import requests
-from django.contrib.auth import get_user_model
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import ValidationError, APIException
@@ -16,7 +15,7 @@ from blockauth.utils.config import get_config
 from blockauth.utils.social import social_login
 
 logger = logging.getLogger(__name__)
-_User = get_user_model()
+_User = get_config('BLOCK_AUTH_USER_MODEL')
 
 class GoogleAuthLoginView(APIView):
     """

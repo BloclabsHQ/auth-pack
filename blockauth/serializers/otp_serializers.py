@@ -1,11 +1,10 @@
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from django.core.validators import EmailValidator
 from rest_framework.exceptions import ValidationError
 from blockauth.utils.config import get_config
 from blockauth.utils.validators import is_valid_phone_number
 
-_User = get_user_model()
+_User = get_config('BLOCK_AUTH_USER_MODEL')
 
 class OTPRequestSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=["email", "sms"], help_text="Method to send message", default="email")
