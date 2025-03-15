@@ -142,6 +142,7 @@ class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
     )
 
     def validate(self, data):
+        super().validate(data)
         if data['new_password'] != data['confirm_password']:
             raise ValidationError(detail={'new_password': 'passwords do not match.'}, code=4007)
         return data

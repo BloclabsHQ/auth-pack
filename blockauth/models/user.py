@@ -1,10 +1,10 @@
 import uuid
 
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import models
 
 
-class BlockUser(AbstractUser):
+class BlockUser(AbstractBaseUser):
     """
     Custom User model that can be updated as per the project requirements.
     This model is not allowed to be managed by Django migrations.
@@ -20,6 +20,7 @@ class BlockUser(AbstractUser):
     username = None
 
     USERNAME_FIELD = 'id'
+    REQUIRED_FIELDS = []
 
     class Meta:
         managed = False
