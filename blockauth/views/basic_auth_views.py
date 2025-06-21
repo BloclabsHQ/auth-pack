@@ -20,14 +20,14 @@ from blockauth.serializers.user_account_serializers import PasswordChangeSeriali
     SignUpRequestSerializer, SignUpResendOTPSerializer, RefreshTokenSerializer, \
     PasswordlessLoginSerializer, BasicLoginSerializer, PasswordlessLoginConfirmationSerializer, \
     SignUpConfirmationSerializer, PasswordResetRequestSerializer
-from blockauth.utils.config import get_config
+from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.rate_limiter import RequestThrottle
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
-_User = get_config('BLOCK_AUTH_USER_MODEL')
+_User = get_block_auth_user_model()
 
 
 class SignUpView(APIView):

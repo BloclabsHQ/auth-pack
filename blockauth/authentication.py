@@ -2,7 +2,7 @@ import logging
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from blockauth.utils.config import get_config
+from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.token import AUTH_TOKEN_CLASS
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class JWTAuthentication(BaseAuthentication):
         return self._get_user(payload), validated_token
 
     def _get_user(self, payload):
-        user_model = get_config('BLOCK_AUTH_USER_MODEL')
+        user_model = get_block_auth_user_model()
         try:
             user_id_field = get_config('USER_ID_FIELD')
             user_id = payload["user_id"]

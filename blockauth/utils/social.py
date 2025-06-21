@@ -2,11 +2,11 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from blockauth.utils.config import get_config
+from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
-_User = get_config('BLOCK_AUTH_USER_MODEL')
+_User = get_block_auth_user_model()
 
 def social_login(email: str, name: str, provider_data: dict) -> Response:
     user, created = _User.objects.get_or_create(email=email, defaults={'first_name': name, 'email': email, 'is_verified': True})

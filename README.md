@@ -129,6 +129,7 @@ own class and add the class path in the settings. Details disccussed in the [Uti
 
 ```python
 BLOCK_AUTH_SETTINGS = {
+    "BLOCK_AUTH_USER_MODEL": "{{app_name.model_class_name}}",  # replace it with your custom user model class name for Blockauth users
     "CLIENT_APP_URL": "http://localhost:3000", # this is the URL of the client app which will communicate with the backend API
     
     "ACCESS_TOKEN_LIFETIME": timedelta(seconds=3600),
@@ -161,12 +162,12 @@ BLOCK_AUTH_SETTINGS = {
     
     # don't need to add DEFAULT_TRIGGER_CLASSES & DEFAULT_NOTIFICATION_CLASS object if you want to use default classes
     "DEFAULT_TRIGGER_CLASSES": {
-        "POST_SIGNUP_TRIGGER": 'path.to.your.Class',
-        "PRE_SIGNUP_TRIGGER": 'path.to.your.Class',
-        "POST_LOGIN_TRIGGER": 'path.to.your.Class',
+        "POST_SIGNUP_TRIGGER": '{{path.to.your.Class}}',  # replace it with your own class path
+        "PRE_SIGNUP_TRIGGER": '{{path.to.your.Class}}',   # replace it with your own class path
+        "POST_LOGIN_TRIGGER": '{{path.to.your.Class}}',   # replace it with your own class path
     },
     
-    "DEFAULT_NOTIFICATION_CLASS": "path.to.your.Class",
+    "DEFAULT_NOTIFICATION_CLASS": "{{path.to.your.Class}}",   # replace it with your own class path
 }
 ```
 

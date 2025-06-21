@@ -13,11 +13,11 @@ from rest_framework.views import APIView
 from blockauth.schemas.examples.social_auth import social_invalid_auth_config, social_authorization_code, \
     social_user_info_missing
 from blockauth.schemas.social_auth import facebook_auth_callback_schema, facebook_auth_login_schema
-from blockauth.utils.config import get_config
+from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 
 logger = logging.getLogger(__name__)
-_User = get_config('BLOCK_AUTH_USER_MODEL')
+_User = get_block_auth_user_model()
 
 class FacebookAuthLoginView(APIView):
     """
