@@ -23,6 +23,7 @@ class LinkedInAuthLoginView(APIView):
     Redirects user to Linkedins's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Linkedin Login', tags=['Social Auth'], **linkedin_auth_login_schema)
     def get(self, request):
@@ -47,6 +48,7 @@ class LinkedInAuthCallbackView(APIView):
     Handles LinkedIn OAuth2 callback, exchanges the code for a LinkedIn token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Linkedin Login Callback', tags=['Social Auth'], **linkedin_auth_callback_schema)
     def get(self, request):

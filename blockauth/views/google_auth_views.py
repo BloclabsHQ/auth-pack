@@ -22,6 +22,7 @@ class GoogleAuthLoginView(APIView):
     Redirects user to Google's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Google Login', tags=['Social Auth'], **google_auth_login_schema)
     def get(self, request):
@@ -47,6 +48,7 @@ class GoogleAuthCallbackView(APIView):
     Handles Google OAuth2 callback, exchanges the code for a Google token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Google Login Callback', tags=['Social Auth'], **google_auth_callback_schema)
     def get(self, request):

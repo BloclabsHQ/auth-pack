@@ -36,6 +36,7 @@ class SignUpView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpRequestSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Signup', tags=['Signup'], **signup_schema)
     def post(self, request):
@@ -70,6 +71,7 @@ class SignUpResendOTPView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
     rate_limit_handler = RequestThrottle()
+    authentication_classes = []
 
     @extend_schema(summary='Resend OTP to Signup', tags=['Signup'], **signup_resend_otp_schema)
     def post(self, request):
@@ -99,6 +101,7 @@ class SignUpConfirmView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpConfirmationSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Confirm Signup', tags=['Signup'], **signup_confirm_schema)
     def post(self, request):
@@ -135,6 +138,7 @@ class BasicAuthLoginView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = BasicLoginSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Basic Login', tags=['Login'], **basic_login_schema)
     def post(self, request):
@@ -169,6 +173,7 @@ class PasswordlessLoginView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
     rate_limit_handler = RequestThrottle()
+    authentication_classes = []
 
     @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
     def post(self, request):
@@ -198,6 +203,7 @@ class PasswordlessLoginConfirmView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Confirm Passwordless Login', tags=['Login'], **passwordless_login_confirm_schema)
     def post(self, request):
@@ -242,6 +248,7 @@ class AuthRefreshTokenView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = RefreshTokenSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Regenerate Access Token', tags=['Login'], **refresh_token_schema)
     def post(self, request):
@@ -273,6 +280,7 @@ class PasswordResetView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetRequestSerializer
     rate_limit_handler = RequestThrottle()
+    authentication_classes = []
 
     @extend_schema(summary='Reset Password', tags=['Password Reset'], **password_reset_schema)
     def post(self, request):
@@ -304,6 +312,7 @@ class PasswordResetConfirmView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetConfirmationEmailSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Confirm Password Reset', tags=['Password Reset'], **password_reset_confirm_schema)
     def post(self, request):
@@ -351,6 +360,7 @@ class PasswordChangeView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
     rate_limit_handler = RequestThrottle()
+    authentication_classes = []
 
     @extend_schema(summary='Change Password', tags=['Account Settings'], **password_change_schema)
     def post(self, request):
@@ -397,6 +407,7 @@ class EmailChangeView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
     rate_limit_handler = RequestThrottle()
+    authentication_classes = []
 
     @extend_schema(summary='Change Account Email', tags=['Account Settings'], **email_change_schema)
     def post(self, request):
@@ -435,6 +446,7 @@ class EmailChangeConfirmView(APIView):
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
+    authentication_classes = []
 
     @extend_schema(summary='Confirm Account Email Change', tags=['Account Settings'], **email_change_confirm_schema)
     def post(self, request):
