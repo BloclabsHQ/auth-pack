@@ -54,7 +54,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - djangorestframework = 3.15.2
 - setuptools = ^75.6.0
 - drf-spectacular = 0.28.0
-- drf-spectacular-sidecar = 2024.12.1
+- drf-spectacular-sidecar = 2025.7.1
 
 ## Installation
 
