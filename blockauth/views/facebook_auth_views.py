@@ -24,6 +24,7 @@ class FacebookAuthLoginView(APIView):
     Redirects user to Facebook's OAuth 2.0 authorization endpoint.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Facebook Login', tags=['Social Auth'], **facebook_auth_login_schema)
     def get(self, request):
@@ -51,6 +52,7 @@ class FacebookAuthCallbackView(APIView):
     Handles Facebook OAuth2 callback, exchanges the code for a Facebook token, and returns JWT tokens.
     """
     permission_classes = (AllowAny,)
+    authentication_classes = []
 
     @extend_schema(summary='Facebook Login Callback', tags=['Social Auth'], **facebook_auth_callback_schema)
     def get(self, request):
