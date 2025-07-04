@@ -360,7 +360,6 @@ class PasswordChangeView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
     rate_limit_handler = RequestThrottle()
-    authentication_classes = []
 
     @extend_schema(summary='Change Password', tags=['Account Settings'], **password_change_schema)
     def post(self, request):
@@ -407,7 +406,6 @@ class EmailChangeView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
     rate_limit_handler = RequestThrottle()
-    authentication_classes = []
 
     @extend_schema(summary='Change Account Email', tags=['Account Settings'], **email_change_schema)
     def post(self, request):
@@ -446,7 +444,6 @@ class EmailChangeConfirmView(APIView):
     """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
-    authentication_classes = []
 
     @extend_schema(summary='Confirm Account Email Change', tags=['Account Settings'], **email_change_confirm_schema)
     def post(self, request):
