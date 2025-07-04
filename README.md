@@ -33,7 +33,6 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Custom Logger Integration](#custom-logger-integration)
   - [Example: Custom Logger Class](#example-custom-logger-class)
   - [Django Settings Configuration](#django-settings-configuration)
-  - [When to Use Each Log Level](#when-to-use-each-log-level)
 - [Rate Limiting](#rate-limiting)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
@@ -513,22 +512,6 @@ BLOCK_AUTH_SETTINGS = {
 - The `icon` argument is a unicode symbol representing the log level.
 - If `BLOCK_AUTH_LOGGER_CLASS` is not set in `BLOCK_AUTH_SETTINGS`, logging calls will be no-ops.
 
-### When to Use Each Log Level
-
-- **debug**: For detailed debugging information.
-- **info**: For general application events and milestones.
-- **warning**: For minor issues or deprecated usage.
-- **error**: For errors that disrupt normal flow but are not critical.
-- **critical**: For severe errors requiring immediate attention.
-- **exception**: For logging exceptions and stack traces.
-- **trace**: For tracing function calls or variable values.
-- **notice**: For important but normal events.
-- **alert**: For events needing immediate action.
-- **fatal**: For unrecoverable errors.
-- **success**: For successful operations.
-- **pending**: For operations in progress.
-
-Refer to the docstrings in `blockauth/utils/logger.py` for more details on each method.
 
 ### Log Context Sanitization
 
