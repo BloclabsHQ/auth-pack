@@ -28,6 +28,12 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - [Utility Classes](#utility-classes)
   - [Communication Class](#communication-class)
   - [Trigger Classes](#trigger-classes)
+- [Logging in BlocAuth](#logging-in-blocauth)
+  - [Supported Log Levels and Icons](#supported-log-levels-and-icons)
+  - [Custom Logger Integration](#custom-logger-integration)
+  - [Example: Custom Logger Class](#example-custom-logger-class)
+  - [Django Settings Configuration](#django-settings-configuration)
+  - [When to Use Each Log Level](#when-to-use-each-log-level)
 - [Rate Limiting](#rate-limiting)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
@@ -168,6 +174,7 @@ BLOCK_AUTH_SETTINGS = {
     },
     
     "DEFAULT_NOTIFICATION_CLASS": "{{path.to.your.Class}}",   # replace it with your own class path
+    "BLOCK_AUTH_LOGGER_CLASS": "myapp.logging.MyBlockAuthLogger",
 }
 ```
 
@@ -457,6 +464,80 @@ class CustomPostLoginTrigger(BaseTrigger):
         print(f"Custom post-login logic with context: {context}")
 ```
 
+## Logging in BlocAuth
+
+BlocAuth provides a unified logging interface for all authentication-related events. This logger supports multiple log levels, each with a unique icon for easy identification.
+
+### Supported Log Levels and Icons
+
+| Level      | Icon  | Description                                                        |
+|------------|-------|--------------------------------------------------------------------|
+| debug      | 🐞    | Detailed information for debugging                                 |
+| info       | ℹ️    | General information about application events                       |
+| warning    | ⚠️    | Unusual or unexpected events, not necessarily errors               |
+| error      | ❌    | Errors that prevent normal execution                               |
+| critical   | 🔥    | Very serious errors requiring immediate attention                  |
+| exception  | 💥    | Exceptions, typically with stack traces                            |
+| trace      | 🔍    | Fine-grained tracing information                                   |
+| notice     | 📢    | Important but normal events requiring special attention            |
+| alert      | 🚨    | Events requiring immediate action, not yet critical                |
+| fatal      | ☠️    | Fatal errors leading to shutdown or unrecoverable failure          |
+| success    | ✅    | Successful completion of an operation                              |
+| pending    | ⏳    | Operations in progress or waiting for completion                   |
+
+### Custom Logger Integration
+
+To use your own logging backend, implement a callback class and set it in your Django settings inside the `BLOCK_AUTH_SETTINGS` dictionary as `BLOCK_AUTH_LOGGER_CLASS`.
+
+#### Example: Custom Logger Class
+
+```python
+# myapp/logging.py
+class MyBlockAuthLogger:
+    def log(self, message, data=None, level="info", icon=None):
+        # You can integrate with Python's logging, send to a service, or print
+        print(f"{icon} [{level.upper()}] {message} | {data}")
+```
+
+#### Django Settings Configuration
+
+```python
+# settings.py
+BLOCK_AUTH_SETTINGS = {
+    "BLOCK_AUTH_LOGGER_CLASS": "myapp.logging.MyBlockAuthLogger",
+    # ... other BlocAuth settings ...
+}
+```
+
+- The logger class must implement a `log(message, data, level, icon)` method.
+- The `icon` argument is a unicode symbol representing the log level.
+- If `BLOCK_AUTH_LOGGER_CLASS` is not set in `BLOCK_AUTH_SETTINGS`, logging calls will be no-ops.
+
+### When to Use Each Log Level
+
+- **debug**: For detailed debugging information.
+- **info**: For general application events and milestones.
+- **warning**: For minor issues or deprecated usage.
+- **error**: For errors that disrupt normal flow but are not critical.
+- **critical**: For severe errors requiring immediate attention.
+- **exception**: For logging exceptions and stack traces.
+- **trace**: For tracing function calls or variable values.
+- **notice**: For important but normal events.
+- **alert**: For events needing immediate action.
+- **fatal**: For unrecoverable errors.
+- **success**: For successful operations.
+- **pending**: For operations in progress.
+
+Refer to the docstrings in `blockauth/utils/logger.py` for more details on each method.
+
+### Log Context Sanitization
+
+To protect sensitive user data, BlocAuth automatically removes sensitive fields (such as passwords, tokens, codes, etc.) from all log data before writing to logs.
+
+By default, the following fields are removed: `password`, `new_password`, `refresh`, `access`, `token`, `code`. This list can be extended by maintainers if needed.
+
+All BlocAuth logging calls use this utility to ensure no sensitive information is ever logged.
+
 ## Rate Limiting
 Rate limiting is implemented for requests currently. The rate limit is based on the number of requests and the duration.
 The rate limit can be configured in the settings.
@@ -472,3 +553,4 @@ All rights reserved.
 - [Google OAuth2](https://developers.google.com/identity/protocols/oauth2)
 - [LinkedIn OAuth2](https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow?context=linkedin/context)
 - [Facebook OAuth2](https://developers.facebook.com/docs/facebook-login/)
+

@@ -33,3 +33,14 @@ def get_password_help_text():
     validators = get_default_password_validators()
     help_texts = [validator.get_help_text() for validator in validators]
     return '\n\n'.join(help_texts)
+
+def sanitize_log_context(data, extra=None):
+    """
+    Remove sensitive fields from a dictionary before logging or external use.
+    SENSITIVE_KEYS can be extended as needed.
+    """
+    SENSITIVE_KEYS = {"password", "new_password", "refresh", "access", "token", "code"}
+    sanitized = {k: v for k, v in data.items() if k not in SENSITIVE_KEYS}
+    if extra:
+        sanitized.update(extra)
+    return sanitized

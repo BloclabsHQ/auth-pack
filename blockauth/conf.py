@@ -25,6 +25,7 @@ DEFAULTS = {
 
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
+    "BLOCK_AUTH_LOGGER_CLASS": "blockauth.utils.logger.DummyLogger",
 }
 
 
@@ -44,6 +45,7 @@ IMPORT_STRINGS = (
     "POST_SIGNUP_TRIGGER",
     "PRE_SIGNUP_TRIGGER",
     "POST_LOGIN_TRIGGER",
+    "BLOCK_AUTH_LOGGER_CLASS",
 )
 
 auth_settings = APISettings(user_settings=None, defaults=DEFAULTS, import_strings=IMPORT_STRINGS)
