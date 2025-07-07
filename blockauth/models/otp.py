@@ -9,10 +9,10 @@ from blockauth.utils.config import get_config
 
 
 class OTPSubject(models.TextChoices):
-    LOGIN = 'Your Login Code for FabricBlo', 'Login'
-    SIGNUP = 'Verify Your Email Address – Your OTP Code Inside', 'Signup'
-    PASSWORD_RESET = 'Password Reset Request – Your OTP Code', 'Password Reset'
-    EMAIL_CHANGE = 'Confirm Your Email Change – OTP Verification Required', 'Email Change'
+    LOGIN = 'login', 'Login'
+    SIGNUP = 'sign_up', 'Signup'
+    PASSWORD_RESET = 'password_reset', 'Password Reset'
+    EMAIL_CHANGE = 'email_change', 'Email Change'
 
 
 class OTP(models.Model):
