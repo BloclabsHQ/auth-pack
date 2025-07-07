@@ -173,7 +173,7 @@ BLOCK_AUTH_SETTINGS = {
     },
     
     "DEFAULT_NOTIFICATION_CLASS": "{{path.to.your.Class}}",   # replace it with your own class path
-    "BLOCK_AUTH_LOGGER_CLASS": "myapp.logging.MyBlockAuthLogger",
+    "BLOCK_AUTH_LOGGER_CLASS": '{{path.to.your.Class}}',   # replace it with your own class path
 }
 ```
 
