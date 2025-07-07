@@ -1,5 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ class DummyPreSignupTrigger(BaseTrigger):
         """
         This trigger will be called before the user signs up.
         """
-        logger.info(f"Pre signup trigger called with context: {context}.")
+        blockauth_logger.info(f"Pre signup trigger called with context")
 
 
 # post signup trigger
@@ -32,7 +34,7 @@ class DummyPostSignupTrigger(BaseTrigger):
         """
         This trigger will be called after the user signs up.
         """
-        logger.info(f"Post signup trigger called with context: {context}.")
+        blockauth_logger.info(f"Post signup trigger called with context")
 
 
 # post login trigger
@@ -41,4 +43,6 @@ class DummyPostLoginTrigger(BaseTrigger):
         """
         This trigger will be called after the user logs in.
         """
-        logger.info(f"Post login trigger called with context: {context}.")
+        blockauth_logger.info(f"Post login trigger called with context")
+
+# NOTE: For custom triggers, always use blockauth_logger and sanitize_log_context for any logging or print statements to avoid leaking sensitive data.

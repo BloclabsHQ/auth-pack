@@ -14,6 +14,8 @@ from blockauth.schemas.examples.social_auth import social_authorization_code, so
 from blockauth.schemas.social_auth import linkedin_auth_login_schema, linkedin_auth_callback_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -39,6 +41,10 @@ class LinkedInAuthLoginView(APIView):
             f"&redirect_uri={callback_url}"
             f"&scope=profile email openid"
             f"&state=blockauth#{timezone.now().timestamp()}"
+        )
+        blockauth_logger.info(
+            "LinkedIn login attempt",
+            sanitize_log_context(request.GET)
         )
         return redirect(linkein_auth_url)
 
@@ -75,6 +81,10 @@ class LinkedInAuthCallbackView(APIView):
         token_response = requests.post(token_url, data=token_data)
         if token_response.status_code != 200:
             token_response_data = token_response.json()
+            blockauth_logger.error(
+                "LinkedIn login failed (token exchange)",
+                {"error": token_response_data.get('error'), "status_code": token_response.status_code}
+            )
             return Response(data={'detail': token_response_data['error']}, status=token_response.status_code)
 
         token_json = token_response.json()
@@ -87,6 +97,10 @@ class LinkedInAuthCallbackView(APIView):
         })
         if user_info_response.status_code != 200:
             user_info_response_data = user_info_response.json()
+            blockauth_logger.error(
+                "LinkedIn login failed (user info)",
+                {"error": user_info_response_data.get('message'), "status_code": user_info_response.status_code}
+            )
             return Response(data={'detail': user_info_response_data['message']}, status=user_info_response.status_code)
 
         # Find or create a user
@@ -97,7 +111,20 @@ class LinkedInAuthCallbackView(APIView):
 
         try:
             provider_data = {'provider': 'linkedin', 'user_info': user_info}
+            blockauth_logger.success(
+                "LinkedIn login successful",
+                {"email": email, "name": name}
+            )
             return social_login(email=email, name=name, provider_data=provider_data)
+        except ValidationError as ve:
+            blockauth_logger.error(
+                "LinkedIn login validation error",
+                {"error": str(ve), "data": sanitize_log_context(request.data)}
+            )
+            raise APIException()
         except Exception as e:
-            logger.error(f'Login failed: {str(e)}', exc_info=True)
+            blockauth_logger.error(
+                "LinkedIn login unexpected error",
+                {"error": str(e), "data": sanitize_log_context(request.data)}
+            )
             raise APIException()

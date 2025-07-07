@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 
 from blockauth.models.otp import OTP
 from blockauth.utils.config import get_config
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +42,8 @@ class BaseNotification(ABC):
 
 class DummyNotification(BaseNotification):
     def notify(self, method: str, event: str, context: dict) -> None:
-        logger.info(
-            f"Notification sent using method: {method}, event: {event}, context: {context}"
+        blockauth_logger.info(
+            f"Notification sent using method: {method}, event: {event}", sanitize_log_context(context)
         )
 
 """
@@ -62,4 +64,7 @@ def send_otp(data, subject):
         context['verification_url'] = f'{get_config('CLIENT_APP_URL')}/{subject}/verify?code={code}&identifier={identifier}'
 
     communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
+    blockauth_logger.info(
+        f"Sending OTP via {method} for {subject}", sanitize_log_context(context)
+    )
     communication_class.notify(method=method, event=NotificationEvent.OTP_REQUEST, context=context)

@@ -15,6 +15,8 @@ from blockauth.schemas.examples.social_auth import social_invalid_auth_config, s
 from blockauth.schemas.social_auth import facebook_auth_callback_schema, facebook_auth_login_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -44,6 +46,10 @@ class FacebookAuthLoginView(APIView):
             'response_mode': 'form_post'
         }
         url = facebook_login_url + urllib.parse.urlencode(params)
+        blockauth_logger.info(
+            "Facebook login attempt",
+            {"client_id": facebook_client_id, "redirect_uri": callback_url}
+        )
         return redirect(url)
 
 
@@ -78,6 +84,10 @@ class FacebookAuthCallbackView(APIView):
         token_response = requests.get(token_url, params=token_data)
         if token_response.status_code != 200:
             token_response_data = token_response.json()
+            blockauth_logger.error(
+                "Facebook login failed (token exchange)",
+                {"error": token_response_data.get('error', {}).get('message'), "status_code": token_response.status_code}
+            )
             return Response(data={'detail': token_response_data['error']['message']}, status=token_response.status_code)
 
         token_json = token_response.json()
@@ -92,6 +102,10 @@ class FacebookAuthCallbackView(APIView):
         user_info_response = requests.get(user_info_url, params=user_info_params)
         if user_info_response.status_code != 200:
             user_info_response_data = user_info_response.json()
+            blockauth_logger.error(
+                "Facebook login failed (user info)",
+                {"error": user_info_response_data.get('message'), "status_code": user_info_response.status_code}
+            )
             return Response(data={'detail': user_info_response_data['message']}, status=user_info_response.status_code)
 
         # Find or create a user
@@ -102,7 +116,20 @@ class FacebookAuthCallbackView(APIView):
 
         try:
             provider_data = {'provider': 'facebook','user_info': user_info}
+            blockauth_logger.success(
+                "Facebook login successful",
+                {"user_id": user_info.get('id'), "email": email, "name": name}
+            )
             return social_login(email=email, name=name, provider_data=provider_data)
+        except ValidationError as ve:
+            blockauth_logger.error(
+                "Facebook login validation error",
+                {"error": str(ve), "data": sanitize_log_context(request.data)}
+            )
+            raise APIException()
         except Exception as e:
-            logger.error(f'Login failed: {str(e)}', exc_info=True)
+            blockauth_logger.error(
+                "Facebook login unexpected error",
+                {"error": str(e), "data": sanitize_log_context(request.data)}
+            )
             raise APIException()
