@@ -65,6 +65,6 @@ def send_otp(data, subject):
 
     communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
     blockauth_logger.info(
-        f"Sending OTP via {method} for {subject}", sanitize_log_context(context)
+        f"Sending {verification_type} via {method} for {subject}", sanitize_log_context(context)
     )
     communication_class.notify(method=method, event=NotificationEvent.OTP_REQUEST, context=context)

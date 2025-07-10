@@ -38,6 +38,7 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
     def validate(self, data):
         super().validate(data)
 
+        # Regular signup OTP resend validation
         identifier = data.get('identifier')
         query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
         user = _User.objects.filter(**query_params).first()
@@ -56,7 +57,9 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         return data
 
 class SignUpConfirmationSerializer(OTPVerifySerializer):
-    pass
+    def validate(self, data):
+        super().validate(data)
+        return data
 
 
 

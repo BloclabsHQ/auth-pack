@@ -1,29 +1,117 @@
 import json
-
-from django.contrib.auth.password_validation import get_default_password_validators
+from typing import Any, Dict, List, Optional, Union
+from datetime import datetime, date
 from django.core.serializers.json import DjangoJSONEncoder
-from django.forms import model_to_dict
+from django.db import models
+from django.contrib.auth.password_validation import get_default_password_validators
+from blockauth.models.user import AuthenticationType
 
-_DEFAULT_FIELDS_TO_REMOVE = ['password', 'groups', 'user_permissions']
 
-def model_to_json(model_instance, remove_fields: tuple[str] = ()) -> dict:
+def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[str, Any]:
     """
-    Convert model instance to json/dict.
-    :param model_instance: model instance
-    :param remove_fields: fields to remove from the json/dict
-    :return: json/dict
+    Convert a Django model instance to a JSON-serializable dictionary.
+    
+    Args:
+        instance: Django model instance
+        remove_fields: Tuple of field names to exclude from the output
+        
+    Returns:
+        Dictionary representation of the model instance
     """
-    otp_data = model_to_dict(model_instance)
-    dump = json.dumps(otp_data, cls=DjangoJSONEncoder)
-    data = json.loads(dump)
-
-    for field in _DEFAULT_FIELDS_TO_REMOVE:
-        data.pop(field, None)
-
-    if remove_fields:
-        for field in remove_fields:
-            data.pop(field, None)
+    if remove_fields is None:
+        remove_fields = ()
+    
+    data = {}
+    for field in instance._meta.fields:
+        if field.name not in remove_fields:
+            value = getattr(instance, field.name)
+            if isinstance(value, (datetime, date)):
+                data[field.name] = value.isoformat()
+            else:
+                data[field.name] = value
+    
     return data
+
+
+def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Sanitize sensitive data from logging context.
+    
+    Args:
+        data: Original data dictionary
+        additional_context: Additional context to include
+        
+    Returns:
+        Sanitized dictionary safe for logging
+    """
+    sensitive_fields = {'password', 'token', 'access', 'refresh', 'signature', 'code'}
+    
+    sanitized = {}
+    for key, value in data.items():
+        if key.lower() in sensitive_fields:
+            sanitized[key] = '***REDACTED***'
+        else:
+            sanitized[key] = value
+    
+    if additional_context:
+        sanitized.update(additional_context)
+    
+    return sanitized
+
+
+def get_authentication_types_display(authentication_types: List[str]) -> List[str]:
+    """
+    Get human-readable display names for authentication types.
+    
+    Args:
+        authentication_types: List of authentication type codes
+        
+    Returns:
+        List of human-readable authentication type names
+    """
+    if not authentication_types:
+        return []
+    
+    display_names = []
+    for auth_type in authentication_types:
+        try:
+            display_name = AuthenticationType(auth_type).label
+            display_names.append(display_name)
+        except ValueError:
+            # If not a valid choice, use the original value
+            display_names.append(auth_type)
+    
+    return display_names
+
+
+def validate_authentication_type(auth_type: str) -> bool:
+    """
+    Validate if an authentication type is supported.
+    
+    Args:
+        auth_type: Authentication type to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    try:
+        AuthenticationType(auth_type)
+        return True
+    except ValueError:
+        return False
+
+
+def get_available_authentication_types() -> List[Dict[str, str]]:
+    """
+    Get all available authentication types with their codes and labels.
+    
+    Returns:
+        List of dictionaries with 'code' and 'label' keys
+    """
+    return [
+        {'code': choice[0], 'label': choice[1]} 
+        for choice in AuthenticationType.choices
+    ]
 
 
 def get_password_help_text():
@@ -33,14 +121,3 @@ def get_password_help_text():
     validators = get_default_password_validators()
     help_texts = [validator.get_help_text() for validator in validators]
     return '\n\n'.join(help_texts)
-
-def sanitize_log_context(data, extra=None):
-    """
-    Remove sensitive fields from a dictionary before logging or external use.
-    SENSITIVE_KEYS can be extended as needed.
-    """
-    SENSITIVE_KEYS = {"password", "new_password", "refresh", "access", "token", "code"}
-    sanitized = {k: v for k, v in data.items() if k not in SENSITIVE_KEYS}
-    if extra:
-        sanitized.update(extra)
-    return sanitized

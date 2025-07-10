@@ -17,6 +17,8 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Spectacular(API documentation) Configs](#spectacularapi-documentation-configs)
   - [Inherit Blockauth User Model](#inherit-blockauth-user-model)
   - [Add URLs](#add-urls)
+- [User Model](#user-model)
+  - [Authentication Types Tracking](#authentication-types-tracking)
 - [User journey of some functionalities](#user-journey-of-some-functionalities)
   - [Sign up](#sign-up)
   - [Basic Login](#basic-login)
@@ -24,6 +26,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Token Refresh](#token-refresh)
   - [Password Reset](#password-reset)
   - [Change Email](#change-email)
+  - [Web3 Wallet Authentication](#web3-wallet-authentication)
 - [Social Providers Login Mechanism (Google, LinkedIn, Facebook, etc.)](#social-providers-login-mechanism-google-linkedin-facebook-etc)
 - [Utility Classes](#utility-classes)
   - [Communication Class](#communication-class)
@@ -44,6 +47,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - SignUp with email and password
 - Login with email and password (Basic Auth)
 - Login via OTP (Passwordless login)
+- Web3 Wallet Authentication (Ethereum/MetaMask)
 - Reset password
 - Change password
 - Change email
@@ -146,6 +150,9 @@ BLOCK_AUTH_SETTINGS = {
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
     "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (identifier, subject, and IP address)
+    
+    # Wallet authentication settings
+    "WALLET_EMAIL_REQUIRED": False,  # Whether wallet users must verify email before accessing non-auth endpoints
         
     "AUTH_PROVIDERS": {
         "GOOGLE": {
@@ -294,6 +301,11 @@ Basic Auth:
 - `auth/email/change`: Request OTP for email change with current email and current password.
 - `auth/email/change/confirm`: Confirm email change with current email, new email and otp.
 
+**Web3 Wallet Authentication:**
+- `auth/login/wallet`: Login with Ethereum wallet signature verification.
+- `auth/wallet/email/add/`: Add email address for wallet user and automatically send verification.
+- `auth/signup/confirm/`: Verify email using OTP (works for both signup and wallet email verification).
+
 Providers:
 - `auth/google`: Redirect URL to Google login page.
 - `auth/google/callback`: Callback URL after succesfull Google login. **This URL should be added to the Google OAuth2 client configuration**.
@@ -359,6 +371,130 @@ Token validity can be configured in the settings.
    - Validate the current email, new email, and OTP.
    - Update the user email with the new email.
 
+### Web3 Wallet Authentication
+BlockAuth supports Ethereum wallet-based authentication using cryptographic signature verification. This allows users to authenticate using their Web3 wallets (like MetaMask) without requiring email or password.
+
+#### Authentication Flow
+1. **Frontend**: User connects their wallet and signs a message (e.g., "ABC")
+2. **Request**: Frontend sends wallet address, message, and signature to `auth/login/wallet`
+3. **Verification**: Backend verifies the signature matches the wallet address
+4. **User Creation**: If no user exists with this wallet address, a new user is created automatically
+5. **Response**: Access token and refresh token are returned
+
+#### Request Format
+```json
+POST /api/v1/auth/login/wallet/
+{
+  "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+  "message": "ABC",
+  "signature": "0x1234567890abcdef1234567890abcdef1234567890abcd..."
+}
+```
+
+#### Response Format
+```json
+{
+  "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+#### Features
+- **Automatic User Creation**: New users are created automatically when first authenticating with a wallet
+- **Signature Verification**: Uses Ethereum's cryptographic signature verification
+- **No Email Required**: Users can authenticate using only their wallet address
+- **Standard JWT Tokens**: Returns the same access/refresh token format as other authentication methods
+- **Trigger Support**: Integrates with existing POST_SIGNUP_TRIGGER and POST_LOGIN_TRIGGER classes
+- **Optional Email Verification**: Users can optionally add and verify email addresses after wallet login
+- **Configurable Email Requirements**: Developers can enforce email verification for wallet users via settings
+
+#### Dependencies
+The Web3 wallet authentication requires the following dependencies (already included in pyproject.toml):
+- `web3`: Ethereum Web3 library
+- `eth-account`: Ethereum account utilities for signature verification
+
+#### Email Verification for Wallet Users
+Wallet users can optionally add and verify email addresses after authentication. This feature is controlled by the `WALLET_EMAIL_REQUIRED` setting.
+
+**Configuration**
+```python
+# settings.py
+BLOCK_AUTH_SETTINGS = {
+    "WALLET_EMAIL_REQUIRED": True,  # Enforce email verification for wallet users
+}
+```
+
+**Email Management Endpoints**
+- `auth/wallet/email/add/`: Add an email address to wallet user and automatically send verification
+- `auth/signup/confirm/`: Verify email using OTP (works for both signup and wallet email verification)
+
+**Request Examples**
+
+Add Email (automatically sends verification):
+```json
+POST /api/v1/auth/wallet/email/add/
+{
+  "email": "user@example.com",
+  "verification_type": "otp"
+}
+```
+
+Add Email with Link Verification:
+```json
+POST /api/v1/auth/wallet/email/add/
+{
+  "email": "user@example.com",
+  "verification_type": "link"
+}
+```
+
+Verify Email:
+```json
+POST /api/v1/auth/signup/confirm/
+{
+  "identifier": "user@example.com",
+  "code": "123456"
+}
+```
+
+**Access Control**
+When `WALLET_EMAIL_REQUIRED` is enabled, wallet users without verified email addresses will be restricted from accessing non-auth endpoints and certain OTP/link related functionality. Use the `WalletEmailVerificationPermission` class to enforce this restriction:
+
+```python
+from blockauth.utils.permissions import WalletEmailVerificationPermission
+
+class MyProtectedView(APIView):
+    permission_classes = [IsAuthenticated, WalletEmailVerificationPermission]
+```
+
+**OTP/Link Endpoint Restrictions**
+When `WALLET_EMAIL_REQUIRED` is enabled, the following endpoints will be restricted for wallet users without verified email:
+
+- `auth/signup/otp/resend/` - Cannot resend OTP for signup/verification
+- `auth/login/passwordless/` - Cannot use passwordless login
+- `auth/password/reset/` - Cannot reset password
+- `auth/password/change/` - Cannot change password
+- `auth/email/change/` - Cannot change email
+- `auth/wallet/email/add/` - Cannot add new email address
+
+**Note**: Wallet users authenticate solely via wallet signature verification. Email addresses are optional and can be added after login for additional functionality or compliance requirements. Verification is automatically sent when email is added or during signup. The system reuses existing signup endpoints for email verification to maintain API consistency.
+
+**Example: Using Wallet Email Verification Permission**
+```python
+# views.py
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from blockauth.utils.permissions import WalletEmailVerificationPermission
+
+class NFTMintingView(APIView):
+    permission_classes = [IsAuthenticated, WalletEmailVerificationPermission]
+    
+    def post(self, request):
+        # This endpoint will only be accessible to wallet users with verified email
+        # when WALLET_EMAIL_REQUIRED is True
+        return Response({"message": "NFT minted successfully"})
+```
+
 ## Social Providers Login Mechanism (Google, LinkedIn, Facebook, etc.)
 
 First, create OAuth client configurations for the social providers (Google, LinkedIn, Facebook, etc.) and add the **client id** 
@@ -394,8 +530,9 @@ Developers have to implement their own class by inheriting the `blockauth.utils.
 Otherwise, the default class will be used.
 
 Currently, the communication class is integrated in the following APIs:
-- `auth/signup`: To send OTP for signup.
-- `auth/signup/otp/resend`: To resend OTP for signup.
+- `auth/signup`: To send OTP/link for signup (automatic).
+- `auth/wallet/email/add/`: To send OTP/link for wallet email verification (automatic).
+- `auth/signup/otp/resend`: To resend OTP for signup (legacy endpoint).
 - `auth/login/passwordless`: To send OTP for passwordless login.
 - `auth/password/reset`: To send OTP for password reset.
 - `auth/password/change`: To send password change notification.
