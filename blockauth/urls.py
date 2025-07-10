@@ -7,6 +7,7 @@ from blockauth.views.basic_auth_views import AuthRefreshTokenView, \
 from blockauth.views.facebook_auth_views import FacebookAuthLoginView, FacebookAuthCallbackView
 from blockauth.views.google_auth_views import GoogleAuthLoginView, GoogleAuthCallbackView
 from blockauth.views.linkedin_auth_views import LinkedInAuthLoginView, LinkedInAuthCallbackView
+from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView
 from django.urls import path
 
 
@@ -20,6 +21,7 @@ urlpatterns = [
     path('login/basic/', BasicAuthLoginView.as_view(), name='basic-login'),
     path('login/passwordless/', PasswordlessLoginView.as_view(), name='passwordless-login'),
     path('login/passwordless/confirm/', PasswordlessLoginConfirmView.as_view(), name='passwordless-login-confirm'),
+    path('login/wallet/', WalletAuthLoginView.as_view(), name='wallet-login'),
     path('token/refresh/', AuthRefreshTokenView.as_view(), name='refresh-token'),
 
     # password reset
@@ -32,6 +34,9 @@ urlpatterns = [
     # email change
     path('email/change/', EmailChangeView.as_view(), name='email-change'),
     path('email/change/confirm/', EmailChangeConfirmView.as_view(), name='confirm-email-change'),
+
+    # wallet email management
+    path('wallet/email/add/', WalletEmailAddView.as_view(), name='wallet-email-add'),
 ]
 
 

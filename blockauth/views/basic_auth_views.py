@@ -1,6 +1,6 @@
 import logging
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 from rest_framework import status
 from rest_framework.exceptions import APIException, AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from blockauth.models.otp import OTP, OTPSubject
+from blockauth.models.user import AuthenticationType
 from blockauth.notification import send_otp, NotificationEvent
 from blockauth.schemas.account_settings import password_change_schema, email_change_schema, email_change_confirm_schema
 from blockauth.schemas.login import basic_login_schema, passwordless_login_schema, passwordless_login_confirm_schema, \
@@ -55,10 +56,11 @@ class SignUpView(APIView):
             else:
                 user = _User.objects.create(phone_number=data['phone_number'])
             user.set_password(data['password'])
+            user.add_authentication_type(AuthenticationType.EMAIL)
             user.save()
 
             send_otp(data=data, subject=OTPSubject.SIGNUP)
-            blockauth_logger.success("User signup OTP sent", sanitize_log_context(request.data, {"user": user.id}))
+            blockauth_logger.success(f"User signup {data['verification_type']} sent", sanitize_log_context(request.data, {"user": user.id}))
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("User signup validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
@@ -71,14 +73,94 @@ class SignUpView(APIView):
 
 class SignUpResendOTPView(APIView):
     """
-    Resend otp for signup.
+    Send OTP/verification link for signup or wallet email verification
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
     rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
-    @extend_schema(summary='Resend OTP to Signup', tags=['Signup'], **signup_resend_otp_schema)
+    @extend_schema(
+        summary='Send Verification OTP/Link',
+        description='Send OTP or verification link for signup confirmation or wallet email verification.',
+        tags=['Verification'],
+        request=SignUpResendOTPSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Verification OTP/link sent successfully",
+                examples=[
+                    OpenApiExample(
+                        "OTP Success",
+                        value={"message": "otp sent via email."},
+                        status_codes=[200],
+                    ),
+                    OpenApiExample(
+                        "Link Success",
+                        value={"message": "link sent via email."},
+                        status_codes=[200],
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Validation error",
+                examples=[
+                    OpenApiExample(
+                        "Invalid identifier",
+                        value={"detail": "Invalid email or phone number."},
+                        status_codes=[400],
+                    )
+                ]
+            ),
+            429: OpenApiResponse(
+                description="Rate limit exceeded",
+                examples=[
+                    OpenApiExample(
+                        "Rate limit",
+                        value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
+                        status_codes=[429],
+                    )
+                ]
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Signup Verification (OTP)",
+                value={
+                    "identifier": "user@example.com",
+                    "method": "email",
+                    "verification_type": "otp"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Signup Verification (Link)",
+                value={
+                    "identifier": "user@example.com",
+                    "method": "email",
+                    "verification_type": "link"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Wallet Email Verification (OTP)",
+                value={
+                    "identifier": "user@example.com",
+                    "method": "email",
+                    "verification_type": "otp"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Wallet Email Verification (Link)",
+                value={
+                    "identifier": "user@example.com",
+                    "method": "email",
+                    "verification_type": "link"
+                },
+                request_only=True,
+            )
+        ]
+    )
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
             wait_time = int(self.rate_limit_handler.wait())
@@ -88,58 +170,187 @@ class SignUpResendOTPView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            send_otp(data, OTPSubject.SIGNUP)
-            blockauth_logger.success("Signup OTP resent", sanitize_log_context(request.data))
+            
+            # Determine if this is a wallet email verification or regular signup
+            # by checking if a user with the given email exists and has a wallet address
+            identifier = data.get('identifier')
+            user = _User.objects.filter(email=identifier).first()
+            is_wallet_verification = user and user.wallet_address
+            
+            if is_wallet_verification:
+                # Check rate limit for wallet email verification
+                if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
+                    wait_time = int(self.rate_limit_handler.wait())
+                    blockauth_logger.warning(
+                        "Wallet email OTP resend rate limit hit", 
+                        sanitize_log_context(request.data, {"wait_time": wait_time})
+                    )
+                    return Response(
+                        data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
+                
+                # Send verification for wallet email verification
+                send_otp(data, OTPSubject.WALLET_EMAIL_VERIFICATION)
+                blockauth_logger.success(f"Wallet email verification {data['verification_type']} sent", sanitize_log_context(request.data))
+            else:
+                # Send verification for regular signup
+                send_otp(data, OTPSubject.SIGNUP)
+                blockauth_logger.success(f"Signup {data['verification_type']} sent", sanitize_log_context(request.data))
+                
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
-            blockauth_logger.warning("Signup OTP resend validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
+            blockauth_logger.warning("Verification send validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
-            blockauth_logger.error("Signup OTP resend failed", sanitize_log_context(request.data, {"error": str(e)}))
+            blockauth_logger.error("Verification send failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
 
 
 class SignUpConfirmView(APIView):
     """
-    Verify otp to signup
+    Verify OTP to confirm signup or wallet email verification
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpConfirmationSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Confirm Signup', tags=['Signup'], **signup_confirm_schema)
+    @extend_schema(
+        summary='Confirm Verification',
+        description='Verify OTP to confirm signup or wallet email verification.',
+        tags=['Verification'],
+        request=SignUpConfirmationSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Verification successful",
+                examples=[
+                    OpenApiExample(
+                        "Signup Success",
+                        value={"message": "Sign up success"},
+                        status_codes=[200],
+                    ),
+                    OpenApiExample(
+                        "Email Verification Success",
+                        value={"message": "Email verified successfully."},
+                        status_codes=[200],
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Validation error",
+                examples=[
+                    OpenApiExample(
+                        "Invalid OTP",
+                        value={"detail": "Invalid OTP."},
+                        status_codes=[400],
+                    )
+                ]
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Signup Confirmation",
+                value={
+                    "identifier": "user@example.com",
+                    "code": "123456"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Wallet Email Verification",
+                value={
+                    "identifier": "user@example.com",
+                    "code": "123456"
+                },
+                request_only=True,
+            )
+        ]
+    )
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        blockauth_logger.info("User signup confirmation attempt", sanitize_log_context(request.data))
+        serializer = self.serializer_class(data=request.data, context={'request': request})
+        blockauth_logger.info("Verification confirmation attempt", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            OTP.validate_otp(identifier=data["identifier"], code=data["code"], subject=OTPSubject.SIGNUP)
+            
+            # Determine if this is a wallet email verification or regular signup
+            # by checking which OTP subject exists in the database
+            identifier = data["identifier"]
+            code = data["code"]
+            
+            # Check if wallet email verification OTP exists
+            wallet_otp_exists = OTP.objects.filter(
+                identifier=identifier,
+                code=code,
+                subject=OTPSubject.WALLET_EMAIL_VERIFICATION,
+                is_used=False
+            ).exists()
+            
+            # Check if signup OTP exists
+            signup_otp_exists = OTP.objects.filter(
+                identifier=identifier,
+                code=code,
+                subject=OTPSubject.SIGNUP,
+                is_used=False
+            ).exists()
+            
+            if wallet_otp_exists:
+                # Wallet email verification
+                OTP.validate_otp(
+                    identifier=identifier, 
+                    code=code, 
+                    subject=OTPSubject.WALLET_EMAIL_VERIFICATION
+                )
+                
+                # Find the user by email and update verification status
+                user = _User.objects.get(email=identifier)
+                user.is_verified = True
+                user.save()
+                
+                blockauth_logger.success(
+                    "Wallet email verified", 
+                    sanitize_log_context(request.data, {"user": user.id})
+                )
+                return Response(
+                    {'message': 'Email verified successfully.'}, 
+                    status=status.HTTP_200_OK
+                )
+            elif signup_otp_exists:
+                # Regular signup confirmation
+                OTP.validate_otp(
+                    identifier=identifier, 
+                    code=code, 
+                    subject=OTPSubject.SIGNUP
+                )
 
-            email, phone_number = data.get('email'), data.get('phone_number')
-            if email:
-                user = _User.objects.get(email=email)
+                email, phone_number = data.get('email'), data.get('phone_number')
+                if email:
+                    user = _User.objects.get(email=email)
+                else:
+                    user = _User.objects.get(phone_number=phone_number)
+                user.is_verified = True
+                user.save()
+
+                user_data = model_to_json(user, remove_fields=('password',))
+
+                post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
+                post_signup_trigger.trigger(context=user_data)
+                blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
+                return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
             else:
-                user = _User.objects.get(phone_number=phone_number)
-            user.is_verified = True
-            user.save()
-
-            user_data = model_to_json(user, remove_fields=('password',))
-
-            post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
-            post_signup_trigger.trigger(context=user_data)
-            blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
-            return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
+                # No valid OTP found for either subject
+                raise ValidationError(detail={"code": "invalid otp"}, code=4010)
+                
         except ValidationError as e:
-            blockauth_logger.warning("User signup confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
+            blockauth_logger.warning("Verification confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
-            blockauth_logger.error("User signup confirmation failed", sanitize_log_context(request.data, {"error": str(e)}))
+            blockauth_logger.error("Verification confirmation failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
 
@@ -162,6 +373,7 @@ class BasicAuthLoginView(APIView):
 
             user = data['user']
             user.last_login = timezone.now()
+            user.add_authentication_type('EMAIL')
             user.save()
 
             user_data = model_to_json(user, remove_fields=('password',))
@@ -205,7 +417,7 @@ class PasswordlessLoginView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
             send_otp(data, OTPSubject.LOGIN)
-            blockauth_logger.success("Passwordless login OTP sent", sanitize_log_context(request.data))
+            blockauth_logger.success(f"Passwordless login {data['verification_type']} sent", sanitize_log_context(request.data))
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Passwordless login validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
@@ -241,6 +453,7 @@ class PasswordlessLoginConfirmView(APIView):
                 user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={'is_verified': True})
             user.last_login = timezone.now()
             user.is_verified = True
+            user.add_authentication_type(AuthenticationType.PASSWORDLESS)
             user.save()
 
             user_data = model_to_json(user, remove_fields=('password',))
@@ -323,7 +536,7 @@ class PasswordResetView(APIView):
             data = serializer.validated_data
 
             send_otp(data, OTPSubject.PASSWORD_RESET)
-            blockauth_logger.success("Password reset OTP sent", sanitize_log_context(request.data))
+            blockauth_logger.success(f"Password reset {data['verification_type']} sent", sanitize_log_context(request.data))
             return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Password reset validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
@@ -465,7 +678,7 @@ class EmailChangeView(APIView):
             context['verification_type'] = data['verification_type']
 
             send_otp(context, OTPSubject.EMAIL_CHANGE)
-            blockauth_logger.success("Email change OTP sent", sanitize_log_context(request.data))
+            blockauth_logger.success(f"Email change {data['verification_type']} sent", sanitize_log_context(request.data))
             return Response({'message': f'{data['verification_type']} has been sent to the email.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Email change validation failed", sanitize_log_context(request.data, {"errors": e.detail}))

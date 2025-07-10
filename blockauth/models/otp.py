@@ -13,6 +13,7 @@ class OTPSubject(models.TextChoices):
     SIGNUP = 'sign_up', 'Signup'
     PASSWORD_RESET = 'password_reset', 'Password Reset'
     EMAIL_CHANGE = 'email_change', 'Email Change'
+    WALLET_EMAIL_VERIFICATION = 'wallet_email_verification', 'Wallet Email Verification'
 
 
 class OTP(models.Model):
