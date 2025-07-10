@@ -17,8 +17,6 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Spectacular(API documentation) Configs](#spectacularapi-documentation-configs)
   - [Inherit Blockauth User Model](#inherit-blockauth-user-model)
   - [Add URLs](#add-urls)
-- [User Model](#user-model)
-  - [Authentication Types Tracking](#authentication-types-tracking)
 - [User journey of some functionalities](#user-journey-of-some-functionalities)
   - [Sign up](#sign-up)
   - [Basic Login](#basic-login)
