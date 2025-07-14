@@ -11,8 +11,4 @@ def is_valid_phone_number(phone):
     # only international phone numbers are allowed
     return phone.startswith("+") and 11 <= len(phone) <= 15
 
-# todo: add unit tests for the followings & more case
-# print(is_valid_phone_number("+123456789012"))  # True (Valid international)
-# print(is_valid_phone_number("1234567890"))     # False (invalid local)
-# print(is_valid_phone_number("12345"))          # False (Too short)
-# print(is_valid_phone_number("+1-234-567-890a")) # False (Contains letters)
+

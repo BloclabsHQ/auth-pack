@@ -185,6 +185,8 @@ BLOCK_AUTH_SETTINGS = {
 
 ### Spectacular(API documentation) Configs
 
+BlockAuth provides comprehensive Swagger/OpenAPI documentation with detailed descriptions, examples, and security information for all endpoints.
+
 Add the following related things to the Django project's `settings.py`:
 
 ```python
@@ -704,6 +706,72 @@ class ProtectedView(APIView):
 ## Rate Limiting
 Rate limiting is implemented for requests currently. The rate limit is based on the number of requests and the duration.
 The rate limit can be configured in the settings.
+
+## Folder Structure
+
+```
+blockauth/
+├── __init__.py
+├── apps.py
+├── authentication.py
+├── conf.py
+├── migrations/
+│   ├── __init__.py
+│   └── 0001_initial.py
+├── models/
+│   ├── __init__.py
+│   ├── otp.py
+│   └── user.py
+├── notification.py
+├── docs/
+│   ├── __init__.py
+│   ├── auth_docs.py
+│   ├── wallet_docs.py
+│   └── social_auth.py
+├── schemas/
+│   ├── __init__.py
+│   ├── account_settings.py
+│   ├── examples/
+│   │   ├── __init__.py
+│   │   ├── account_settings.py
+│   │   ├── common.py
+│   │   ├── login.py
+│   │   ├── password_reset.py
+│   │   ├── signup.py
+│   │   └── social_auth.py
+│   ├── factory.py
+│   ├── login.py
+│   ├── password_reset.py
+│   ├── signup.py
+│   └── social_auth.py
+├── serializers/
+│   ├── __init__.py
+│   ├── otp_serializers.py
+│   ├── user_account_serializers.py
+│   └── wallet_serializers.py
+├── triggers.py
+├── urls.py
+├── utils/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── custom_exception.py
+│   ├── generics.py
+│   ├── logger.py
+│   ├── permissions.py
+│   ├── rate_limiter.py
+│   ├── social.py
+│   ├── token.py
+│   ├── validators.py
+│   └── web3/
+│       └── wallet.py
+└── views/
+    ├── __init__.py
+    ├── basic_auth_views.py
+    ├── facebook_auth_views.py
+    ├── google_auth_views.py
+    ├── linkedin_auth_views.py
+    └── wallet_auth_views.py
+```
 
 ## License
 All rights reserved. 

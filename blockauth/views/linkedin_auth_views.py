@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from blockauth.schemas.examples.social_auth import social_authorization_code, social_invalid_auth_config, \
     social_user_info_missing
-from blockauth.schemas.social_auth import linkedin_auth_login_schema, linkedin_auth_callback_schema
+from blockauth.docs.social_auth import linkedin_auth_login_schema, linkedin_auth_callback_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 from blockauth.utils.logger import blockauth_logger
@@ -27,7 +27,7 @@ class LinkedInAuthLoginView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = []
 
-    @extend_schema(summary='Linkedin Login', tags=['Social Auth'], **linkedin_auth_login_schema)
+    @extend_schema(**linkedin_auth_login_schema)
     def get(self, request):
         linkedin_client_id = get_config('LINKEDIN_CLIENT_ID')
         callback_url = get_config('LINKEDIN_REDIRECT_URI')
@@ -56,7 +56,7 @@ class LinkedInAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = []
 
-    @extend_schema(summary='Linkedin Login Callback', tags=['Social Auth'], **linkedin_auth_callback_schema)
+    @extend_schema(**linkedin_auth_callback_schema)
     def get(self, request):
         code = request.query_params.get('code')
         linkedin_client_id = get_config('LINKEDIN_CLIENT_ID')

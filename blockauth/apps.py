@@ -10,4 +10,4 @@ class BlockAuthConfig(AppConfig):
         import logging
         logging.basicConfig(level=logging.DEBUG)
         logger = logging.getLogger(__name__)
-        logger.debug("BlockAuthConfig is ready")
+        logger.debug("BlockAuth service is ready")

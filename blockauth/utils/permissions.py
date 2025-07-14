@@ -43,7 +43,7 @@ class EmailVerificationPermission(BasePermission):
                 "Email verification required. Please verify your email address to access this endpoint."
             )
         
-        return True
+        return True 
 
 
  

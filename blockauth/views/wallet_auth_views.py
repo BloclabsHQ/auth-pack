@@ -1,6 +1,7 @@
 import logging
 
-from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
+from drf_spectacular.utils import extend_schema
+from blockauth.docs.wallet_docs import wallet_login_docs, wallet_email_add_docs
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -29,59 +30,7 @@ class WalletAuthLoginView(APIView):
     authentication_classes = []
     serializer_class = WalletLoginSerializer
 
-    @extend_schema(
-        summary='Wallet Login',
-        description='Authenticate using an Ethereum wallet signature.',
-        tags=['Wallet Auth'],
-        request=WalletLoginSerializer,
-        responses={
-            200: OpenApiResponse(
-                response={
-                    "type": "object",
-                    "properties": {
-                        "access": {"type": "string", "description": "JWT access token"},
-                        "refresh": {"type": "string", "description": "JWT refresh token"}
-                    },
-                    "example": {
-                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
-                    }
-                },
-                description="Successful wallet login"
-            ),
-            400: OpenApiResponse(
-                description="Validation error",
-                examples=[
-                    OpenApiExample(
-                        "Invalid signature",
-                        value={"detail": "Invalid signature. Signature verification failed."},
-                        status_codes=[400],
-                    )
-                ]
-            ),
-            500: OpenApiResponse(
-                description="Internal server error",
-                examples=[
-                    OpenApiExample(
-                        "Internal error",
-                        value={"detail": "Internal server error"},
-                        status_codes=[500],
-                    )
-                ]
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                "Wallet Login Example",
-                value={
-                    "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                    "message": "ABC",
-                    "signature": "0x1234567890abcdef1234567890abcdef1234567890abcd..."
-                },
-                request_only=True,
-            )
-        ]
-    )
+    @extend_schema(**wallet_login_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Wallet login attempt", sanitize_log_context(request.data))
@@ -136,52 +85,7 @@ class WalletEmailAddView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = WalletEmailAddSerializer
 
-    @extend_schema(
-        summary='Add Email for Wallet User',
-        description='Add an email address to a wallet-authenticated user and automatically send verification.',
-        tags=['Wallet Auth'],
-        request=WalletEmailAddSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Email added and verification sent successfully",
-                examples=[
-                    OpenApiExample(
-                        "Success",
-                        value={"message": "Email added successfully. Verification sent via email."},
-                        status_codes=[200],
-                    )
-                ]
-            ),
-            400: OpenApiResponse(
-                description="Validation error",
-                examples=[
-                    OpenApiExample(
-                        "Email already in use",
-                        value={"detail": "This email is already in use by another account."},
-                        status_codes=[400],
-                    )
-                ]
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                "Add Email with OTP",
-                value={
-                    "email": "user@example.com",
-                    "verification_type": "otp"
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Add Email with Link",
-                value={
-                    "email": "user@example.com",
-                    "verification_type": "link"
-                },
-                request_only=True,
-            )
-        ]
-    )
+    @extend_schema(**wallet_email_add_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         blockauth_logger.info("Wallet email add attempt", sanitize_log_context(request.data))

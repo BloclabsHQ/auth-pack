@@ -1,6 +1,20 @@
 import logging
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+from drf_spectacular.utils import extend_schema
+from blockauth.docs.auth_docs import (
+    signup_docs,
+    signup_resend_otp_docs,
+    signup_confirm_docs,
+    basic_login_docs,
+    passwordless_login_docs,
+    passwordless_confirm_docs,
+    refresh_token_docs,
+    password_reset_docs,
+    password_reset_confirm_docs,
+    password_change_docs,
+    email_change_docs,
+    email_change_confirm_docs
+)
 from rest_framework import status
 from rest_framework.exceptions import APIException, AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,11 +24,7 @@ from rest_framework.views import APIView
 from blockauth.models.otp import OTP, OTPSubject
 from blockauth.models.user import AuthenticationType
 from blockauth.notification import send_otp, NotificationEvent
-from blockauth.schemas.account_settings import password_change_schema, email_change_schema, email_change_confirm_schema
-from blockauth.schemas.login import basic_login_schema, passwordless_login_schema, passwordless_login_confirm_schema, \
-    refresh_token_schema
-from blockauth.schemas.password_reset import password_reset_schema, password_reset_confirm_schema
-from blockauth.schemas.signup import signup_schema, signup_resend_otp_schema, signup_confirm_schema
+
 from blockauth.serializers.user_account_serializers import PasswordChangeSerializer, \
     EmailChangeConfirmationSerializer, \
     PasswordResetConfirmationEmailSerializer, EmailChangeRequestSerializer, \
@@ -40,7 +50,7 @@ class SignUpView(APIView):
     serializer_class = SignUpRequestSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Signup', tags=['Signup'], **signup_schema)
+    @extend_schema(**signup_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("User signup attempt", sanitize_log_context(request.data))
@@ -80,87 +90,7 @@ class SignUpResendOTPView(APIView):
     rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
-    @extend_schema(
-        summary='Send Verification OTP/Link',
-        description='Send OTP or verification link for signup confirmation or wallet email verification.',
-        tags=['Verification'],
-        request=SignUpResendOTPSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Verification OTP/link sent successfully",
-                examples=[
-                    OpenApiExample(
-                        "OTP Success",
-                        value={"message": "otp sent via email."},
-                        status_codes=[200],
-                    ),
-                    OpenApiExample(
-                        "Link Success",
-                        value={"message": "link sent via email."},
-                        status_codes=[200],
-                    )
-                ]
-            ),
-            400: OpenApiResponse(
-                description="Validation error",
-                examples=[
-                    OpenApiExample(
-                        "Invalid identifier",
-                        value={"detail": "Invalid email or phone number."},
-                        status_codes=[400],
-                    )
-                ]
-            ),
-            429: OpenApiResponse(
-                description="Rate limit exceeded",
-                examples=[
-                    OpenApiExample(
-                        "Rate limit",
-                        value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
-                        status_codes=[429],
-                    )
-                ]
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                "Signup Verification (OTP)",
-                value={
-                    "identifier": "user@example.com",
-                    "method": "email",
-                    "verification_type": "otp"
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Signup Verification (Link)",
-                value={
-                    "identifier": "user@example.com",
-                    "method": "email",
-                    "verification_type": "link"
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Wallet Email Verification (OTP)",
-                value={
-                    "identifier": "user@example.com",
-                    "method": "email",
-                    "verification_type": "otp"
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Wallet Email Verification (Link)",
-                value={
-                    "identifier": "user@example.com",
-                    "method": "email",
-                    "verification_type": "link"
-                },
-                request_only=True,
-            )
-        ]
-    )
+    @extend_schema(**signup_resend_otp_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
             wait_time = int(self.rate_limit_handler.wait())
@@ -220,57 +150,7 @@ class SignUpConfirmView(APIView):
     serializer_class = SignUpConfirmationSerializer
     authentication_classes = []
 
-    @extend_schema(
-        summary='Confirm Verification',
-        description='Verify OTP to confirm signup or wallet email verification.',
-        tags=['Verification'],
-        request=SignUpConfirmationSerializer,
-        responses={
-            200: OpenApiResponse(
-                description="Verification successful",
-                examples=[
-                    OpenApiExample(
-                        "Signup Success",
-                        value={"message": "Sign up success"},
-                        status_codes=[200],
-                    ),
-                    OpenApiExample(
-                        "Email Verification Success",
-                        value={"message": "Email verified successfully."},
-                        status_codes=[200],
-                    )
-                ]
-            ),
-            400: OpenApiResponse(
-                description="Validation error",
-                examples=[
-                    OpenApiExample(
-                        "Invalid OTP",
-                        value={"detail": "Invalid OTP."},
-                        status_codes=[400],
-                    )
-                ]
-            ),
-        },
-        examples=[
-            OpenApiExample(
-                "Signup Confirmation",
-                value={
-                    "identifier": "user@example.com",
-                    "code": "123456"
-                },
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Wallet Email Verification",
-                value={
-                    "identifier": "user@example.com",
-                    "code": "123456"
-                },
-                request_only=True,
-            )
-        ]
-    )
+    @extend_schema(**signup_confirm_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         blockauth_logger.info("Verification confirmation attempt", sanitize_log_context(request.data))
@@ -363,7 +243,7 @@ class BasicAuthLoginView(APIView):
     serializer_class = BasicLoginSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Basic Login', tags=['Login'], **basic_login_schema)
+    @extend_schema(**basic_login_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Basic login attempt", sanitize_log_context(request.data))
@@ -402,7 +282,7 @@ class PasswordlessLoginView(APIView):
     rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
-    @extend_schema(summary='Passwordless Login', tags=['Login'], **passwordless_login_schema)
+    @extend_schema(**passwordless_login_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
             wait_time = int(self.rate_limit_handler.wait())
@@ -436,7 +316,7 @@ class PasswordlessLoginConfirmView(APIView):
     serializer_class = PasswordlessLoginConfirmationSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Confirm Passwordless Login', tags=['Login'], **passwordless_login_confirm_schema)
+    @extend_schema(**passwordless_confirm_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Passwordless login confirmation attempt", sanitize_log_context(request.data))
@@ -486,7 +366,7 @@ class AuthRefreshTokenView(APIView):
     serializer_class = RefreshTokenSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Regenerate Access Token', tags=['Login'], **refresh_token_schema)
+    @extend_schema(**refresh_token_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Refresh token attempt", sanitize_log_context(request.data))
@@ -519,7 +399,7 @@ class PasswordResetView(APIView):
     rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
-    @extend_schema(summary='Reset Password', tags=['Password Reset'], **password_reset_schema)
+    @extend_schema(**password_reset_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.PASSWORD_RESET):
             wait_time = int(self.rate_limit_handler.wait())
@@ -555,7 +435,7 @@ class PasswordResetConfirmView(APIView):
     serializer_class = PasswordResetConfirmationEmailSerializer
     authentication_classes = []
 
-    @extend_schema(summary='Confirm Password Reset', tags=['Password Reset'], **password_reset_confirm_schema)
+    @extend_schema(**password_reset_confirm_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Password reset confirmation attempt", sanitize_log_context(request.data))
@@ -605,7 +485,7 @@ class PasswordChangeView(APIView):
     serializer_class = PasswordChangeSerializer
     rate_limit_handler = RequestThrottle()
 
-    @extend_schema(summary='Change Password', tags=['Account Settings'], **password_change_schema)
+    @extend_schema(**password_change_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, 'password_change'):
             wait_time = int(self.rate_limit_handler.wait())
@@ -655,7 +535,7 @@ class EmailChangeView(APIView):
     serializer_class = EmailChangeRequestSerializer
     rate_limit_handler = RequestThrottle()
 
-    @extend_schema(summary='Change Account Email', tags=['Account Settings'], **email_change_schema)
+    @extend_schema(**email_change_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.EMAIL_CHANGE):
             wait_time = int(self.rate_limit_handler.wait())
@@ -697,7 +577,7 @@ class EmailChangeConfirmView(APIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
 
-    @extend_schema(summary='Confirm Account Email Change', tags=['Account Settings'], **email_change_confirm_schema)
+    @extend_schema(**email_change_confirm_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Email change confirmation attempt", sanitize_log_context(request.data))

@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from blockauth.schemas.examples.social_auth import social_invalid_auth_config, social_authorization_code, \
     social_user_info_missing
-from blockauth.schemas.social_auth import google_auth_login_schema, google_auth_callback_schema
+from blockauth.docs.social_auth import google_auth_login_schema, google_auth_callback_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 from blockauth.utils.logger import blockauth_logger
@@ -26,7 +26,7 @@ class GoogleAuthLoginView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = []
 
-    @extend_schema(summary='Google Login', tags=['Social Auth'], **google_auth_login_schema)
+    @extend_schema(**google_auth_login_schema)
     def get(self, request):
         google_client_id = get_config('GOOGLE_CLIENT_ID')
         callback_url = get_config('GOOGLE_REDIRECT_URI')
@@ -56,7 +56,7 @@ class GoogleAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = []
 
-    @extend_schema(summary='Google Login Callback', tags=['Social Auth'], **google_auth_callback_schema)
+    @extend_schema(**google_auth_callback_schema)
     def get(self, request):
         code = request.query_params.get('code')
         google_client_id = get_config('GOOGLE_CLIENT_ID')
