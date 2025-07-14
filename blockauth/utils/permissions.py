@@ -20,7 +20,11 @@ class EmailVerificationPermission(BasePermission):
     
     def has_permission(self, request, view):
         # If email verification is not required, allow all requests
-        if not get_config('EMAIL_VERIFICATION_REQUIRED', False):
+        try:
+            if not get_config('EMAIL_VERIFICATION_REQUIRED'):
+                return True
+        except AttributeError:
+            # If EMAIL_VERIFICATION_REQUIRED is not configured, default to False (not required)
             return True
         
         # If user is not authenticated, let other permission classes handle it
