@@ -457,7 +457,7 @@ POST /api/v1/auth/signup/confirm/
 ```
 
 **Access Control**
-When `EMAIL_VERIFICATION_REQUIRED` is enabled, users without verified email addresses will be restricted from accessing non-auth endpoints and certain OTP/link related functionality. Use the `EmailVerificationPermission` class to enforce this restriction:
+When `EMAIL_VERIFICATION_REQUIRED` is enabled, users without verified email addresses will be restricted from accessing protected endpoints. Use the `EmailVerificationPermission` class to enforce this restriction on your application endpoints:
 
 ```python
 from blockauth.utils.permissions import EmailVerificationPermission
@@ -466,15 +466,16 @@ class MyProtectedView(APIView):
     permission_classes = [IsAuthenticated, EmailVerificationPermission]
 ```
 
-**OTP/Link Endpoint Restrictions**
-When `EMAIL_VERIFICATION_REQUIRED` is enabled, the following endpoints will be restricted for users without verified email:
+**Protected Endpoints**
+When `EMAIL_VERIFICATION_REQUIRED` is enabled, you should use the `EmailVerificationPermission` class on your application endpoints to restrict access for users without verified email. This includes endpoints like:
 
-- `auth/signup/otp/resend/` - Cannot resend OTP for signup/verification
-- `auth/login/passwordless/` - Cannot use passwordless login
-- `auth/password/reset/` - Cannot reset password
-- `auth/password/change/` - Cannot change password
-- `auth/email/change/` - Cannot change email
-- `auth/wallet/email/add/` - Cannot add new email address
+- User profile management
+- Sensitive operations
+- Payment processing
+- Data access endpoints
+- Any endpoint that requires verified user identity
+
+**Note:** The `auth/wallet/email/add/` endpoint is specifically designed for adding email after wallet signup and will always allow users to add their email address, regardless of the `EMAIL_VERIFICATION_REQUIRED` setting.
 
 **Note**: Wallet users authenticate solely via wallet signature verification. Email addresses are optional and can be added after login for additional functionality or compliance requirements. Verification is automatically sent when email is added or during signup. The system reuses existing signup endpoints for email verification to maintain API consistency.
 
@@ -693,6 +694,8 @@ class ProtectedView(APIView):
 1. If email verification is required (configurable via `EMAIL_VERIFICATION_REQUIRED`)
 2. If the user has an email address
 3. If the user's email is verified (`is_verified=True`)
+
+**Note:** This permission is designed to be used on protected endpoints that require email verification. It should NOT be used on endpoints that are specifically for adding email addresses (like `auth/wallet/email/add/`) since users calling those endpoints are expected to be unverified.
 
 **Error Messages:**
 - "Email address required. Please add an email address to access this endpoint." - When user has no email
