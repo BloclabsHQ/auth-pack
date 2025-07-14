@@ -190,8 +190,8 @@ class WalletEmailAddView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
             
-            # Check WALLET_EMAIL_REQUIRED setting for wallet users
-            if get_config('WALLET_EMAIL_REQUIRED'):
+            # Check EMAIL_VERIFICATION_REQUIRED setting for users
+            if get_config('EMAIL_VERIFICATION_REQUIRED'):
                 if not request.user.is_verified:
                     raise ValidationError(
                         detail={"non_field_error": "Email verification required. Please verify your email address first."}, 

@@ -18,8 +18,8 @@ DEFAULTS = {
     "OTP_LENGTH": 6,
     "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
 
-    # Wallet authentication settings
-    "WALLET_EMAIL_REQUIRED": False,  # Whether wallet users must verify email before accessing non-auth endpoints
+    # Email verification settings
+    "EMAIL_VERIFICATION_REQUIRED": False,  # Whether users must verify email before accessing non-auth endpoints
 
     # Trigger classes
     "POST_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPostSignupTrigger',

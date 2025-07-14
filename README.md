@@ -150,8 +150,8 @@ BLOCK_AUTH_SETTINGS = {
     "OTP_LENGTH": 6,
     "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (identifier, subject, and IP address)
     
-    # Wallet authentication settings
-    "WALLET_EMAIL_REQUIRED": False,  # Whether wallet users must verify email before accessing non-auth endpoints
+    # Email verification settings
+    "EMAIL_VERIFICATION_REQUIRED": False,  # Whether users must verify email before accessing non-auth endpoints
         
     "AUTH_PROVIDERS": {
         "GOOGLE": {
@@ -413,13 +413,13 @@ The Web3 wallet authentication requires the following dependencies (already incl
 - `eth-account`: Ethereum account utilities for signature verification
 
 #### Email Verification for Wallet Users
-Wallet users can optionally add and verify email addresses after authentication. This feature is controlled by the `WALLET_EMAIL_REQUIRED` setting.
+Wallet users can optionally add and verify email addresses after authentication. This feature is controlled by the `EMAIL_VERIFICATION_REQUIRED` setting.
 
 **Configuration**
 ```python
 # settings.py
 BLOCK_AUTH_SETTINGS = {
-    "WALLET_EMAIL_REQUIRED": True,  # Enforce email verification for wallet users
+    "EMAIL_VERIFICATION_REQUIRED": True,  # Enforce email verification for all users
 }
 ```
 
@@ -457,17 +457,17 @@ POST /api/v1/auth/signup/confirm/
 ```
 
 **Access Control**
-When `WALLET_EMAIL_REQUIRED` is enabled, wallet users without verified email addresses will be restricted from accessing non-auth endpoints and certain OTP/link related functionality. Use the `WalletEmailVerificationPermission` class to enforce this restriction:
+When `EMAIL_VERIFICATION_REQUIRED` is enabled, users without verified email addresses will be restricted from accessing non-auth endpoints and certain OTP/link related functionality. Use the `EmailVerificationPermission` class to enforce this restriction:
 
 ```python
-from blockauth.utils.permissions import WalletEmailVerificationPermission
+from blockauth.utils.permissions import EmailVerificationPermission
 
 class MyProtectedView(APIView):
-    permission_classes = [IsAuthenticated, WalletEmailVerificationPermission]
+    permission_classes = [IsAuthenticated, EmailVerificationPermission]
 ```
 
 **OTP/Link Endpoint Restrictions**
-When `WALLET_EMAIL_REQUIRED` is enabled, the following endpoints will be restricted for wallet users without verified email:
+When `EMAIL_VERIFICATION_REQUIRED` is enabled, the following endpoints will be restricted for users without verified email:
 
 - `auth/signup/otp/resend/` - Cannot resend OTP for signup/verification
 - `auth/login/passwordless/` - Cannot use passwordless login
@@ -478,19 +478,19 @@ When `WALLET_EMAIL_REQUIRED` is enabled, the following endpoints will be restric
 
 **Note**: Wallet users authenticate solely via wallet signature verification. Email addresses are optional and can be added after login for additional functionality or compliance requirements. Verification is automatically sent when email is added or during signup. The system reuses existing signup endpoints for email verification to maintain API consistency.
 
-**Example: Using Wallet Email Verification Permission**
+**Example: Using Email Verification Permission**
 ```python
 # views.py
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-from blockauth.utils.permissions import WalletEmailVerificationPermission
+from blockauth.utils.permissions import EmailVerificationPermission
 
 class NFTMintingView(APIView):
-    permission_classes = [IsAuthenticated, WalletEmailVerificationPermission]
+    permission_classes = [IsAuthenticated, EmailVerificationPermission]
     
     def post(self, request):
-        # This endpoint will only be accessible to wallet users with verified email
-        # when WALLET_EMAIL_REQUIRED is True
+        # This endpoint will only be accessible to users with verified email
+        # when EMAIL_VERIFICATION_REQUIRED is True
         return Response({"message": "NFT minted successfully"})
 ```
 
@@ -656,6 +656,47 @@ To protect sensitive user data, BlocAuth automatically removes sensitive fields 
 By default, the following fields are removed: `password`, `new_password`, `refresh`, `access`, `token`, `code`. This list can be extended by maintainers if needed.
 
 All BlocAuth logging calls use this utility to ensure no sensitive information is ever logged.
+
+## Permission Classes
+
+BlockAuth provides permission classes to control access to endpoints based on email verification status.
+
+### EmailVerificationPermission
+
+A generic permission class that checks if users have verified their email address. This permission can be used on any endpoint to restrict access for users who haven't verified their email.
+
+**Configuration:**
+```python
+# settings.py
+BLOCK_AUTH_SETTINGS = {
+    "EMAIL_VERIFICATION_REQUIRED": True,  # Enable email verification requirement
+    # ... other settings
+}
+```
+
+**Usage:**
+```python
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from blockauth.utils.permissions import EmailVerificationPermission
+
+class ProtectedView(APIView):
+    permission_classes = [IsAuthenticated, EmailVerificationPermission]
+    
+    def get(self, request):
+        # This endpoint will only be accessible to users with verified email
+        # when EMAIL_VERIFICATION_REQUIRED is True
+        return Response({"message": "Access granted"})
+```
+
+**What it checks:**
+1. If email verification is required (configurable via `EMAIL_VERIFICATION_REQUIRED`)
+2. If the user has an email address
+3. If the user's email is verified (`is_verified=True`)
+
+**Error Messages:**
+- "Email address required. Please add an email address to access this endpoint." - When user has no email
+- "Email verification required. Please verify your email address to access this endpoint." - When email is not verified
 
 ## Rate Limiting
 Rate limiting is implemented for requests currently. The rate limit is based on the number of requests and the duration.
