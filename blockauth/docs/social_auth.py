@@ -6,29 +6,29 @@ from blockauth.schemas.factory import CustomOpenApiResponse
 google_auth_login_schema = {
     'operation_id': 'google_oauth_login',
     'summary': 'Initiate Google OAuth Login',
-    'description': '''
-    Initiates the Google OAuth authentication flow by redirecting users to Google's authorization server.
-    
-    **Flow:**
-    1. User clicks "Login with Google"
-    2. Redirected to Google OAuth consent screen
-    3. User authorizes the application
-    4. Google redirects back to callback URL with authorization code
-    
-    **Prerequisites:**
-    - Google OAuth credentials configured in settings
-    - Valid redirect URI configured in Google Console
-    
-    **Security:**
-    - No authentication required (public endpoint)
-    - CSRF protection via state parameter
-    
-    **Use Cases:**
-    - Quick user registration and login
-    - Single sign-on (SSO) integration
-    - Reduced friction user onboarding
-    - Mobile app social login
-    ''',
+    'description': (
+        "Initiates the Google OAuth authentication flow by redirecting users to Google's authorization server\n"
+        "\n"
+        "**Flow:**\n"
+        "1. User clicks \"Login with Google\"\n"
+        "2. Redirected to Google OAuth consent screen\n"
+        "3. User authorizes the application\n"
+        "4. Google redirects back to callback URL with authorization code\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- Google OAuth credentials configured in settings\n"
+        "- Valid redirect URI configured in Google Console\n"
+        "\n"
+        "**Security:**\n"
+        "- No authentication required (public endpoint)\n"
+        "- CSRF protection via state parameter\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Quick user registration and login\n"
+        "- Single sign-on (SSO) integration\n"
+        "- Reduced friction user onboarding\n"
+        "- Mobile app social login\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'external_docs': {
@@ -105,32 +105,32 @@ google_auth_login_schema = {
 google_auth_callback_schema = {
     'operation_id': 'google_oauth_callback',
     'summary': 'Handle Google OAuth Callback',
-    'description': '''
-    Processes the authorization code returned by Google OAuth and authenticates the user.
-    
-    **Process:**
-    1. Receives authorization code from Google
-    2. Exchanges code for access token
-    3. Retrieves user profile from Google
-    4. Creates or updates user account
-    5. Returns JWT tokens for authenticated session
-    
-    **Error Handling:**
-    - Invalid authorization code
-    - Expired authorization code
-    - Network errors during token exchange
-    - Profile retrieval failures
-    
-    **Security:**
-    - Validates OAuth state parameter for CSRF protection
-    - Verifies authorization code authenticity
-    
-    **Use Cases:**
-    - Completing social authentication flow
-    - User profile creation from social data
-    - Account linking with social profiles
-    - Social login completion
-    ''',
+    'description': (
+        "Processes the authorization code returned by Google OAuth and authenticates the user\n"
+        "\n"
+        "**Process:**\n"
+        "1. Receives authorization code from Google\n"
+        "2. Exchanges code for access token\n"
+        "3. Retrieves user profile from Google\n"
+        "4. Creates or updates user account\n"
+        "5. Returns JWT tokens for authenticated session\n"
+        "\n"
+        "**Error Handling:**\n"
+        "- Invalid authorization code\n"
+        "- Expired authorization code\n"
+        "- Network errors during token exchange\n"
+        "- Profile retrieval failures\n"
+        "\n"
+        "**Security:**\n"
+        "- Validates OAuth state parameter for CSRF protection\n"
+        "- Verifies authorization code authenticity\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing social authentication flow\n"
+        "- User profile creation from social data\n"
+        "- Account linking with social profiles\n"
+        "- Social login completion\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'parameters': [
@@ -278,30 +278,30 @@ google_auth_callback_schema = {
 facebook_auth_login_schema = {
     'operation_id': 'facebook_oauth_login',
     'summary': 'Initiate Facebook OAuth Login',
-    'description': '''
-    Initiates the Facebook OAuth authentication flow by redirecting users to Facebook's authorization server.
-    
-    **Flow:**
-    1. User clicks "Login with Facebook"
-    2. Redirected to Facebook OAuth consent screen
-    3. User authorizes the application
-    4. Facebook redirects back to callback URL with authorization code
-    
-    **Prerequisites:**
-    - Facebook OAuth credentials configured in settings
-    - Valid redirect URI configured in Facebook Developer Console
-    - Required permissions configured (email, public_profile)
-    
-    **Security:**
-    - No authentication required (public endpoint)
-    - CSRF protection via state parameter
-    
-    **Use Cases:**
-    - Social media platform integration
-    - Mobile app Facebook login
-    - E-commerce social authentication
-    - Gaming platform social login
-    ''',
+    'description': (
+        "Initiates the Facebook OAuth authentication flow by redirecting users to Facebook's authorization server\n"
+        "\n"
+        "**Flow:**\n"
+        "1. User clicks \"Login with Facebook\"\n"
+        "2. Redirected to Facebook OAuth consent screen\n"
+        "3. User authorizes the application\n"
+        "4. Facebook redirects back to callback URL with authorization code\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- Facebook OAuth credentials configured in settings\n"
+        "- Valid redirect URI configured in Facebook Developer Console\n"
+        "- Required permissions configured (email, public_profile)\n"
+        "\n"
+        "**Security:**\n"
+        "- No authentication required (public endpoint)\n"
+        "- CSRF protection via state parameter\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Social media platform integration\n"
+        "- Mobile app Facebook login\n"
+        "- E-commerce social authentication\n"
+        "- Gaming platform social login\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'external_docs': {
@@ -378,33 +378,33 @@ facebook_auth_login_schema = {
 facebook_auth_callback_schema = {
     'operation_id': 'facebook_oauth_callback',
     'summary': 'Handle Facebook OAuth Callback',
-    'description': '''
-    Processes the authorization code returned by Facebook OAuth and authenticates the user.
-    
-    **Process:**
-    1. Receives authorization code from Facebook
-    2. Exchanges code for access token
-    3. Retrieves user profile from Facebook Graph API
-    4. Creates or updates user account
-    5. Returns JWT tokens for authenticated session
-    
-    **Error Handling:**
-    - Invalid authorization code
-    - Expired authorization code
-    - Network errors during token exchange
-    - Profile retrieval failures
-    - Permission denied by user
-    
-    **Security:**
-    - Validates OAuth state parameter for CSRF protection
-    - Verifies authorization code authenticity
-    
-    **Use Cases:**
-    - Completing Facebook authentication flow
-    - Social profile data import
-    - Social login completion
-    - Account linking with Facebook profile
-    ''',
+    'description': (
+        "Processes the authorization code returned by Facebook OAuth and authenticates the user\n"
+        "\n"
+        "**Process:**\n"
+        "1. Receives authorization code from Facebook\n"
+        "2. Exchanges code for access token\n"
+        "3. Retrieves user profile from Facebook Graph API\n"
+        "4. Creates or updates user account\n"
+        "5. Returns JWT tokens for authenticated session\n"
+        "\n"
+        "**Error Handling:**\n"
+        "- Invalid authorization code\n"
+        "- Expired authorization code\n"
+        "- Network errors during token exchange\n"
+        "- Profile retrieval failures\n"
+        "- Permission denied by user\n"
+        "\n"
+        "**Security:**\n"
+        "- Validates OAuth state parameter for CSRF protection\n"
+        "- Verifies authorization code authenticity\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing Facebook authentication flow\n"
+        "- Social profile data import\n"
+        "- Social login completion\n"
+        "- Account linking with Facebook profile\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'parameters': [
@@ -552,30 +552,30 @@ facebook_auth_callback_schema = {
 linkedin_auth_login_schema = {
     'operation_id': 'linkedin_oauth_login',
     'summary': 'Initiate LinkedIn OAuth Login',
-    'description': '''
-    Initiates the LinkedIn OAuth authentication flow by redirecting users to LinkedIn's authorization server.
-    
-    **Flow:**
-    1. User clicks "Login with LinkedIn"
-    2. Redirected to LinkedIn OAuth consent screen
-    3. User authorizes the application
-    4. LinkedIn redirects back to callback URL with authorization code
-    
-    **Prerequisites:**
-    - LinkedIn OAuth credentials configured in settings
-    - Valid redirect URI configured in LinkedIn Developer Console
-    - Required permissions configured (r_liteprofile, r_emailaddress)
-    
-    **Security:**
-    - No authentication required (public endpoint)
-    - CSRF protection via state parameter
-    
-    **Use Cases:**
-    - Professional networking platform integration
-    - B2B application authentication
-    - Enterprise social login
-    - Professional profile import
-    ''',
+    'description': (
+        "Initiates the LinkedIn OAuth authentication flow by redirecting users to LinkedIn's authorization server\n"
+        "\n"
+        "**Flow:**\n"
+        "1. User clicks \"Login with LinkedIn\"\n"
+        "2. Redirected to LinkedIn OAuth consent screen\n"
+        "3. User authorizes the application\n"
+        "4. LinkedIn redirects back to callback URL with authorization code\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- LinkedIn OAuth credentials configured in settings\n"
+        "- Valid redirect URI configured in LinkedIn Developer Console\n"
+        "- Required permissions configured (r_liteprofile, r_emailaddress)\n"
+        "\n"
+        "**Security:**\n"
+        "- No authentication required (public endpoint)\n"
+        "- CSRF protection via state parameter\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Professional networking platform integration\n"
+        "- B2B application authentication\n"
+        "- Enterprise social login\n"
+        "- Professional profile import\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'external_docs': {
@@ -652,33 +652,33 @@ linkedin_auth_login_schema = {
 linkedin_auth_callback_schema = {
     'operation_id': 'linkedin_oauth_callback',
     'summary': 'Handle LinkedIn OAuth Callback',
-    'description': '''
-    Processes the authorization code returned by LinkedIn OAuth and authenticates the user.
-    
-    **Process:**
-    1. Receives authorization code from LinkedIn
-    2. Exchanges code for access token
-    3. Retrieves user profile from LinkedIn API
-    4. Creates or updates user account
-    5. Returns JWT tokens for authenticated session
-    
-    **Error Handling:**
-    - Invalid authorization code
-    - Expired authorization code
-    - Network errors during token exchange
-    - Profile retrieval failures
-    - Permission denied by user
-    
-    **Security:**
-    - Validates OAuth state parameter for CSRF protection
-    - Verifies authorization code authenticity
-    
-    **Use Cases:**
-    - Completing LinkedIn authentication flow
-    - Professional profile data import
-    - Business networking integration
-    - Professional identity verification
-    ''',
+    'description': (
+        "Processes the authorization code returned by LinkedIn OAuth and authenticates the user\n"
+        "\n"
+        "**Process:**\n"
+        "1. Receives authorization code from LinkedIn\n"
+        "2. Exchanges code for access token\n"
+        "3. Retrieves user profile from LinkedIn API\n"
+        "4. Creates or updates user account\n"
+        "5. Returns JWT tokens for authenticated session\n"
+        "\n"
+        "**Error Handling:**\n"
+        "- Invalid authorization code\n"
+        "- Expired authorization code\n"
+        "- Network errors during token exchange\n"
+        "- Profile retrieval failures\n"
+        "- Permission denied by user\n"
+        "\n"
+        "**Security:**\n"
+        "- Validates OAuth state parameter for CSRF protection\n"
+        "- Verifies authorization code authenticity\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing LinkedIn authentication flow\n"
+        "- Professional profile data import\n"
+        "- Business networking integration\n"
+        "- Professional identity verification\n"
+    ),
     'tags': ['Social Authentication'],
     'deprecated': False,
     'parameters': [

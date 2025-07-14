@@ -18,46 +18,44 @@ from blockauth.serializers.wallet_serializers import WalletLoginSerializer, Wall
 wallet_login_docs = {
     'operation_id': 'wallet_login',
     'summary': 'Ethereum Wallet Authentication',
-    'description': '''
-    Authenticate user using Ethereum wallet signature verification.
-    
-    **Process:**
-    1. User provides wallet address, message, and signature
-    2. System verifies signature using Ethereum cryptography
-    3. Creates or retrieves user account
-    4. Returns JWT access and refresh tokens
-    
-    **Security Features:**
-    - Cryptographic signature verification
-    - Nonce-based replay protection
-    - Wallet address validation
-    - Automatic user creation for new wallets
-    
-    **Message Format:**
-    The message to sign follows this format:
-    ```
-    Welcome to BlockAuth!
-    
-    Please sign this message to authenticate with your wallet.
-    
-    Wallet Address: {wallet_address}
-    Nonce: {nonce}
-    Timestamp: {timestamp}
-    
-    This signature will be used to authenticate your account.
-    ```
-    
-    **Prerequisites:**
-    - Valid Ethereum wallet address
-    - Properly signed message with correct format
-    - Valid signature that matches the wallet address
-    
-    **Use Cases:**
-    - DeFi application user authentication
-    - NFT marketplace user access
-    - Web3 gaming platform login
-    - Decentralized application (dApp) login
-    ''',
+    'description': (
+        "Authenticate user using Ethereum wallet signature verification\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides wallet address, message, and signature\n"
+        "2. System verifies signature using Ethereum cryptography\n"
+        "3. Creates or retrieves user account\n"
+        "4. Returns JWT access and refresh tokens\n"
+        "\n"
+        "**Security Features:**\n"
+        "- Cryptographic signature verification\n"
+        "- Nonce-based replay protection\n"
+        "- Wallet address validation\n"
+        "- Automatic user creation for new wallets\n"
+        "\n"
+        "**Message Format:**\n"
+        "The message to sign follows this format:\n"
+        "Welcome to BlockAuth!\n"
+        "\n"
+        "Please sign this message to authenticate with your wallet.\n"
+        "\n"
+        "Wallet Address: {wallet_address}\n"
+        "Nonce: {nonce}\n"
+        "Timestamp: {timestamp}\n"
+        "\n"
+        "This signature will be used to authenticate your account.\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- Valid Ethereum wallet address\n"
+        "- Properly signed message with correct format\n"
+        "- Valid signature that matches the wallet address\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- DeFi application user authentication\n"
+        "- NFT marketplace user access\n"
+        "- Web3 gaming platform login\n"
+        "- Decentralized application (dApp) login\n"
+    ),
     'tags': ['Wallet'],
     'deprecated': False,
     'request': WalletLoginSerializer,
@@ -253,37 +251,37 @@ wallet_login_docs = {
 wallet_email_add_docs = {
     'operation_id': 'add_wallet_email',
     'summary': 'Add Email to Wallet Account',
-    'description': '''
-    Add an email address to a wallet-based user account and send verification.
-    
-    **Process:**
-    1. User provides email address
-    2. System validates email format
-    3. Updates user account with email
-    4. Sends verification OTP/link to email
-    5. User completes verification via separate endpoint
-    
-    **Benefits:**
-    - Enhanced account recovery options
-    - Email notifications and updates
-    - Additional verification layer
-    - Better user experience
-    
-    **Security:**
-    - Email format validation
-    - Rate limiting on requests
-    - Verification required before email is active
-    - Authentication required
-    
-    **Authentication Required:**
-    - Valid JWT access token in Authorization header
-    
-    **Use Cases:**
-    - Wallet user account enhancement
-    - Account recovery setup for wallet users
-    - Email notification preferences
-    - Multi-factor authentication setup
-    ''',
+    'description': (
+        "Add an email address to a wallet-based user account and send verification\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides email address\n"
+        "2. System validates email format\n"
+        "3. Updates user account with email\n"
+        "4. Sends verification OTP/link to email\n"
+        "5. User completes verification via separate endpoint\n"
+        "\n"
+        "**Benefits:**\n"
+        "- Enhanced account recovery options\n"
+        "- Email notifications and updates\n"
+        "- Additional verification layer\n"
+        "- Better user experience\n"
+        "\n"
+        "**Security:**\n"
+        "- Email format validation\n"
+        "- Rate limiting on requests\n"
+        "- Verification required before email is active\n"
+        "- Authentication required\n"
+        "\n"
+        "**Authentication Required:**\n"
+        "- Valid JWT access token in Authorization header\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Wallet user account enhancement\n"
+        "- Account recovery setup for wallet users\n"
+        "- Email notification preferences\n"
+        "- Multi-factor authentication setup\n"
+    ),
     'tags': ['Account Management'],
     'deprecated': False,
     'request': WalletEmailAddSerializer,

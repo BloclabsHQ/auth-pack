@@ -23,36 +23,36 @@ from blockauth.serializers.user_account_serializers import (
 signup_docs = {
     'operation_id': 'user_signup',
     'summary': 'User Registration',
-    'description': '''
-    Create a new user account with email/phone verification.
-    
-    **Process:**
-    1. User provides email/phone and password
-    2. System validates input data
-    3. Creates user account (unverified)
-    4. Sends OTP or verification link
-    5. User completes verification via separate endpoint
-    
-    **Verification Methods:**
-    - **OTP**: Time-based one-time password sent via email/SMS
-    - **Link**: Verification link sent via email
-    
-    **Security:**
-    - Password is hashed using Django's secure hashing
-    - Rate limiting applied to prevent abuse
-    - Email/phone validation before account creation
-    
-    **Prerequisites:**
-    - Valid email address or phone number
-    - Strong password (minimum 8 characters)
-    - Unique identifier (email/phone not already registered)
-    
-    **Use Cases:**
-    - New user registration for web/mobile applications
-    - Account creation for e-commerce platforms
-    - User onboarding for SaaS applications
-    - Community platform member registration
-    ''',
+    'description': (
+        "Create a new user account with email/phone verification.\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides email/phone and password\n"
+        "2. System validates input data\n"
+        "3. Creates user account (unverified)\n"
+        "4. Sends OTP or verification link\n"
+        "5. User completes verification via separate endpoint\n"
+        "\n"
+        "**Verification Methods:**\n"
+        "- **OTP**: Time-based one-time password sent via email/SMS\n"
+        "- **Link**: Verification link sent via email\n"
+        "\n"
+        "**Security:**\n"
+        "- Password is hashed using Django's secure hashing\n"
+        "- Rate limiting applied to prevent abuse\n"
+        "- Email/phone validation before account creation\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- Valid email address or phone number\n"
+        "- Strong password (minimum 8 characters)\n"
+        "- Unique identifier (email/phone not already registered)\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- New user registration for web/mobile applications\n"
+        "- Account creation for e-commerce platforms\n"
+        "- User onboarding for SaaS applications\n"
+        "- Community platform member registration\n"
+    ),
     'tags': ['Signup'],
     'deprecated': False,
     'request': SignUpRequestSerializer,
@@ -203,30 +203,30 @@ signup_docs = {
 signup_resend_otp_docs = {
     'operation_id': 'resend_verification',
     'summary': 'Resend Verification OTP/Link',
-    'description': '''
-    Resend OTP or verification link for signup confirmation or wallet email verification.
-    
-    **Use Cases:**
-    - User didn't receive initial verification
-    - OTP expired and needs renewal
-    - Wallet user adding email verification
-    
-    **Rate Limiting:**
-    - Prevents abuse and spam
-    - Configurable wait time between requests
-    - Different limits for signup vs wallet verification
-    
-    **Security:**
-    - Rate limiting prevents brute force attacks
-    - Validates identifier format before sending
-    - Logs all attempts for monitoring
-    
-    **Use Cases:**
-    - User didn't receive initial verification email/SMS
-    - OTP expired and needs renewal
-    - Wallet user adding email verification
-    - Account recovery for unverified users
-    ''',
+    'description': (
+        "Resend OTP or verification link for signup confirmation or wallet email verification.\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- User didn't receive initial verification\n"
+        "- OTP expired and needs renewal\n"
+        "- Wallet user adding email verification\n"
+        "\n"
+        "**Rate Limiting:**\n"
+        "- Prevents abuse and spam\n"
+        "- Configurable wait time between requests\n"
+        "- Different limits for signup vs wallet verification\n"
+        "\n"
+        "**Security:**\n"
+        "- Rate limiting prevents brute force attacks\n"
+        "- Validates identifier format before sending\n"
+        "- Logs all attempts for monitoring\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- User didn't receive initial verification email/SMS\n"
+        "- OTP expired and needs renewal\n"
+        "- Wallet user adding email verification\n"
+        "- Account recovery for unverified users\n"
+    ),
     'tags': ['Verification'],
     'deprecated': False,
     'request': SignUpResendOTPSerializer,
@@ -332,31 +332,31 @@ signup_resend_otp_docs = {
 signup_confirm_docs = {
     'operation_id': 'confirm_signup',
     'summary': 'Confirm User Registration',
-    'description': '''
-    Verify OTP or click verification link to complete user registration.
-    
-    **Process:**
-    1. User provides identifier and verification code
-    2. System validates OTP/link
-    3. Marks user as verified
-    4. User can now login to the system
-    
-    **Verification Types:**
-    - **OTP**: Numeric code sent via email/SMS
-    - **Link**: URL-based verification (handled separately)
-    
-    **Security:**
-    - OTP has expiration time
-    - One-time use only
-    - Rate limiting on attempts
-    - CSRF protection for link verification
-    
-    **Use Cases:**
-    - Completing email verification after signup
-    - Phone number verification for SMS-based auth
-    - Account activation after registration
-    - Two-factor authentication setup
-    ''',
+    'description': (
+        "Verify OTP or click verification link to complete user registration\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides identifier and verification code\n"
+        "2. System validates OTP/link\n"
+        "3. Marks user as verified\n"
+        "4. User can now login to the system\n"
+        "\n"
+        "**Verification Types:**\n"
+        "- **OTP**: Numeric code sent via email/SMS\n"
+        "- **Link**: URL-based verification (handled separately)\n"
+        "\n"
+        "**Security:**\n"
+        "- OTP has expiration time\n"
+        "- One-time use only\n"
+        "- Rate limiting on attempts\n"
+        "- CSRF protection for link verification\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing email verification after signup\n"
+        "- Phone number verification for SMS-based auth\n"
+        "- Account activation after registration\n"
+        "- Two-factor authentication setup\n"
+    ),
     'tags': ['Verification'],
     'deprecated': False,
     'request': SignUpConfirmationSerializer,
@@ -447,35 +447,35 @@ signup_confirm_docs = {
 basic_login_docs = {
     'operation_id': 'basic_login',
     'summary': 'Basic Authentication Login',
-    'description': '''
-    Authenticate user with email/phone and password to obtain access tokens.
-    
-    **Authentication Flow:**
-    1. User provides identifier (email/phone) and password
-    2. System validates credentials
-    3. Returns JWT access and refresh tokens
-    4. User can use access token for authenticated requests
-    
-    **Security Features:**
-    - Password hashing and validation
-    - Account lockout after failed attempts
-    - JWT token expiration
-    - Refresh token for token renewal
-    
-    **Token Usage:**
-    - **Access Token**: Include in Authorization header for API calls
-    - **Refresh Token**: Use to get new access token when expired
-    
-    **Prerequisites:**
-    - User account must be verified
-    - Valid email/phone and password combination
-    
-    **Use Cases:**
-    - Web application user login
-    - Mobile app authentication
-    - API access for authenticated users
-    - E-commerce platform customer login
-    ''',
+    'description': (
+        "Authenticate user with email/phone and password to obtain access tokens\n"
+        "\n"
+        "**Authentication Flow:**\n"
+        "1. User provides identifier (email/phone) and password\n"
+        "2. System validates credentials\n"
+        "3. Returns JWT access and refresh tokens\n"
+        "4. User can use access token for authenticated requests\n"
+        "\n"
+        "**Security Features:**\n"
+        "- Password hashing and validation\n"
+        "- Account lockout after failed attempts\n"
+        "- JWT token expiration\n"
+        "- Refresh token for token renewal\n"
+        "\n"
+        "**Token Usage:**\n"
+        "- **Access Token**: Include in Authorization header for API calls\n"
+        "- **Refresh Token**: Use to get new access token when expired\n"
+        "\n"
+        "**Prerequisites:**\n"
+        "- User account must be verified\n"
+        "- Valid email/phone and password combination\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Web application user login\n"
+        "- Mobile app authentication\n"
+        "- API access for authenticated users\n"
+        "- E-commerce platform customer login\n"
+    ),
     'tags': ['Login'],
     'deprecated': False,
     'request': BasicLoginSerializer,
@@ -632,31 +632,31 @@ basic_login_docs = {
 passwordless_login_docs = {
     'operation_id': 'passwordless_login',
     'summary': 'Passwordless Login',
-    'description': '''
-    Initiate passwordless login by sending OTP or verification link.
-    
-    **Process:**
-    1. User provides email/phone number
-    2. System sends OTP or verification link
-    3. User enters OTP or clicks link
-    4. System authenticates user and returns tokens
-    
-    **Benefits:**
-    - No password required
-    - Enhanced security through time-based codes
-    - Reduced password management overhead
-    
-    **Security:**
-    - Rate limiting prevents abuse
-    - OTP expiration for security
-    - One-time use codes
-    
-    **Use Cases:**
-    - Password-free authentication for mobile apps
-    - Quick login for returning users
-    - Enhanced security for sensitive applications
-    - Corporate SSO integration
-    ''',
+    'description': (
+        "Initiate passwordless login by sending OTP or verification link\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides email/phone number\n"
+        "2. System sends OTP or verification link\n"
+        "3. User enters OTP or clicks link\n"
+        "4. System authenticates user and returns tokens\n"
+        "\n"
+        "**Benefits:**\n"
+        "- No password required\n"
+        "- Enhanced security through time-based codes\n"
+        "- Reduced password management overhead\n"
+        "\n"
+        "**Security:**\n"
+        "- Rate limiting prevents abuse\n"
+        "- OTP expiration for security\n"
+        "- One-time use codes\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Password-free authentication for mobile apps\n"
+        "- Quick login for returning users\n"
+        "- Enhanced security for sensitive applications\n"
+        "- Corporate SSO integration\n"
+    ),
     'tags': ['Login'],
     'deprecated': False,
     'request': PasswordlessLoginSerializer,
@@ -760,26 +760,26 @@ passwordless_login_docs = {
 passwordless_confirm_docs = {
     'operation_id': 'confirm_passwordless_login',
     'summary': 'Confirm Passwordless Login',
-    'description': '''
-    Complete passwordless login by verifying OTP or link.
-    
-    **Process:**
-    1. User provides identifier and verification code
-    2. System validates OTP/link
-    3. Authenticates user and returns JWT tokens
-    4. User can now access protected resources
-    
-    **Security:**
-    - OTP validation with expiration check
-    - One-time use verification codes
-    - Rate limiting on verification attempts
-    
-    **Use Cases:**
-    - Completing passwordless login flow
-    - Two-factor authentication verification
-    - Temporary access code validation
-    - Guest user authentication
-    ''',
+    'description': (
+        "Complete passwordless login by verifying OTP or link\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides identifier and verification code\n"
+        "2. System validates OTP/link\n"
+        "3. Authenticates user and returns JWT tokens\n"
+        "4. User can now access protected resources\n"
+        "\n"
+        "**Security:**\n"
+        "- OTP validation with expiration check\n"
+        "- One-time use verification codes\n"
+        "- Rate limiting on verification attempts\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing passwordless login flow\n"
+        "- Two-factor authentication verification\n"
+        "- Temporary access code validation\n"
+        "- Guest user authentication\n"
+    ),
     'tags': ['Verification'],
     'deprecated': False,
     'request': PasswordlessLoginConfirmationSerializer,
@@ -913,26 +913,26 @@ passwordless_confirm_docs = {
 refresh_token_docs = {
     'operation_id': 'refresh_token',
     'summary': 'Refresh Access Token',
-    'description': '''
-    Get a new access token using a valid refresh token.
-    
-    **Process:**
-    1. User provides valid refresh token
-    2. System validates refresh token
-    3. Returns new access and refresh tokens
-    4. Old refresh token becomes invalid
-    
-    **Security:**
-    - Refresh tokens have longer expiration
-    - Token rotation for enhanced security
-    - Automatic invalidation of old tokens
-    
-    **Use Cases:**
-    - Access token expired during active session
-    - Regular token rotation for security
-    - Session renewal for long-running applications
-    - Mobile app background token refresh
-    ''',
+    'description': (
+        "Get a new access token using a valid refresh token\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides valid refresh token\n"
+        "2. System validates refresh token\n"
+        "3. Returns new access and refresh tokens\n"
+        "4. Old refresh token becomes invalid\n"
+        "\n"
+        "**Security:**\n"
+        "- Refresh tokens have longer expiration\n"
+        "- Token rotation for enhanced security\n"
+        "- Automatic invalidation of old tokens\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Access token expired during active session\n"
+        "- Regular token rotation for security\n"
+        "- Session renewal for long-running applications\n"
+        "- Mobile app background token refresh\n"
+    ),
     'tags': ['Token Management'],
     'deprecated': False,
     'request': RefreshTokenSerializer,
@@ -1030,26 +1030,26 @@ refresh_token_docs = {
 password_reset_docs = {
     'operation_id': 'request_password_reset',
     'summary': 'Request Password Reset',
-    'description': '''
-    Initiate password reset process by sending OTP or reset link.
-    
-    **Process:**
-    1. User provides email/phone number
-    2. System validates user exists
-    3. Sends OTP or reset link
-    4. User completes reset via separate endpoint
-    
-    **Security:**
-    - Rate limiting prevents abuse
-    - No indication if user exists (security through obscurity)
-    - Time-limited reset tokens
-    
-    **Use Cases:**
-    - User forgot password
-    - Account compromise recovery
-    - Password expiration notification
-    - Security policy enforcement
-    ''',
+    'description': (
+        "Initiate password reset process by sending OTP or reset link\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides email/phone number\n"
+        "2. System validates user exists\n"
+        "3. Sends OTP or reset link\n"
+        "4. User completes reset via separate endpoint\n"
+        "\n"
+        "**Security:**\n"
+        "- Rate limiting prevents abuse\n"
+        "- No indication if user exists (security through obscurity)\n"
+        "- Time-limited reset tokens\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- User forgot password\n"
+        "- Account compromise recovery\n"
+        "- Password expiration notification\n"
+        "- Security policy enforcement\n"
+    ),
     'tags': ['Password Management'],
     'deprecated': False,
     'request': PasswordResetRequestSerializer,
@@ -1133,26 +1133,26 @@ password_reset_docs = {
 password_reset_confirm_docs = {
     'operation_id': 'confirm_password_reset',
     'summary': 'Confirm Password Reset',
-    'description': '''
-    Complete password reset by providing verification code and new password.
-    
-    **Process:**
-    1. User provides identifier, verification code, and new password
-    2. System validates code and password
-    3. Updates user password
-    4. Invalidates all existing sessions
-    
-    **Security:**
-    - Password strength validation
-    - Code expiration check
-    - Session invalidation for security
-    
-    **Use Cases:**
-    - Completing forgotten password recovery
-    - Account security restoration
-    - Compromised account recovery
-    - Password policy compliance
-    ''',
+    'description': (
+        "Complete password reset by providing verification code and new password.\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides identifier, verification code, and new password\n"
+        "2. System validates code and password\n"
+        "3. Updates user password\n"
+        "4. Invalidates all existing sessions\n"
+        "\n"
+        "**Security:**\n"
+        "- Password strength validation\n"
+        "- Code expiration check\n"
+        "- Session invalidation for security\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing forgotten password recovery\n"
+        "- Account security restoration\n"
+        "- Compromised account recovery\n"
+        "- Password policy compliance\n"
+    ),
     'tags': ['Password Management'],
     'deprecated': False,
     'request': PasswordResetConfirmationEmailSerializer,
@@ -1237,30 +1237,30 @@ password_reset_confirm_docs = {
 password_change_docs = {
     'operation_id': 'change_password',
     'summary': 'Change Password',
-    'description': '''
-    Change password for authenticated user.
-    
-    **Process:**
-    1. User provides current password and new password
-    2. System validates current password
-    3. Updates to new password
-    4. Invalidates all existing sessions
-    
-    **Security:**
-    - Requires current password verification
-    - Password strength validation
-    - Session invalidation for security
-    - Rate limiting on attempts
-    
-    **Authentication Required:**
-    - Valid JWT access token in Authorization header
-    
-    **Use Cases:**
-    - Proactive password security updates
-    - Regular password rotation compliance
-    - Account security enhancement
-    - Password policy enforcement
-    ''',
+    'description': (
+        "Change password for authenticated user.\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides current password and new password\n"
+        "2. System validates current password\n"
+        "3. Updates to new password\n"
+        "4. Invalidates all existing sessions\n"
+        "\n"
+        "**Security:**\n"
+        "- Requires current password verification\n"
+        "- Password strength validation\n"
+        "- Session invalidation for security\n"
+        "- Rate limiting on attempts\n"
+        "\n"
+        "**Authentication Required:**\n"
+        "- Valid JWT access token in Authorization header\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Proactive password security updates\n"
+        "- Regular password rotation compliance\n"
+        "- Account security enhancement\n"
+        "- Password policy enforcement\n"
+    ),
     'tags': ['Password Management'],
     'deprecated': False,
     'request': PasswordChangeSerializer,
@@ -1368,29 +1368,29 @@ password_change_docs = {
 email_change_docs = {
     'operation_id': 'request_email_change',
     'summary': 'Request Email Change',
-    'description': '''
-    Initiate email change process for authenticated user.
-    
-    **Process:**
-    1. User provides new email and current password
-    2. System validates current password
-    3. Sends verification OTP to new email
-    4. User confirms via separate endpoint
-    
-    **Security:**
-    - Requires current password verification
-    - Rate limiting on requests
-    - Verification required for new email
-    
-    **Authentication Required:**
-    - Valid JWT access token in Authorization header
-    
-    **Use Cases:**
-    - Personal email address updates
-    - Corporate email migration
-    - Account ownership transfer
-    - Email provider changes
-    ''',
+    'description': (
+        "Initiate email change process for authenticated user.\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides new email and current password\n"
+        "2. System validates current password\n"
+        "3. Sends verification OTP to new email\n"
+        "4. User confirms via separate endpoint\n"
+        "\n"
+        "**Security:**\n"
+        "- Requires current password verification\n"
+        "- Rate limiting on requests\n"
+        "- Verification required for new email\n"
+        "\n"
+        "**Authentication Required:**\n"
+        "- Valid JWT access token in Authorization header\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Personal email address updates\n"
+        "- Corporate email migration\n"
+        "- Account ownership transfer\n"
+        "- Email provider changes\n"
+    ),
     'tags': ['Account Management'],
     'deprecated': False,
     'request': EmailChangeRequestSerializer,
@@ -1494,29 +1494,29 @@ email_change_docs = {
 email_change_confirm_docs = {
     'operation_id': 'confirm_email_change',
     'summary': 'Confirm Email Change',
-    'description': '''
-    Complete email change by providing verification code.
-    
-    **Process:**
-    1. User provides verification code from new email
-    2. System validates code
-    3. Updates user email address
-    4. Sends notification to old email
-    
-    **Security:**
-    - Code expiration check
-    - Notification to old email for security
-    - Session invalidation
-    
-    **Authentication Required:**
-    - Valid JWT access token in Authorization header
-    
-    **Use Cases:**
-    - Completing email address updates
-    - Account ownership verification
-    - Email change confirmation
-    - Account security verification
-    ''',
+    'description': (
+        "Complete email change by providing verification code.\n"
+        "\n"
+        "**Process:**\n"
+        "1. User provides verification code from new email\n"
+        "2. System validates code\n"
+        "3. Updates user email address\n"
+        "4. Sends notification to old email\n"
+        "\n"
+        "**Security:**\n"
+        "- Code expiration check\n"
+        "- Notification to old email for security\n"
+        "- Session invalidation\n"
+        "\n"
+        "**Authentication Required:**\n"
+        "- Valid JWT access token in Authorization header\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Completing email address updates\n"
+        "- Account ownership verification\n"
+        "- Email change confirmation\n"
+        "- Account security verification\n"
+    ),
     'tags': ['Account Management'],
     'deprecated': False,
     'request': EmailChangeConfirmationSerializer,
