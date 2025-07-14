@@ -144,6 +144,7 @@ BLOCK_AUTH_SETTINGS = {
     "ALGORITHM": "HS256",
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",   # Field name in the user model which will be used as user id in the JWT token
+    "JWT_SECRET_KEY": "your-jwt-secret-key-here",  # Separate secret key for JWT tokens (optional, falls back to Django SECRET_KEY)
     
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
