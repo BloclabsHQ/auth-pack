@@ -152,6 +152,30 @@ BLOCK_AUTH_SETTINGS = {
     
     # Email verification settings
     "EMAIL_VERIFICATION_REQUIRED": False,  # Whether users must verify email before accessing non-auth endpoints
+    
+    # Feature flags - Enable/disable specific authentication features
+    "FEATURES": {
+        # Core authentication features
+        "SIGNUP": True,                    # Enable user registration with email/password
+        "BASIC_LOGIN": True,               # Enable email/password login authentication
+        "PASSWORDLESS_LOGIN": True,        # Enable passwordless login with OTP
+        "WALLET_LOGIN": True,              # Enable wallet-based authentication
+        "TOKEN_REFRESH": True,             # Enable JWT token refresh functionality
+        
+        # Password management
+        "PASSWORD_RESET": True,            # Enable password reset functionality
+        "PASSWORD_CHANGE": True,           # Enable password change for authenticated users
+        
+        # Email management
+        "EMAIL_CHANGE": True,              # Enable email change functionality
+        "EMAIL_VERIFICATION": True,        # Enable email verification requirement
+        
+        # Wallet features
+        "WALLET_EMAIL_ADD": True,          # Enable adding email to wallet accounts
+        
+        # Social authentication (controlled by provider configuration)
+        "SOCIAL_AUTH": True,               # Master switch for social authentication
+    },
         
     "AUTH_PROVIDERS": {
         "GOOGLE": {
@@ -231,6 +255,111 @@ urlpatterns += [
 
 After adding the above URL pattern, you can access the swagger documentation by going to the URL `http://localhost:8000/api/swagger/` or
 the redoc documentation by going to the URL `http://localhost:8000/api/redoc/`.
+
+### Feature Flags
+
+BlockAuth supports feature flags to enable/disable specific authentication features. This allows you to customize which endpoints are available in your application.
+
+#### Available Features
+
+- **SIGNUP**: Enable user registration with email and password
+- **BASIC_LOGIN**: Enable email/password login authentication  
+- **PASSWORDLESS_LOGIN**: Enable passwordless login with OTP
+- **WALLET_LOGIN**: Enable wallet-based authentication
+- **TOKEN_REFRESH**: Enable JWT token refresh functionality
+- **PASSWORD_RESET**: Enable password reset functionality
+- **PASSWORD_CHANGE**: Enable password change for authenticated users
+- **EMAIL_CHANGE**: Enable email change functionality
+- **EMAIL_VERIFICATION**: Enable email verification requirement
+- **WALLET_EMAIL_ADD**: Enable adding email to wallet accounts
+- **SOCIAL_AUTH**: Master switch for social authentication
+
+#### Example Configuration
+
+To disable email change functionality:
+
+```python
+from blockauth.constants import Features
+
+BLOCK_AUTH_SETTINGS = {
+    # ... other settings ...
+    "FEATURES": {
+        Features.SIGNUP: True,
+        Features.BASIC_LOGIN: True,
+        Features.PASSWORDLESS_LOGIN: True,
+        Features.WALLET_LOGIN: True,
+        Features.TOKEN_REFRESH: True,
+        Features.PASSWORD_RESET: True,
+        Features.PASSWORD_CHANGE: True,
+        Features.EMAIL_CHANGE: False,  # Disable email change
+        Features.EMAIL_VERIFICATION: True,
+        Features.WALLET_EMAIL_ADD: True,
+        Features.SOCIAL_AUTH: True,
+    },
+}
+```
+
+#### Using Constants
+
+BlockAuth provides constants for better type safety and IDE support:
+
+```python
+from blockauth.constants import Features, SocialProviders, URLNames
+from blockauth.utils.feature_flags import is_feature_enabled
+from blockauth.utils.config import is_social_auth_configured
+
+# Check if a feature is enabled
+if is_feature_enabled(Features.EMAIL_CHANGE):
+    # Show email change form
+    pass
+
+# Use social provider constants
+if is_social_auth_configured(SocialProviders.GOOGLE):
+    # Configure Google auth
+    pass
+
+# Use URL name constants
+from django.urls import reverse
+signup_url = reverse(URLNames.SIGNUP)  # Get signup URL
+```
+
+#### Advanced Usage
+
+You can also use constants in your configuration for better maintainability:
+
+```python
+from blockauth.constants import Features, ConfigKeys
+
+BLOCK_AUTH_SETTINGS = {
+    ConfigKeys.FEATURES: {
+        Features.SIGNUP: True,
+        Features.EMAIL_CHANGE: False,
+    },
+    ConfigKeys.ACCESS_TOKEN_LIFETIME: timedelta(hours=1),
+    ConfigKeys.OTP_VALIDITY: timedelta(minutes=5),
+}
+```
+
+
+
+
+
+#### Feature Dependencies
+
+Some features have logical dependencies:
+- `EMAIL_CHANGE` requires `EMAIL_VERIFICATION` to be enabled
+- `PASSWORDLESS_LOGIN` requires `SIGNUP` to be enabled
+
+The system will automatically validate these dependencies and warn about any configuration issues.
+
+#### Benefits
+
+✅ **Type Safety** - Use constants instead of string literals  
+✅ **IDE Support** - Autocomplete and error detection  
+✅ **Maintainable** - Centralized constants in one place  
+✅ **Consistent** - Uniform naming across the codebase  
+✅ **Scalable** - Easy to add new features and constants  
+✅ **Documented** - Comprehensive documentation and examples
 
 
 ### Inherit Blockauth User Model
