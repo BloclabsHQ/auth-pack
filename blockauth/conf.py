@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.signals import setting_changed
 from rest_framework.settings import APISettings
+from blockauth.constants import ConfigKeys
 
 USER_SETTINGS = getattr(settings, "BLOCK_AUTH_SETTINGS", dict())
 
@@ -20,6 +21,30 @@ DEFAULTS = {
 
     # Email verification settings
     "EMAIL_VERIFICATION_REQUIRED": False,  # Whether users must verify email before accessing non-auth endpoints
+
+    # Feature flags - Enable/disable specific authentication features
+    ConfigKeys.FEATURES: {
+        # Core authentication features
+        "SIGNUP": True,                    # Enable user registration
+        "BASIC_LOGIN": True,               # Enable email/password login
+        "PASSWORDLESS_LOGIN": True,        # Enable passwordless login with OTP
+        "WALLET_LOGIN": True,              # Enable wallet-based authentication
+        "TOKEN_REFRESH": True,             # Enable JWT token refresh
+        
+        # Password management
+        "PASSWORD_RESET": True,            # Enable password reset functionality
+        "PASSWORD_CHANGE": True,           # Enable password change for authenticated users
+        
+        # Email management
+        "EMAIL_CHANGE": True,              # Enable email change functionality
+        "EMAIL_VERIFICATION": True,        # Enable email verification requirement
+        
+        # Wallet features
+        "WALLET_EMAIL_ADD": True,          # Enable adding email to wallet accounts
+        
+        # Social authentication (controlled by provider configuration)
+        "SOCIAL_AUTH": True,               # Master switch for social authentication
+    },
 
     # Trigger classes
     "POST_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPostSignupTrigger',
