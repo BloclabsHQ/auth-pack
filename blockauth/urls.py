@@ -11,6 +11,9 @@ from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAd
 from django.urls import path
 
 
+# Note: All endpoints include trailing slashes for consistency.
+# Django's APPEND_SLASH=True setting will automatically redirect
+# requests without trailing slashes to the correct URLs.
 urlpatterns = [
     # signup
     path('signup/', SignUpView.as_view(), name='signup'),
