@@ -261,7 +261,11 @@ class BasicAuthLoginView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=user.id.hex)
+            access_token, refresh_token = generate_auth_token(
+                token_class=AUTH_TOKEN_CLASS(), 
+                user_id=user.id.hex,
+                user_data={"is_verified": user.is_verified}
+            )
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -346,7 +350,11 @@ class PasswordlessLoginConfirmView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=user.id.hex)
+            access_token, refresh_token = generate_auth_token(
+                token_class=AUTH_TOKEN_CLASS(), 
+                user_id=user.id.hex,
+                user_data={"is_verified": user.is_verified}
+            )
             blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -381,7 +389,16 @@ class AuthRefreshTokenView(APIView):
                 blockauth_logger.error("Invalid refresh token type", sanitize_log_context(request.data, {"payload": payload}))
                 raise AuthenticationFailed("Invalid token.")
             user_id = payload["user_id"]
-            access_token, refresh_token = generate_auth_token(token_class=token, user_id=user_id)
+            
+            # Get user to retrieve is_verified status
+            user_model = get_block_auth_user_model()
+            user = user_model.objects.get(id=user_id)
+            
+            access_token, refresh_token = generate_auth_token(
+                token_class=token, 
+                user_id=user_id,
+                user_data={"is_verified": user.is_verified}
+            )
             blockauth_logger.success("Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -551,13 +568,14 @@ class EmailChangeView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
-            code = OTP.generate_otp(get_config('OTP_LENGTH'))
-            otp_instance = OTP.objects.create(identifier=data['new_email'], code=code, subject=OTPSubject.EMAIL_CHANGE)
-            context = model_to_json(otp_instance)
-            context['method'] = 'email'
-            context['verification_type'] = data['verification_type']
+            # Create proper data structure for send_otp function
+            otp_data = {
+                'identifier': data['new_email'],
+                'method': 'email',
+                'verification_type': data['verification_type']
+            }
 
-            send_otp(context, OTPSubject.EMAIL_CHANGE)
+            send_otp(otp_data, OTPSubject.EMAIL_CHANGE)
             blockauth_logger.success(f"Email change {data['verification_type']} sent", sanitize_log_context(request.data))
             return Response({'message': f'{data['verification_type']} has been sent to the email.'}, status=status.HTTP_200_OK)
         except ValidationError as e:

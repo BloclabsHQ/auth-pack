@@ -57,7 +57,7 @@ class AbstractToken:
         decode_token: Decode and validate an existing token
     """
     
-    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta) -> str:
+    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
         """
         Generate a new token with the specified parameters.
         
@@ -128,7 +128,7 @@ class Token(AbstractToken):
                 self.secret_key = get_config('SECRET_KEY')
         self.algorithm = algorithm or get_config('ALGORITHM')
 
-    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta) -> str:
+    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
         """
         Generate a new JWT token with the specified parameters.
         
@@ -140,6 +140,7 @@ class Token(AbstractToken):
             user_id (str): The unique identifier of the user (typically user.id.hex)
             token_type (str): Type of token ('access' or 'refresh')
             token_lifetime (timedelta): How long the token should be valid
+            user_data (Dict[str, Any], optional): Additional user data to include in token
             
         Returns:
             str: The generated JWT token string
@@ -149,7 +150,8 @@ class Token(AbstractToken):
             access_token = token.generate_token(
                 user_id="user123",
                 token_type="access",
-                token_lifetime=timedelta(hours=1)
+                token_lifetime=timedelta(hours=1),
+                user_data={"is_verified": True}
             )
         """
         # Create the token payload with standard JWT claims
@@ -159,6 +161,10 @@ class Token(AbstractToken):
             "iat": timezone.now(),                 # Standard claim: issued at time
             "type": token_type                     # Custom claim: token type
         }
+        
+        # Add additional user data if provided
+        if user_data:
+            payload.update(user_data)
         
         # Encode the payload into a JWT token
         return jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
@@ -174,7 +180,7 @@ class Token(AbstractToken):
             token (str): The JWT token string to decode
             
         Returns:
-            Dict[str, Any]: The decoded token payload containing user_id, exp, iat, type
+            Dict[str, Any]: The decoded token payload containing user_id, exp, iat, type, and any additional user data
             
         Raises:
             AuthenticationFailed: If the token is invalid, expired, or has an invalid signature
@@ -185,6 +191,7 @@ class Token(AbstractToken):
                 payload = token.decode_token("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")
                 user_id = payload['user_id']
                 token_type = payload['type']
+                is_verified = payload.get('is_verified', False)
             except AuthenticationFailed as e:
                 # Handle authentication error
                 pass
@@ -210,7 +217,7 @@ class Token(AbstractToken):
             raise AuthenticationFailed("Invalid signature.")
 
 
-def generate_auth_token(token_class: AbstractToken, user_id: str) -> Tuple[str, str]:
+def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
     """
     Generate both access and refresh tokens for a user.
     
@@ -221,6 +228,7 @@ def generate_auth_token(token_class: AbstractToken, user_id: str) -> Tuple[str, 
     Args:
         token_class (AbstractToken): Token class instance to use for generation
         user_id (str): The unique identifier of the user (typically user.id.hex)
+        user_data (Dict[str, Any], optional): Additional user data to include in tokens
         
     Returns:
         Tuple[str, str]: A tuple containing (access_token, refresh_token)
@@ -235,7 +243,8 @@ def generate_auth_token(token_class: AbstractToken, user_id: str) -> Tuple[str, 
         # Generate tokens for a user
         access_token, refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(),
-            user_id=user.id.hex
+            user_id=user.id.hex,
+            user_data={"is_verified": user.is_verified}
         )
         
         # Use tokens in API responses
@@ -248,14 +257,16 @@ def generate_auth_token(token_class: AbstractToken, user_id: str) -> Tuple[str, 
     access_token = token_class.generate_token(
         user_id=user_id,
         token_type="access",
-        token_lifetime=get_config('ACCESS_TOKEN_LIFETIME')
+        token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
+        user_data=user_data
     )
 
     # Generate refresh token with longer lifetime
     refresh_token = token_class.generate_token(
         user_id=user_id,
         token_type="refresh",
-        token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
+        token_lifetime=get_config('REFRESH_TOKEN_LIFETIME'),
+        user_data=user_data
     )
     
     return access_token, refresh_token

@@ -76,7 +76,8 @@ class WalletLoginSerializer(serializers.Serializer):
         # Generate tokens
         access_token, refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(), 
-            user_id=user.id.hex
+            user_id=user.id.hex,
+            user_data={"is_verified": user.is_verified}
         )
 
         # Store all the data for the view to use

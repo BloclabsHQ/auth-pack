@@ -30,5 +30,9 @@ def social_login(email: str, name: str, provider_data: dict) -> Response:
     post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
     post_login_trigger.trigger(context=context)
 
-    access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=user.id.hex)
+    access_token, refresh_token = generate_auth_token(
+        token_class=AUTH_TOKEN_CLASS(), 
+        user_id=user.id.hex,
+        user_data={"is_verified": user.is_verified}
+    )
     return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
