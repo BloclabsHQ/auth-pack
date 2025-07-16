@@ -20,12 +20,12 @@ from .auth_docs import (
     email_change_confirm_docs
 )
 
-from .wallet_docs import (
+from .wallet_auth_docs import (
     wallet_login_docs,
     wallet_email_add_docs
 )
 
-from .social_auth import (
+from .social_auth_docs import (
     google_auth_login_schema,
     google_auth_callback_schema,
     facebook_auth_login_schema,

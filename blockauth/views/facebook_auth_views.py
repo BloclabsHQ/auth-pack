@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 
 from blockauth.schemas.examples.social_auth import social_invalid_auth_config, social_authorization_code, \
     social_user_info_missing
-from blockauth.docs.social_auth import facebook_auth_callback_schema, facebook_auth_login_schema
+from blockauth.docs.social_auth_docs import facebook_auth_callback_schema, facebook_auth_login_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 from blockauth.utils.logger import blockauth_logger

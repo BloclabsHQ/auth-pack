@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from blockauth.schemas.examples.social_auth import social_authorization_code, social_invalid_auth_config, \
     social_user_info_missing
-from blockauth.docs.social_auth import linkedin_auth_login_schema, linkedin_auth_callback_schema
+from blockauth.docs.social_auth_docs import linkedin_auth_login_schema, linkedin_auth_callback_schema
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 from blockauth.utils.logger import blockauth_logger

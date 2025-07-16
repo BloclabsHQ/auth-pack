@@ -1,7 +1,7 @@
 import logging
 
 from drf_spectacular.utils import extend_schema
-from blockauth.docs.wallet_docs import wallet_login_docs, wallet_email_add_docs
+from blockauth.docs.wallet_auth_docs import wallet_login_docs, wallet_email_add_docs
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated

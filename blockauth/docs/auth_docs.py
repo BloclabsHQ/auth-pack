@@ -24,7 +24,7 @@ signup_docs = {
     'operation_id': 'user_signup',
     'summary': 'User Registration',
     'description': (
-        "Create a new user account with email/phone verification.\n"
+        "Create a new user account with email/phone verification (Basic Signup).\n"
         "\n"
         "**Process:**\n"
         "1. User provides email/phone and password\n"
