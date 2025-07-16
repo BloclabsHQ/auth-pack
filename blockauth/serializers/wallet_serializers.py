@@ -61,7 +61,7 @@ class WalletLoginSerializer(serializers.Serializer):
         # Check if user exists or create new one
         user, created = _User.objects.get_or_create(
             wallet_address=wallet_address,
-            defaults={'is_verified': True}
+            defaults={'is_verified': False}
         )
         
         # Update last login and add authentication type
