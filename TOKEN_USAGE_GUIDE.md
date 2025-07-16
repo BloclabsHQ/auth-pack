@@ -12,6 +12,8 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 ## Token Structure
 
 ### JWT Payload
+
+**Access Token:**
 ```json
 {
   "user_id": "user-uuid-hex",
@@ -22,12 +24,22 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 }
 ```
 
+**Refresh Token:**
+```json
+{
+  "user_id": "user-uuid-hex",
+  "exp": 1640995200,
+  "iat": 1640991600,
+  "type": "refresh"
+}
+```
+
 ### Claims
 - `user_id`: User's UUID in hexadecimal format
 - `exp`: Expiration timestamp
 - `iat`: Issued at timestamp
 - `type`: Token type ("access" or "refresh")
-- `is_verified`: User's email verification status
+- `is_verified`: User's email verification status (access tokens only)
 
 ## Using BlockAuth Tokens in External Services
 
@@ -98,6 +110,43 @@ access_token = custom_token.generate_token(
     token_type="access",
     token_lifetime=timedelta(hours=2)
 )
+```
+
+## Token Refresh Flow
+
+```python
+from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
+
+def refresh_token_view(request):
+    refresh_token = request.data.get('refresh')
+    
+    try:
+        # Validate refresh token
+        token_instance = AUTH_TOKEN_CLASS()
+        payload = token_instance.decode_token(refresh_token)
+        
+        # Check if it's a refresh token
+        if payload['type'] != 'refresh':
+            raise AuthenticationFailed("Invalid token type")
+        
+        # Get user to retrieve current verification status
+        user_model = get_block_auth_user_model()
+        user = user_model.objects.get(id=payload['user_id'])
+        
+        # Generate new tokens (user_data only goes to access token)
+        access_token, new_refresh_token = generate_auth_token(
+            token_class=AUTH_TOKEN_CLASS(),
+            user_id=payload['user_id'],
+            user_data={"is_verified": user.is_verified}
+        )
+        
+        return {
+            "access": access_token,
+            "refresh": new_refresh_token
+        }
+        
+    except AuthenticationFailed as e:
+        return {"error": str(e)}, 401
 ```
 
 ## Django Settings Configuration
@@ -194,6 +243,7 @@ class BlockAuthMiddleware:
                 # Add user info to request
                 request.user_id = payload['user_id']
                 request.token_type = payload['type']
+                request.is_verified = payload.get('is_verified', False)
                 
             except AuthenticationFailed:
                 # Handle invalid token
@@ -211,135 +261,21 @@ from rest_framework.permissions import IsAuthenticated
 
 @api_view(['GET'])
 def protected_endpoint(request):
-    # User ID is available from middleware
+    # User ID and verification status are available from middleware
     user_id = request.user_id
+    is_verified = request.is_verified
     
     return {
         "message": f"Hello user {user_id}",
+        "is_verified": is_verified,
         "data": "Protected data"
     }
 ```
 
-## Token Refresh Flow
+## Testing Token Validation
 
 ```python
-from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
-
-def refresh_token_view(request):
-    refresh_token = request.data.get('refresh')
-    
-    try:
-        # Validate refresh token
-        token_instance = AUTH_TOKEN_CLASS()
-        payload = token_instance.decode_token(refresh_token)
-        
-        # Check if it's a refresh token
-        if payload['type'] != 'refresh':
-            raise AuthenticationFailed("Invalid token type")
-        
-        # Generate new access token
-        access_token, new_refresh_token = generate_auth_token(
-            token_class=AUTH_TOKEN_CLASS(),
-            user_id=payload['user_id'],
-            user_data={"is_verified": payload.get('is_verified', False)}
-        )
-        
-        return {
-            "access": access_token,
-            "refresh": new_refresh_token
-        }
-        
-    except AuthenticationFailed as e:
-        return {"error": str(e)}, 401
-```
-
-## Error Handling
-
-### Common Token Errors
-
-```python
-from rest_framework.exceptions import AuthenticationFailed
-
-try:
-    payload = token_instance.decode_token(token)
-except AuthenticationFailed as e:
-    if "expired" in str(e):
-        # Token has expired
-        return {"error": "Token expired"}, 401
-    elif "Invalid signature" in str(e):
-        # Token signature is invalid
-        return {"error": "Invalid token"}, 401
-    else:
-        # Other token errors
-        return {"error": "Authentication failed"}, 401
-```
-
-## Security Best Practices
-
-### 1. Secret Key Management
-```python
-# Use environment variables
-import os
-
-BLOCK_AUTH_SETTINGS = {
-    "JWT_SECRET_KEY": os.environ.get("JWT_SECRET_KEY"),
-    # ... other settings
-}
-```
-
-### 2. Token Storage
-```python
-# Store tokens securely
-# ✅ Good: HTTP-only cookies, secure storage
-# ❌ Bad: localStorage, sessionStorage (for sensitive apps)
-```
-
-### 3. Token Rotation
-```python
-# Implement token rotation for refresh tokens
-def refresh_with_rotation(request):
-    old_refresh_token = request.data.get('refresh')
-    
-    # Validate old refresh token
-    payload = token_instance.decode_token(old_refresh_token)
-    
-    # Generate new tokens
-    access_token, new_refresh_token = generate_auth_token(
-        token_class=AUTH_TOKEN_CLASS(),
-        user_id=payload['user_id']
-    )
-    
-    # Invalidate old refresh token (implement blacklist)
-    blacklist_token(old_refresh_token)
-    
-    return {
-        "access": access_token,
-        "refresh": new_refresh_token
-    }
-```
-
-## Testing
-
-### Unit Tests
-
-```python
-import pytest
-from blockauth.utils.token import Token, generate_auth_token, AUTH_TOKEN_CLASS
-
-def test_token_generation():
-    token_instance = Token(secret_key="test-secret")
-    
-    access_token = token_instance.generate_token(
-        user_id="test-user",
-        token_type="access",
-        token_lifetime=timedelta(hours=1)
-    )
-    
-    # Decode token
-    payload = token_instance.decode_token(access_token)
-    
-    assert payload['user_id'] == "test-user"
-    assert payload['type'] == "access"
+from blockauth.utils.token import generate_auth_token, Token
 
 def test_token_validation():
     token_instance = Token(secret_key="test-secret")
@@ -356,62 +292,7 @@ def test_token_validation():
     refresh_payload = token_instance.decode_token(refresh_token)
     
     assert access_payload['type'] == "access"
+    assert access_payload['is_verified'] == True
     assert refresh_payload['type'] == "refresh"
+    assert 'is_verified' not in refresh_payload  # Refresh tokens don't contain user data
 ```
-
-## Configuration Reference
-
-### Available Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `ACCESS_TOKEN_LIFETIME` | 1 hour | Access token validity period |
-| `REFRESH_TOKEN_LIFETIME` | 1 day | Refresh token validity period |
-| `ALGORITHM` | "HS256" | JWT signing algorithm |
-| `JWT_SECRET_KEY` | Django SECRET_KEY | Secret key for token signing |
-| `AUTH_HEADER_NAME` | "HTTP_AUTHORIZATION" | Authorization header name |
-
-### Supported Algorithms
-- `HS256` (default)
-- `HS384`
-- `HS512`
-- `RS256`
-- `RS384`
-- `RS512`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Import Errors**
-   ```python
-   # Make sure blockauth is installed
-   pip install blockauth
-   ```
-
-2. **Configuration Errors**
-   ```python
-   # Ensure BLOCK_AUTH_SETTINGS is configured
-   BLOCK_AUTH_SETTINGS = {
-       "BLOCK_AUTH_USER_MODEL": "your_app.YourUserModel",
-   }
-   ```
-
-3. **Token Validation Failures**
-   ```python
-   # Check secret key consistency across services
-   # Ensure same JWT_SECRET_KEY is used
-   ```
-
-4. **User Model Issues**
-   ```python
-   # Verify user model has UUID field
-   # Ensure user.id.hex() returns valid hex string
-   ```
-
-## Support
-
-For issues and questions:
-- Check the BlockAuth documentation
-- Review the source code in `blockauth/utils/token.py`
-- Ensure consistent configuration across all services 

@@ -261,12 +261,11 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
         user_data=user_data
     )
 
-    # Generate refresh token with longer lifetime
+    # Generate refresh token with longer lifetime (minimal payload)
     refresh_token = token_class.generate_token(
         user_id=user_id,
         token_type="refresh",
-        token_lifetime=get_config('REFRESH_TOKEN_LIFETIME'),
-        user_data=user_data
+        token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
     )
     
     return access_token, refresh_token
