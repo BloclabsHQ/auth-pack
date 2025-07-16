@@ -64,6 +64,9 @@ class WalletLoginSerializer(serializers.Serializer):
             defaults={'is_verified': False}
         )
         
+        if created:
+            user.is_verified = False
+
         # Update last login and add authentication type
         user.last_login = timezone.now()
         user.add_authentication_type(AuthenticationType.WALLET)
