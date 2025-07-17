@@ -168,14 +168,7 @@ google_auth_callback_schema = {
             'Successful Authentication',
             value={
                 'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'user': {
-                    'id': 123,
-                    'email': 'user@example.com',
-                    'first_name': 'John',
-                    'last_name': 'Doe',
-                    'is_verified': True
-                }
+                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
             },
             response_only=True,
             status_codes=['200']
@@ -207,36 +200,9 @@ google_auth_callback_schema = {
                         'type': 'string',
                         'description': 'JWT refresh token for token renewal',
                         'format': 'jwt'
-                    },
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'id': {
-                                'type': 'integer',
-                                'description': 'User ID in the system'
-                            },
-                            'email': {
-                                'type': 'string',
-                                'format': 'email',
-                                'description': 'User email address'
-                            },
-                            'first_name': {
-                                'type': 'string',
-                                'description': 'User first name'
-                            },
-                            'last_name': {
-                                'type': 'string',
-                                'description': 'User last name'
-                            },
-                            'is_verified': {
-                                'type': 'boolean',
-                                'description': 'Whether user email is verified'
-                            }
-                        },
-                        'required': ['id', 'email', 'is_verified']
                     }
                 },
-                'required': ['access', 'refresh', 'user']
+                'required': ['access', 'refresh']
             }
         ),
         400: CustomOpenApiResponse(
@@ -442,14 +408,7 @@ facebook_auth_callback_schema = {
             'Successful Authentication',
             value={
                 'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'user': {
-                    'id': 123,
-                    'email': 'user@example.com',
-                    'first_name': 'John',
-                    'last_name': 'Doe',
-                    'is_verified': True
-                }
+                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
             },
             response_only=True,
             status_codes=['200']
@@ -481,36 +440,9 @@ facebook_auth_callback_schema = {
                         'type': 'string',
                         'description': 'JWT refresh token for token renewal',
                         'format': 'jwt'
-                    },
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'id': {
-                                'type': 'integer',
-                                'description': 'User ID in the system'
-                            },
-                            'email': {
-                                'type': 'string',
-                                'format': 'email',
-                                'description': 'User email address'
-                            },
-                            'first_name': {
-                                'type': 'string',
-                                'description': 'User first name'
-                            },
-                            'last_name': {
-                                'type': 'string',
-                                'description': 'User last name'
-                            },
-                            'is_verified': {
-                                'type': 'boolean',
-                                'description': 'Whether user email is verified'
-                            }
-                        },
-                        'required': ['id', 'email', 'is_verified']
                     }
                 },
-                'required': ['access', 'refresh', 'user']
+                'required': ['access', 'refresh']
             }
         ),
         400: CustomOpenApiResponse(
@@ -716,14 +648,7 @@ linkedin_auth_callback_schema = {
             'Successful Authentication',
             value={
                 'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'user': {
-                    'id': 123,
-                    'email': 'user@example.com',
-                    'first_name': 'John',
-                    'last_name': 'Doe',
-                    'is_verified': True
-                }
+                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
             },
             response_only=True,
             status_codes=['200']
@@ -755,36 +680,9 @@ linkedin_auth_callback_schema = {
                         'type': 'string',
                         'description': 'JWT refresh token for token renewal',
                         'format': 'jwt'
-                    },
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'id': {
-                                'type': 'integer',
-                                'description': 'User ID in the system'
-                            },
-                            'email': {
-                                'type': 'string',
-                                'format': 'email',
-                                'description': 'User email address'
-                            },
-                            'first_name': {
-                                'type': 'string',
-                                'description': 'User first name'
-                            },
-                            'last_name': {
-                                'type': 'string',
-                                'description': 'User last name'
-                            },
-                            'is_verified': {
-                                'type': 'boolean',
-                                'description': 'Whether user email is verified'
-                            }
-                        },
-                        'required': ['id', 'email', 'is_verified']
                     }
                 },
-                'required': ['access', 'refresh', 'user']
+                'required': ['access', 'refresh']
             }
         ),
         400: CustomOpenApiResponse(

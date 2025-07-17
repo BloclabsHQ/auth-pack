@@ -1134,16 +1134,17 @@ password_reset_confirm_docs = {
     'operation_id': 'confirm_password_reset',
     'summary': 'Confirm Password Reset',
     'description': (
-        "Complete password reset by providing verification code and new password.\n"
+        "Complete password reset by providing verification code, new password, and confirmation.\n"
         "\n"
         "**Process:**\n"
-        "1. User provides identifier, verification code, and new password\n"
-        "2. System validates code and password\n"
+        "1. User provides identifier, verification code, new password, and confirmation\n"
+        "2. System validates code, password, and confirmation matching\n"
         "3. Updates user password\n"
         "4. Invalidates all existing sessions\n"
         "\n"
         "**Security:**\n"
         "- Password strength validation\n"
+        "- Password confirmation matching\n"
         "- Code expiration check\n"
         "- Session invalidation for security\n"
         "\n"
@@ -1162,10 +1163,11 @@ password_reset_confirm_docs = {
             value={
                 "identifier": "user@example.com",
                 "code": "123456",
-                "new_password": "NewSecurePassword123"
+                "new_password": "NewSecurePassword123",
+                "confirm_password": "NewSecurePassword123"
             },
             request_only=True,
-            description="Confirm password reset with OTP and new password"
+            description="Confirm password reset with OTP, new password, and confirmation"
         )
     ],
     'responses': {
@@ -1217,6 +1219,14 @@ password_reset_confirm_docs = {
                         "error_code": "4001"
                     },
                     status_codes=[400],
+                ),
+                OpenApiExample(
+                    "Password Mismatch",
+                    value={
+                        "detail": {"new_password": "passwords do not match."},
+                        "error_code": "4007"
+                    },
+                    status_codes=[400],
                 )
             ]
         ),
@@ -1241,14 +1251,15 @@ password_change_docs = {
         "Change password for authenticated user.\n"
         "\n"
         "**Process:**\n"
-        "1. User provides current password and new password\n"
-        "2. System validates current password\n"
+        "1. User provides old password, new password, and confirmation\n"
+        "2. System validates old password and password confirmation\n"
         "3. Updates to new password\n"
         "4. Invalidates all existing sessions\n"
         "\n"
         "**Security:**\n"
-        "- Requires current password verification\n"
+        "- Requires old password verification\n"
         "- Password strength validation\n"
+        "- Password confirmation matching\n"
         "- Session invalidation for security\n"
         "- Rate limiting on attempts\n"
         "\n"
@@ -1268,11 +1279,12 @@ password_change_docs = {
         OpenApiExample(
             "Password Change",
             value={
-                "current_password": "OldPassword123",
-                "new_password": "NewSecurePassword123"
+                "old_password": "OldPassword123",
+                "new_password": "NewSecurePassword123",
+                "confirm_password": "NewSecurePassword123"
             },
             request_only=True,
-            description="Change password with current and new password"
+            description="Change password with old password, new password, and confirmation"
         )
     ],
     'responses': {
@@ -1310,10 +1322,10 @@ password_change_docs = {
             },
             examples=[
                 OpenApiExample(
-                    "Invalid Current Password",
+                    "Invalid Old Password",
                     value={
-                        "detail": "Current password is incorrect.",
-                        "error_code": "4001"
+                        "detail": "old password is incorrect.",
+                        "error_code": "4005"
                     },
                     status_codes=[400],
                 ),
@@ -1322,6 +1334,14 @@ password_change_docs = {
                     value={
                         "detail": {"new_password": ["This password is too short."]},
                         "error_code": "4001"
+                    },
+                    status_codes=[400],
+                ),
+                OpenApiExample(
+                    "Password Mismatch",
+                    value={
+                        "detail": {"new_password": "passwords do not match."},
+                        "error_code": "4007"
                     },
                     status_codes=[400],
                 )

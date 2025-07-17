@@ -96,34 +96,6 @@ wallet_login_docs = {
                         "type": "string",
                         "description": "JWT refresh token for token renewal",
                         "format": "jwt"
-                    },
-                    "user": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "integer",
-                                "description": "User ID in the system"
-                            },
-                            "wallet_address": {
-                                "type": "string",
-                                "description": "Ethereum wallet address",
-                                "pattern": "^0x[a-fA-F0-9]{40}$"
-                            },
-                            "email": {
-                                "type": "string",
-                                "format": "email",
-                                "description": "User email address (if added)"
-                            },
-                            "is_verified": {
-                                "type": "boolean",
-                                "description": "Email verification status"
-                            },
-                            "created": {
-                                "type": "boolean",
-                                "description": "Whether this is a new user account"
-                            }
-                        },
-                        "required": ["id", "wallet_address", "is_verified", "created"]
                     }
                 },
                 "required": ["access", "refresh"]
@@ -133,13 +105,7 @@ wallet_login_docs = {
                     "New User Success",
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "user": {
-                            "id": 123,
-                            "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                            "is_verified": False,
-                            "created": True
-                        }
+                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                     },
                     status_codes=[200],
                     description="New wallet user created and authenticated"
@@ -148,14 +114,7 @@ wallet_login_docs = {
                     "Existing User Success",
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "user": {
-                            "id": 123,
-                            "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                            "email": "user@example.com",
-                            "is_verified": True,
-                            "created": False
-                        }
+                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                     },
                     status_codes=[200],
                     description="Existing wallet user authenticated"
