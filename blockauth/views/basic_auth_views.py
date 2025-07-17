@@ -263,8 +263,7 @@ class BasicAuthLoginView(APIView):
 
             access_token, refresh_token = generate_auth_token(
                 token_class=AUTH_TOKEN_CLASS(), 
-                user_id=user.id.hex,
-                user_data={"is_verified": user.is_verified}
+                user_id=user.id.hex
             )
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
@@ -352,8 +351,7 @@ class PasswordlessLoginConfirmView(APIView):
 
             access_token, refresh_token = generate_auth_token(
                 token_class=AUTH_TOKEN_CLASS(), 
-                user_id=user.id.hex,
-                user_data={"is_verified": user.is_verified}
+                user_id=user.id.hex
             )
             blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
@@ -396,8 +394,7 @@ class AuthRefreshTokenView(APIView):
             
             access_token, refresh_token = generate_auth_token(
                 token_class=token, 
-                user_id=user_id,
-                user_data={"is_verified": user.is_verified}
+                user_id=user_id
             )
             blockauth_logger.success("Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)

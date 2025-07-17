@@ -19,8 +19,7 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
   "user_id": "user-uuid-hex",
   "exp": 1640995200,
   "iat": 1640991600,
-  "type": "access",
-  "is_verified": true
+  "type": "access"
 }
 ```
 
@@ -39,7 +38,6 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 - `exp`: Expiration timestamp
 - `iat`: Issued at timestamp
 - `type`: Token type ("access" or "refresh")
-- `is_verified`: User's email verification status (access tokens only)
 
 ## Using BlockAuth Tokens in External Services
 
@@ -59,7 +57,7 @@ user_id = "550e8400-e29b-41d4-a716-446655440000"  # User's UUID in hex
 access_token, refresh_token = generate_auth_token(
     token_class=AUTH_TOKEN_CLASS(),
     user_id=user_id,
-    user_data={"is_verified": True}  # Include user verification status
+    user_data={}  # Include user verification status
 )
 
 print(f"Access Token: {access_token}")
@@ -136,8 +134,7 @@ def refresh_token_view(request):
         # Generate new tokens (user_data only goes to access token)
         access_token, new_refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(),
-            user_id=payload['user_id'],
-            user_data={"is_verified": user.is_verified}
+            user_id=payload['user_id']
         )
         
         return {
@@ -207,7 +204,7 @@ def login_view(request):
     access_token, refresh_token = generate_auth_token(
         token_class=AUTH_TOKEN_CLASS(),
         user_id=user.id.hex,
-        user_data={"is_verified": user.is_verified}
+        user_data={}
     )
     
     return {
@@ -283,8 +280,7 @@ def test_token_validation():
     # Generate token
     access_token, refresh_token = generate_auth_token(
         token_class=token_instance,
-        user_id="test-user",
-        user_data={"is_verified": True}
+        user_id="test-user"
     )
     
     # Validate tokens

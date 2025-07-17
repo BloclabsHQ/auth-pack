@@ -150,8 +150,7 @@ class Token(AbstractToken):
             access_token = token.generate_token(
                 user_id="user123",
                 token_type="access",
-                token_lifetime=timedelta(hours=1),
-                user_data={"is_verified": True}
+                token_lifetime=timedelta(hours=1)
             )
         """
         # Create the token payload with standard JWT claims
@@ -191,7 +190,6 @@ class Token(AbstractToken):
                 payload = token.decode_token("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")
                 user_id = payload['user_id']
                 token_type = payload['type']
-                is_verified = payload.get('is_verified', False)
             except AuthenticationFailed as e:
                 # Handle authentication error
                 pass
@@ -243,8 +241,7 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
         # Generate tokens for a user
         access_token, refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(),
-            user_id=user.id.hex,
-            user_data={"is_verified": user.is_verified}
+            user_id=user.id.hex
         )
         
         # Use tokens in API responses
