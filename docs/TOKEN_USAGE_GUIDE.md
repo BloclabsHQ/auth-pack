@@ -16,7 +16,7 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 **Access Token:**
 ```json
 {
-  "user_id": "user-uuid-hex",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "exp": 1640995200,
   "iat": 1640991600,
   "type": "access"
@@ -26,7 +26,7 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 **Refresh Token:**
 ```json
 {
-  "user_id": "user-uuid-hex",
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
   "exp": 1640995200,
   "iat": 1640991600,
   "type": "refresh"
@@ -34,7 +34,7 @@ BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provid
 ```
 
 ### Claims
-- `user_id`: User's UUID in hexadecimal format
+- `user_id`: User's UUID in standard format with hyphens
 - `exp`: Expiration timestamp
 - `iat`: Issued at timestamp
 - `type`: Token type ("access" or "refresh")
@@ -53,7 +53,7 @@ pip install blockauth
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 # Generate tokens for a user
-user_id = "550e8400-e29b-41d4-a716-446655440000"  # User's UUID in hex
+user_id = "550e8400-e29b-41d4-a716-446655440000"  # User's UUID with hyphens
 access_token, refresh_token = generate_auth_token(
     token_class=AUTH_TOKEN_CLASS(),
     user_id=user_id,
@@ -104,7 +104,7 @@ custom_token = Token(
 
 # Generate token with custom lifetime
 access_token = custom_token.generate_token(
-    user_id="user-uuid-hex",
+    user_id="550e8400-e29b-41d4-a716-446655440000",
     token_type="access",
     token_lifetime=timedelta(hours=2)
 )
@@ -203,14 +203,14 @@ def login_view(request):
     # Generate tokens
     access_token, refresh_token = generate_auth_token(
         token_class=AUTH_TOKEN_CLASS(),
-        user_id=user.id.hex,
+        user_id=str(user.id),
         user_data={}
     )
     
     return {
         "access": access_token,
         "refresh": refresh_token,
-        "user_id": user.id.hex
+        "user_id": str(user.id)
     }
 ```
 

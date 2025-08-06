@@ -24,7 +24,7 @@ Usage:
     # Generate tokens for a user
     access_token, refresh_token = generate_auth_token(
         token_class=AUTH_TOKEN_CLASS(), 
-        user_id=user.id.hex
+        user_id=str(user.id)
     )
     
     # Decode a token
@@ -137,7 +137,7 @@ class Token(AbstractToken):
         secret key and algorithm.
         
         Args:
-            user_id (str): The unique identifier of the user (typically user.id.hex)
+            user_id (str): The unique identifier of the user (typically user.id)
             token_type (str): Type of token ('access' or 'refresh')
             token_lifetime (timedelta): How long the token should be valid
             user_data (Dict[str, Any], optional): Additional user data to include in token
@@ -225,7 +225,7 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
     
     Args:
         token_class (AbstractToken): Token class instance to use for generation
-        user_id (str): The unique identifier of the user (typically user.id.hex)
+        user_id (str): The unique identifier of the user (typically str(user.id))
         user_data (Dict[str, Any], optional): Additional user data to include in tokens
         
     Returns:
@@ -241,7 +241,7 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
         # Generate tokens for a user
         access_token, refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(),
-            user_id=user.id.hex
+            user_id=str(user.id)
         )
         
         # Use tokens in API responses

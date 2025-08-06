@@ -29,7 +29,7 @@ class RequestThrottle(BaseThrottle):
         ip_address = request.META.get('REMOTE_ADDR')
 
         if not identifier and request.user.id:
-            identifier = request.user.id.hex
+            identifier = str(request.user.id)
 
         # No throttling if identifier, subject, or IP address is missing
         if not identifier or not subject or not ip_address:
