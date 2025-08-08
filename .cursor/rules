@@ -1,0 +1,401 @@
+# BlockAuth Authentication Package - Cursor Rules
+# Enterprise Security & SOC2 Compliance Standards
+
+## 🚨 CRITICAL SECURITY REQUIREMENTS
+
+### Authentication & Authorization
+- **NEVER** log sensitive data (passwords, tokens, private keys, OTP codes)
+- **ALWAYS** validate and sanitize all user inputs before processing
+- **MUST** implement proper rate limiting on all authentication endpoints
+- **REQUIRED** to use HTTPS-only for all authentication operations
+- **MANDATORY** to implement proper session management and token rotation
+- **CRITICAL** to validate JWT tokens with proper signature verification
+- **ESSENTIAL** to implement proper password hashing (bcrypt/Argon2) - never plain text
+- **REQUIRED** to implement account lockout after failed attempts
+- **MANDATORY** to use secure random generation for OTPs and tokens
+
+### Data Protection & Privacy
+- **NEVER** store sensitive data in logs, cache, or error messages
+- **ALWAYS** encrypt sensitive data at rest and in transit
+- **MUST** implement proper data retention and deletion policies
+- **REQUIRED** to anonymize/pseudonymize user data in logs
+- **MANDATORY** to implement proper access controls and audit trails
+- **CRITICAL** to validate all external API calls and responses
+- **ESSENTIAL** to implement proper error handling without information disclosure
+
+### Web3/Wallet Security
+- **NEVER** store private keys or seed phrases in code or logs
+- **ALWAYS** validate wallet signatures before authentication
+- **MUST** implement proper nonce management for wallet authentication
+- **REQUIRED** to validate blockchain transactions and confirmations
+- **MANDATORY** to implement proper gas estimation and transaction validation
+- **CRITICAL** to handle wallet connection failures gracefully
+- **ESSENTIAL** to implement proper wallet address validation and checksum verification
+
+## 📋 CODE STANDARDS & ARCHITECTURE
+
+### Python/Django Standards
+- **Follow PEP 8** for code formatting and style
+- **Use type hints** for all function parameters and return values
+- **Implement proper exception handling** with specific exception types
+- **Use Django best practices** for models, views, and serializers
+- **Follow DRY principle** - avoid code duplication
+- **Implement proper validation** using Django forms and serializers
+- **Use Django's built-in security features** (CSRF, XSS protection, etc.)
+
+### Project Structure
+- **Maintain modular architecture** - keep features in separate modules
+- **Use feature flags** for enabling/disabling functionality
+- **Implement proper configuration management** with environment variables
+- **Follow Django app structure** conventions
+- **Use proper import organization** (standard library, third-party, local)
+- **Implement proper logging** with structured log messages
+- **Use constants** for configuration keys and feature flags
+
+### Testing Requirements
+- **MUST** have unit tests for all authentication functions
+- **REQUIRED** to test security scenarios (invalid tokens, expired tokens, etc.)
+- **MANDATORY** to test rate limiting and throttling
+- **CRITICAL** to test error handling and edge cases
+- **ESSENTIAL** to test integration with external services
+- **REQUIRED** to maintain minimum 80% test coverage
+- **MANDATORY** to test both positive and negative scenarios
+
+## 🔒 SECURITY IMPLEMENTATION RULES
+
+### JWT Token Management
+```python
+# ✅ CORRECT - Secure token generation
+def generate_secure_token(user_id: str) -> str:
+    payload = {
+        "user_id": user_id,
+        "exp": timezone.now() + timedelta(hours=1),
+        "iat": timezone.now(),
+        "type": "access",
+        "jti": str(uuid.uuid4())  # Unique token identifier
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+# ❌ WRONG - Insecure token generation
+def generate_insecure_token(user_id: str) -> str:
+    payload = {"user_id": user_id}  # No expiration, no signature
+    return base64.b64encode(json.dumps(payload).encode())
+```
+
+### Password Security
+```python
+# ✅ CORRECT - Secure password handling
+from django.contrib.auth.hashers import make_password, check_password
+
+def create_user(email: str, password: str) -> User:
+    user = User.objects.create(
+        email=email,
+        password=make_password(password)  # Properly hashed
+    )
+    return user
+
+# ❌ WRONG - Insecure password handling
+def create_user_insecure(email: str, password: str) -> User:
+    user = User.objects.create(
+        email=email,
+        password=password  # Plain text password
+    )
+    return user
+```
+
+### Input Validation
+```python
+# ✅ CORRECT - Proper input validation
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+
+def validate_user_input(email: str, password: str) -> bool:
+    try:
+        validate_email(email)
+        if len(password) < 8:
+            raise ValidationError("Password too short")
+        return True
+    except ValidationError:
+        return False
+
+# ❌ WRONG - No input validation
+def process_user_input(email: str, password: str):
+    # Directly use without validation
+    user = User.objects.create(email=email, password=password)
+```
+
+### Rate Limiting
+```python
+# ✅ CORRECT - Proper rate limiting
+from blockauth.utils.rate_limiter import RequestThrottle
+
+class SecureAuthView(APIView):
+    throttle_classes = [RequestThrottle]
+    
+    def post(self, request):
+        # Rate limiting automatically applied
+        return self.process_auth(request)
+
+# ❌ WRONG - No rate limiting
+class InsecureAuthView(APIView):
+    def post(self, request):
+        # No protection against brute force
+        return self.process_auth(request)
+```
+
+## 🏢 ENTERPRISE & SOC2 COMPLIANCE
+
+### Audit Trail Requirements
+- **MUST** log all authentication events (login, logout, password changes)
+- **REQUIRED** to log all administrative actions
+- **MANDATORY** to implement proper audit log retention
+- **CRITICAL** to include user context in audit logs
+- **ESSENTIAL** to implement tamper-proof audit logging
+- **REQUIRED** to log all security-related events
+
+### Configuration Management
+- **NEVER** hardcode secrets in source code
+- **ALWAYS** use environment variables for sensitive configuration
+- **MUST** implement proper configuration validation
+- **REQUIRED** to use secure configuration management
+- **MANDATORY** to implement configuration change tracking
+- **CRITICAL** to validate all configuration values
+
+### Error Handling & Logging
+```python
+# ✅ CORRECT - Secure error handling
+from blockauth.utils.logger import blockauth_logger
+
+def secure_authentication(request):
+    try:
+        # Authentication logic
+        user = authenticate_user(request)
+        blockauth_logger.info("User authenticated successfully", {
+            "user_id": user.id,
+            "ip_address": request.META.get('REMOTE_ADDR'),
+            "user_agent": request.META.get('HTTP_USER_AGENT')
+        })
+        return user
+    except AuthenticationFailed as e:
+        blockauth_logger.warning("Authentication failed", {
+            "ip_address": request.META.get('REMOTE_ADDR'),
+            "error_type": "authentication_failed"
+        })
+        raise
+    except Exception as e:
+        blockauth_logger.error("Unexpected error during authentication", {
+            "error_type": type(e).__name__,
+            "ip_address": request.META.get('REMOTE_ADDR')
+        })
+        raise AuthenticationFailed("Authentication service unavailable")
+
+# ❌ WRONG - Insecure error handling
+def insecure_authentication(request):
+    try:
+        user = authenticate_user(request)
+        return user
+    except Exception as e:
+        # Logs sensitive information
+        logger.error(f"Auth failed for user {request.data.get('email')}: {str(e)}")
+        raise
+```
+
+## 🔧 DEVELOPMENT WORKFLOW
+
+### Code Review Checklist
+Before submitting code, ensure:
+- [ ] All security requirements are met
+- [ ] Proper error handling is implemented
+- [ ] Input validation is in place
+- [ ] Rate limiting is configured
+- [ ] Audit logging is implemented
+- [ ] Tests are written and passing
+- [ ] No sensitive data is logged
+- [ ] Configuration is properly managed
+- [ ] Documentation is updated
+
+### Testing Requirements
+```python
+# ✅ CORRECT - Comprehensive security testing
+class TestAuthenticationSecurity(TestCase):
+    def test_brute_force_protection(self):
+        """Test rate limiting prevents brute force attacks"""
+        for _ in range(10):
+            response = self.client.post('/auth/login/', {
+                'email': 'test@example.com',
+                'password': 'wrong_password'
+            })
+        self.assertEqual(response.status_code, 429)  # Too Many Requests
+
+    def test_token_expiration(self):
+        """Test JWT tokens expire properly"""
+        token = generate_token(user_id="123", lifetime=timedelta(seconds=0))
+        time.sleep(1)
+        response = self.client.get('/api/protected/', 
+                                 HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.assertEqual(response.status_code, 401)
+
+    def test_sensitive_data_not_logged(self):
+        """Test that sensitive data is not logged"""
+        with self.assertLogs() as logs:
+            self.client.post('/auth/login/', {
+                'email': 'test@example.com',
+                'password': 'secret_password'
+            })
+        log_output = '\n'.join(logs.output)
+        self.assertNotIn('secret_password', log_output)
+```
+
+### Documentation Requirements
+- **MUST** document all authentication flows
+- **REQUIRED** to document security considerations
+- **MANDATORY** to document configuration options
+- **CRITICAL** to document error handling procedures
+- **ESSENTIAL** to maintain API documentation
+- **REQUIRED** to document deployment procedures
+
+## 🚫 FORBIDDEN PATTERNS
+
+### Security Anti-Patterns
+```python
+# ❌ NEVER DO THESE:
+
+# 1. Logging sensitive data
+logger.info(f"User {email} logged in with password {password}")
+
+# 2. Storing passwords in plain text
+user.password = password
+
+# 3. Using weak random generation
+import random
+otp = random.randint(100000, 999999)
+
+# 4. No input validation
+user = User.objects.create(email=email, password=password)
+
+# 5. Hardcoded secrets
+SECRET_KEY = "my-secret-key-123"
+
+# 6. No rate limiting
+class AuthView(APIView):
+    def post(self, request):
+        # No protection against abuse
+        pass
+
+# 7. Exposing internal errors
+except Exception as e:
+    return Response({"error": str(e)}, status=500)
+
+# 8. No audit logging
+def change_password(user, new_password):
+    user.password = make_password(new_password)
+    user.save()  # No audit trail
+```
+
+## ✅ REQUIRED PATTERNS
+
+### Security Best Practices
+```python
+# ✅ ALWAYS DO THESE:
+
+# 1. Secure logging
+blockauth_logger.info("User authenticated", {
+    "user_id": user.id,
+    "ip_address": request.META.get('REMOTE_ADDR')
+})
+
+# 2. Proper password handling
+user.password = make_password(password)
+
+# 3. Secure random generation
+import secrets
+otp = ''.join(secrets.choice('0123456789') for _ in range(6))
+
+# 4. Input validation
+from django.core.validators import validate_email
+validate_email(email)
+
+# 5. Environment-based configuration
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+
+# 6. Rate limiting
+throttle_classes = [RequestThrottle]
+
+# 7. Secure error handling
+except AuthenticationFailed as e:
+    blockauth_logger.warning("Authentication failed", {"error_type": "auth_failed"})
+    raise AuthenticationFailed("Invalid credentials")
+
+# 8. Audit logging
+def change_password(user, new_password):
+    user.password = make_password(new_password)
+    user.save()
+    blockauth_logger.info("Password changed", {"user_id": user.id})
+```
+
+## 🔍 CODE REVIEW FOCUS AREAS
+
+### Security Review
+- [ ] Authentication flow security
+- [ ] Token management and validation
+- [ ] Input validation and sanitization
+- [ ] Rate limiting implementation
+- [ ] Error handling and information disclosure
+- [ ] Audit logging completeness
+- [ ] Configuration security
+- [ ] Data protection measures
+
+### Performance Review
+- [ ] Database query optimization
+- [ ] Caching strategies
+- [ ] Rate limiting performance impact
+- [ ] Token validation efficiency
+- [ ] Memory usage patterns
+- [ ] Response time optimization
+
+### Maintainability Review
+- [ ] Code organization and structure
+- [ ] Documentation completeness
+- [ ] Test coverage adequacy
+- [ ] Error handling patterns
+- [ ] Configuration management
+- [ ] Logging consistency
+
+## 📚 RESOURCES & REFERENCES
+
+### Security Standards
+- OWASP Authentication Cheat Sheet
+- NIST Digital Identity Guidelines
+- SOC2 Type II Compliance Requirements
+- GDPR Data Protection Requirements
+- Web3 Security Best Practices
+
+### Django Security
+- Django Security Documentation
+- Django Authentication Documentation
+- Django REST Framework Security
+- Django Best Practices
+
+### Web3 Security
+- Ethereum Security Best Practices
+- Wallet Security Guidelines
+- Smart Contract Security
+- Blockchain Authentication Patterns
+
+## 🎯 HANDOVER CHECKLIST
+
+For seamless project handover, ensure:
+- [ ] All security requirements are documented
+- [ ] Configuration management is properly set up
+- [ ] Testing procedures are documented
+- [ ] Deployment procedures are documented
+- [ ] Monitoring and alerting are configured
+- [ ] Incident response procedures are in place
+- [ ] Access controls are properly configured
+- [ ] Audit trails are functional
+- [ ] Documentation is up to date
+- [ ] Team training is completed
+
+---
+
+**Remember: Security is not a feature, it's a requirement. Every line of code in this authentication package must be written with security in mind.**
