@@ -31,8 +31,8 @@ This document outlines the implementation plan for integrating Account Abstracti
 5. **User Experience**: Familiar authentication patterns users understand
 
 ### Enhancement Opportunities (Without Breaking Web2)
-1. **Gas Sponsorship**: Paymaster contracts for sponsored transactions (Web3 users only)
-2. **Batch Operations**: Multiple operations in single transaction (Web3 enhancement)
+1. **Gas Sponsorship**: [Paymaster contracts](./PAYMASTER_INTEGRATION.md) for sponsored transactions (Web3 users only)
+2. **Batch Operations**: [Signature Aggregation](./SIGNATURE_AGGREGATOR_INTEGRATION.md) for multiple operations in single transaction (Web3 enhancement)
 3. **Smart Recovery**: Advanced recovery mechanisms via smart contracts (Web3 users only)
 4. **Session Keys**: Temporary authentication for better UX (Web3 enhancement)
 5. **Programmable Authentication**: Custom validation logic (Web3 advanced features)
@@ -106,6 +106,7 @@ contract SmartAccount {
 ```
 
 #### 5. BlockAuth Paymaster Contract (WEB3 ENHANCEMENT)
+See [Paymaster Integration Plan](./PAYMASTER_INTEGRATION.md) for more details.
 ```solidity
 // Location: contracts/BlockAuthPaymaster.sol
 contract BlockAuthPaymaster {
@@ -177,6 +178,12 @@ class AAUserMixin(models.Model):
     def deploy_smart_account(self):
         # Deploy smart account if not exists
 ```
+
+## Advanced Features
+
+### Signature Aggregation
+
+For details on how BlockAuth can bundle multiple user operations into a single transaction, see the [Signature Aggregator Integration Plan](./SIGNATURE_AGGREGATOR_INTEGRATION.md).
 
 ## Implementation Phases
 

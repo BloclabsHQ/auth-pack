@@ -59,8 +59,8 @@ Our Account Abstraction solution unlocks a suite of powerful features that will 
 
 ### For Your Users:
 
-*   **Gasless Transactions:** Our **Paymaster** system can sponsor gas fees, allowing users to interact with your platform without needing to own cryptocurrency.
-*   **Simplified Transactions:** Complicated multi-step blockchain operations can be bundled into a single, one-click transaction.
+*   **Gasless Transactions:** Our **Paymaster** system can sponsor gas fees, allowing users to interact with your platform without needing to own cryptocurrency. ([Learn More](./PAYMASTER_INTEGRATION.md))
+*   **Simplified Transactions:** Complicated multi-step blockchain operations can be bundled into a single, one-click transaction. ([Learn More](./SIGNATURE_AGGREGATOR_INTEGRATION.md))
 *   **Enhanced Security:**
     *   **Multi-Signature (Multi-Sig):** Require multiple approvals for sensitive transactions, adding a layer of security for high-value accounts.
     *   **Social Recovery:** Users can designate trusted friends, family, or institutions as "guardians" to help them recover their account if they lose access, eliminating the fear of lost keys.
@@ -84,8 +84,9 @@ Our Hybrid Account Abstraction system is built on a robust and secure architectu
 1.  **Smart Account:** A user-owned smart contract that defines the rules for their account, including security policies and authentication methods.
 2.  **Smart Account Factory:** A contract responsible for deploying new smart accounts in a predictable and secure manner.
 3.  **Bundler:** A service that bundles multiple user operations into a single transaction, optimizing for gas efficiency.
-4.  **Paymaster:** A smart contract that can be configured to sponsor transaction fees on behalf of your users, enabling gasless experiences.
-5.  **Hybrid Authentication Router:** Our proprietary middleware that intelligently routes authentication requests between your existing Web2 systems and our new Web3 capabilities, ensuring a seamless experience for all users.
+4.  **Paymaster:** A smart contract that can be configured to sponsor transaction fees on behalf of your users, enabling gasless experiences. ([Learn More](./PAYMASTER_INTEGRATION.md))
+5.  **Signature Aggregator:** A contract that can verify a single signature for multiple transactions, reducing costs and increasing throughput. ([Learn More](./SIGNATURE_AGGREGATOR_INTEGRATION.md))
+6.  **Hybrid Authentication Router:** Our proprietary middleware that intelligently routes authentication requests between your existing Web2 systems and our new Web3 capabilities, ensuring a seamless experience for all users.
 
 ### The User Journey:
 
