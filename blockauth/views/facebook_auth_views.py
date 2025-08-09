@@ -4,7 +4,7 @@ import urllib.parse
 import requests
 from django.shortcuts import redirect
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from blockauth.utils.docs import extend_schema
 from rest_framework.exceptions import ValidationError, APIException
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -12,7 +12,11 @@ from rest_framework.views import APIView
 
 from blockauth.schemas.examples.social_auth import social_invalid_auth_config, social_authorization_code, \
     social_user_info_missing
-from blockauth.docs.social_auth_docs import facebook_auth_callback_schema, facebook_auth_login_schema
+try:
+    from blockauth.docs.social_auth_docs import facebook_auth_callback_schema, facebook_auth_login_schema
+except Exception:  # docs extra not installed
+    facebook_auth_callback_schema = {}
+    facebook_auth_login_schema = {}
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.social import social_login
 from blockauth.utils.logger import blockauth_logger

@@ -1,7 +1,11 @@
 import logging
 
-from drf_spectacular.utils import extend_schema
-from blockauth.docs.wallet_auth_docs import wallet_login_docs, wallet_email_add_docs
+from blockauth.utils.docs import extend_schema
+try:
+    from blockauth.docs.wallet_auth_docs import wallet_login_docs, wallet_email_add_docs
+except Exception:  # docs extra not installed
+    wallet_login_docs = {}
+    wallet_email_add_docs = {}
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -114,7 +118,7 @@ class WalletEmailAddView(APIView):
             )
             
             return Response(
-                {'message': f'Email added successfully. {data["verification_type"]} sent via email.'}, 
+                {'message': f"Email added successfully. {data['verification_type']} sent via email."}, 
                 status=status.HTTP_200_OK
             )
             

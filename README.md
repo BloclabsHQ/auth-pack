@@ -1,7 +1,7 @@
 # Blockauth
 
-[//]: # ([![PyPI version]&#40;https://badge.fury.io/py/block-inter-auth.svg&#41;]&#40;https://badge.fury.io/py/block-inter-auth&#41;)
-[//]: # ([![PyPI - Python Version]&#40;https://img.shields.io/pypi/pyversions/block-inter-auth&#41;]&#40;https://pypi.org/project/block-inter-auth/&#41;)
+[//]: # ([![PyPI version](https://badge.fury.io/py/block-inter-auth.svg)](https://badge.fury.io/py/block-inter-auth))
+[//]: # ([![PyPI - Python Version](https://img.shields.io/pypi/pyversions/block-inter-auth)](https://pypi.org/project/block-inter-auth/))
 
 Blockauth is an authentication package for Python REST APIs, designed for internal use. It provides JWT-based authentication mechanisms, including login and token refresh functionalities. It also supports Social login using OAuth2.
 
@@ -60,12 +60,35 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - requests = 2.32.3
 - djangorestframework = 3.15.2
 - setuptools = ^75.6.0
-- drf-spectacular = 0.28.0
-- drf-spectacular-sidecar = 2025.7.1
+(Optional extras)
+- docs: drf-spectacular, drf-spectacular-sidecar
+- wallet: web3, eth-account
 
 ## Installation
 
-#### Direct Installation
+### Core only
+Install core package (no optional docs or wallet deps):
+
+```bash
+pip install blockauth
+```
+
+### With docs (OpenAPI generation)
+```bash
+pip install "blockauth[docs]"
+```
+
+### With wallet features (Web3)
+```bash
+pip install "blockauth[wallet]"
+```
+
+### With both
+```bash
+pip install "blockauth[docs,wallet]"
+```
+
+### Direct Installation
 To install the package, we prefer poetry. It's recommended to install the package in a virtual environment. Also make sure to add ssh to your github account.
 With Poetry add dependency like below in `pyproject.toml` file:
 ```

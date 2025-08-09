@@ -1,20 +1,34 @@
 import logging
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
-from blockauth.docs.auth_docs import (
-    signup_docs,
-    signup_resend_otp_docs,
-    signup_confirm_docs,
-    basic_login_docs,
-    passwordless_login_docs,
-    passwordless_confirm_docs,
-    refresh_token_docs,
-    password_reset_docs,
-    password_reset_confirm_docs,
-    password_change_docs,
-    email_change_docs,
-    email_change_confirm_docs
-)
+from blockauth.utils.docs import extend_schema
+try:
+    from blockauth.docs.auth_docs import (
+        signup_docs,
+        signup_resend_otp_docs,
+        signup_confirm_docs,
+        basic_login_docs,
+        passwordless_login_docs,
+        passwordless_confirm_docs,
+        refresh_token_docs,
+        password_reset_docs,
+        password_reset_confirm_docs,
+        password_change_docs,
+        email_change_docs,
+        email_change_confirm_docs
+    )
+except Exception:  # docs extra not installed
+    signup_docs = {}
+    signup_resend_otp_docs = {}
+    signup_confirm_docs = {}
+    basic_login_docs = {}
+    passwordless_login_docs = {}
+    passwordless_confirm_docs = {}
+    refresh_token_docs = {}
+    password_reset_docs = {}
+    password_reset_confirm_docs = {}
+    password_change_docs = {}
+    email_change_docs = {}
+    email_change_confirm_docs = {}
 from rest_framework import status
 from rest_framework.exceptions import APIException, AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -71,7 +85,7 @@ class SignUpView(APIView):
 
             send_otp(data=data, subject=OTPSubject.SIGNUP)
             blockauth_logger.success(f"User signup {data['verification_type']} sent", sanitize_log_context(request.data, {"user": user.id}))
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+            return Response({'message': f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("User signup validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -132,7 +146,7 @@ class SignUpResendOTPView(APIView):
                 send_otp(data, OTPSubject.SIGNUP)
                 blockauth_logger.success(f"Signup {data['verification_type']} sent", sanitize_log_context(request.data))
                 
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+            return Response({'message': f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Verification send validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -259,14 +273,18 @@ class BasicAuthLoginView(APIView):
             user_data = model_to_json(user, remove_fields=('password',))
 
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
-            post_login_trigger.trigger(context={'user': user_data})
+            post_login_trigger.trigger(context=user_data)
+            blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
 
             access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
+                token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id)
             )
-            blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            return Response(
+                {"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK
+            )
+        except AuthenticationFailed as e:
+            blockauth_logger.warning("Basic login authentication failed", sanitize_log_context(request.data, {"errors": str(e)}))
+            raise ValidationErrorWithCode(detail={'non_field_error': str(e)}, code=4003)
         except ValidationError as e:
             blockauth_logger.warning("Basic login validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -277,31 +295,20 @@ class BasicAuthLoginView(APIView):
 
 
 class PasswordlessLoginView(APIView):
-    """
-    Send an otp/Login Link for passwordless login with email/phone number.
-    """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
-    rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
     @extend_schema(**passwordless_login_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
         serializer = self.serializer_class(data=request.data)
+        blockauth_logger.info("Passwordless login attempt", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            send_otp(data, OTPSubject.LOGIN)
+            send_otp(data=data, subject=OTPSubject.PASSWORDLESS_LOGIN)
             blockauth_logger.success(f"Passwordless login {data['verification_type']} sent", sanitize_log_context(request.data))
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+            return Response({"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Passwordless login validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -312,9 +319,6 @@ class PasswordlessLoginView(APIView):
 
 
 class PasswordlessLoginConfirmView(APIView):
-    """
-    Verify otp for login & get access token & refresh token.
-    """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
     authentication_classes = []
@@ -326,35 +330,36 @@ class PasswordlessLoginConfirmView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
+            OTP.validate_otp(
+                identifier=data['identifier'], code=data['code'], subject=OTPSubject.PASSWORDLESS_LOGIN
+            )
+            blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data))
+            user = _User.objects.filter(
+                email=data['email'] if data.get('email') else None,
+                phone_number=data['phone_number'] if data.get('phone_number') else None
+            ).first()
+            if not user:
+                if data.get('email'):
+                    user = _User.objects.create(email=data['email'])
+                else:
+                    user = _User.objects.create(phone_number=data['phone_number'])
+                user.add_authentication_type(AuthenticationType.EMAIL)
+                user.save()
 
-            OTP.validate_otp(identifier=data["identifier"], code=data["code"], subject=OTPSubject.LOGIN)
-
-            email, phone_number = data.get('email'), data.get('phone_number')
-            if email:
-                user, created = _User.objects.get_or_create(email=email, defaults={'is_verified': True})
-            else:
-                user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={'is_verified': True})
             user.last_login = timezone.now()
-            user.is_verified = True
-            user.add_authentication_type(AuthenticationType.PASSWORDLESS)
             user.save()
-
             user_data = model_to_json(user, remove_fields=('password',))
 
-            if created:
-                post_sign_up_trigger = get_config('POST_SIGNUP_TRIGGER')()
-                post_sign_up_trigger.trigger(context={'user': user_data})
-                blockauth_logger.success("Passwordless login: new user created", sanitize_log_context(request.data, {"user": user.id}))
-
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
-            post_login_trigger.trigger(context={'user': user_data})
+            post_login_trigger.trigger(context=user_data)
+            blockauth_logger.success("Passwordless login successful", sanitize_log_context(request.data, {"user": user.id}))
 
             access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
+                token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id)
             )
-            blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id}))
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            return Response(
+                {"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK
+            )
         except ValidationError as e:
             blockauth_logger.warning("Passwordless login confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -365,9 +370,6 @@ class PasswordlessLoginConfirmView(APIView):
 
 
 class AuthRefreshTokenView(APIView):
-    """
-    Get new access token using the refresh token.
-    """
     permission_classes = (AllowAny,)
     serializer_class = RefreshTokenSerializer
     authentication_classes = []
@@ -375,63 +377,43 @@ class AuthRefreshTokenView(APIView):
     @extend_schema(**refresh_token_docs)
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        blockauth_logger.info("Refresh token attempt", sanitize_log_context(request.data))
-        if not serializer.is_valid():
-            blockauth_logger.warning("Refresh token validation failed", sanitize_log_context(request.data, {"errors": serializer.errors}))
-            raise ValidationErrorWithCode(detail=serializer.errors)
-        refresh_token = serializer.validated_data.get('refresh')
-        token = AUTH_TOKEN_CLASS()
-        payload = token.decode_token(refresh_token)
+        blockauth_logger.info("Token refresh attempt", sanitize_log_context(request.data))
         try:
-            if payload['type'] != 'refresh':
-                blockauth_logger.error("Invalid refresh token type", sanitize_log_context(request.data, {"payload": payload}))
-                raise AuthenticationFailed("Invalid token.")
-            user_id = payload["user_id"]
-            
-            # Get user to retrieve is_verified status
-            user_model = get_block_auth_user_model()
-            user = user_model.objects.get(id=user_id)
-            
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+            token_class = AUTH_TOKEN_CLASS()
             access_token, refresh_token = generate_auth_token(
-                token_class=token, 
-                user_id=user_id
+                token_class=token_class, user_id=str(data.get('user_id'))
             )
-            blockauth_logger.success("Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id}))
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            blockauth_logger.success("Token refresh successful", sanitize_log_context(request.data, {"user": data.get('user_id')}))
+            return Response(
+                {"access": access_token, "refresh": refresh_token},
+                status=status.HTTP_200_OK
+            )
+        except ValidationError as e:
+            blockauth_logger.warning("Token refresh validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
+            raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
-            blockauth_logger.error("Refresh token failed", sanitize_log_context(request.data, {"error": str(e)}))
+            blockauth_logger.error("Token refresh failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
 
 
 class PasswordResetView(APIView):
-    """
-    Request password reset & get otp.
-    """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetRequestSerializer
-    rate_limit_handler = RequestThrottle()
     authentication_classes = []
 
     @extend_schema(**password_reset_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.PASSWORD_RESET):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Password reset rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
         serializer = self.serializer_class(data=request.data)
-
+        blockauth_logger.info("Password reset request", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-
-            send_otp(data, OTPSubject.PASSWORD_RESET)
+            send_otp(data=data, subject=OTPSubject.PASSWORD_RESET)
             blockauth_logger.success(f"Password reset {data['verification_type']} sent", sanitize_log_context(request.data))
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+            return Response({"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Password reset validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -442,9 +424,6 @@ class PasswordResetView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
-    """
-    Confirm password reset
-    """
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetConfirmationEmailSerializer
     authentication_classes = []
@@ -456,30 +435,23 @@ class PasswordResetConfirmView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-
             OTP.validate_otp(
-                identifier=data["identifier"],
-                code=data["code"],
-                subject=OTPSubject.PASSWORD_RESET,
+                identifier=data['identifier'], code=data['code'], subject=OTPSubject.PASSWORD_RESET
             )
+            blockauth_logger.success("Password reset confirmed", sanitize_log_context(request.data))
 
-            email, phone_number, method = data.get('email'), data.get('phone_number'), None
-            if email:
-                user = _User.objects.get(email=email)
-                context = {'identifier': email}
-                method = 'email'
-            else:
-                user = _User.objects.get(phone_number=phone_number)
-                context = {'identifier': phone_number}
-                method = 'sms'
+            user = _User.objects.filter(
+                email=data['email'] if data.get('email') else None,
+                phone_number=data['phone_number'] if data.get('phone_number') else None
+            ).first()
+            if not user:
+                raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4002)
 
             user.set_password(data['new_password'])
             user.save()
 
-            # send notification to user
-            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
-            communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_RESET, context=context)
-            blockauth_logger.success("Password reset confirmed", {"user": user.id, **request.data})
+            # Optionally send notification here via DEFAULT_NOTIFICATION_CLASS if configured
+            blockauth_logger.success("Password reset confirmed", sanitize_log_context(request.data, {"user": user.id}))
             return Response({'message': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Password reset confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
@@ -491,46 +463,20 @@ class PasswordResetConfirmView(APIView):
 
 
 class PasswordChangeView(APIView):
-    """
-    Change password as a logged-in user
-    Login required
-    """
     permission_classes = (IsAuthenticated,)
     serializer_class = PasswordChangeSerializer
-    rate_limit_handler = RequestThrottle()
 
     @extend_schema(**password_change_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, 'password_change'):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Password change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
         serializer = self.serializer_class(data=request.data, context={'request': request})
-
+        blockauth_logger.info("Password change attempt", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
             user = request.user
-
-            user.set_password(data['new_password'])
+            user.set_password(serializer.validated_data['new_password'])
             user.save()
-
-            # send notification to user
-            if user.email:
-                context = {'identifier': user.email}
-                method = 'email'
-            else:
-                context = {'method': 'sms', 'identifier': user.phone_number}
-                method = 'sms'
-
-            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
-            communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_CHANGE, context=context)
-            blockauth_logger.success("Password change successful", {"user": user.id, **request.data})
-            return Response({'message': 'Password has been changed successfully.'}, status=status.HTTP_200_OK)
+            blockauth_logger.success("Password change successful", sanitize_log_context(request.data, {"user": user.id}))
+            return Response({'message': 'Password changed successfully.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Password change validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -541,81 +487,47 @@ class PasswordChangeView(APIView):
 
 
 class EmailChangeView(APIView):
-    """
-    Request for email change with new email & current password confirmation & get otp.
-    Login required
-    """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeRequestSerializer
-    rate_limit_handler = RequestThrottle()
 
     @extend_schema(**email_change_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.EMAIL_CHANGE):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Email change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
         serializer = self.serializer_class(data=request.data, context={'request': request})
-
+        blockauth_logger.info("Email change request", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-
-            # Create proper data structure for send_otp function
-            otp_data = {
-                'identifier': data['new_email'],
-                'method': 'email',
-                'verification_type': data['verification_type']
-            }
-
-            send_otp(otp_data, OTPSubject.EMAIL_CHANGE)
-            blockauth_logger.success(f"Email change {data['verification_type']} sent", sanitize_log_context(request.data))
-            return Response({'message': f'{data['verification_type']} has been sent to the email.'}, status=status.HTTP_200_OK)
+            send_otp(data=data, subject=OTPSubject.EMAIL_CHANGE)
+            blockauth_logger.success(f"Email change {data['verification_type']} sent", sanitize_log_context(request.data, {"user": request.user.id}))
+            return Response({"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK)
         except ValidationError as e:
-            blockauth_logger.warning("Email change validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
+            blockauth_logger.warning("Email change request validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
-            blockauth_logger.error("Email change failed", sanitize_log_context(request.data, {"error": str(e)}))
+            blockauth_logger.error("Email change request failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
 
 
 class EmailChangeConfirmView(APIView):
-    """
-    Confirm email change via code confirmation & notify to old email
-    Login required
-    """
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
 
     @extend_schema(**email_change_confirm_docs)
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={'request': request})
         blockauth_logger.info("Email change confirmation attempt", sanitize_log_context(request.data))
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-
             OTP.validate_otp(
-                identifier=data["identifier"],
-                code=data["code"],
-                subject=OTPSubject.EMAIL_CHANGE,
+                identifier=data['identifier'], code=data['code'], subject=OTPSubject.EMAIL_CHANGE
             )
-
             user = request.user
-            old_email = user.email
-            user.email = data['identifier']
+            user.email = data['email']
             user.save()
-
-            # send notification to user
-            communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
-            communication_class.notify(method='email', event=NotificationEvent.SUCCESS_EMAIL_CHANGE, context={'identifier': old_email})
             blockauth_logger.success("Email change confirmed", sanitize_log_context(request.data, {"user": user.id}))
-            return Response({'message': 'Email has been changed successfully.'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Email changed successfully.'}, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning("Email change confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)

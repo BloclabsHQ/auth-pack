@@ -25,19 +25,18 @@ Configuration:
     }
 """
 
+from importlib import import_module
+from django.urls import path
+
 from blockauth.utils.config import is_social_auth_configured
 from blockauth.utils.feature_flags import is_feature_enabled
 from blockauth.constants import Features, URLNames, SocialProviders
-from blockauth.views.basic_auth_views import AuthRefreshTokenView, \
-    PasswordResetConfirmView, \
-    PasswordChangeView, EmailChangeConfirmView, PasswordlessLoginView, PasswordlessLoginConfirmView, \
-    BasicAuthLoginView, \
-    PasswordResetView, EmailChangeView, SignUpView, SignUpConfirmView, SignUpResendOTPView
-from blockauth.views.facebook_auth_views import FacebookAuthLoginView, FacebookAuthCallbackView
-from blockauth.views.google_auth_views import GoogleAuthLoginView, GoogleAuthCallbackView
-from blockauth.views.linkedin_auth_views import LinkedInAuthLoginView, LinkedInAuthCallbackView
-from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView
-from django.urls import path
+
+
+def _import_string(dotted_path: str):
+    module_path, attr_name = dotted_path.rsplit('.', 1)
+    module = import_module(module_path)
+    return getattr(module, attr_name)
 
 
 # Note: All endpoints include trailing slashes for consistency.
@@ -45,67 +44,65 @@ from django.urls import path
 # requests without trailing slashes to the correct URLs.
 
 # URL pattern mappings organized by feature
-# Each feature maps to a list of tuples: (url_path, view_class, url_name)
-# This allows for dynamic URL generation based on enabled features
+# Each feature maps to a list of tuples: (url_path, view_class_path, url_name)
+# This allows for dynamic URL generation based on enabled features and defers imports
 URL_PATTERN_MAPPINGS = {
     # User registration endpoints
     Features.SIGNUP: [
-        ('signup/', SignUpView, URLNames.SIGNUP),                    # Request OTP for signup
-        ('signup/otp/resend/', SignUpResendOTPView, URLNames.SIGNUP_OTP_RESEND),  # Resend OTP
-        ('signup/confirm/', SignUpConfirmView, URLNames.SIGNUP_CONFIRM),          # Confirm signup
+        ('signup/', 'blockauth.views.basic_auth_views.SignUpView', URLNames.SIGNUP),
+        ('signup/otp/resend/', 'blockauth.views.basic_auth_views.SignUpResendOTPView', URLNames.SIGNUP_OTP_RESEND),
+        ('signup/confirm/', 'blockauth.views.basic_auth_views.SignUpConfirmView', URLNames.SIGNUP_CONFIRM),
     ],
-    
+
     # Authentication endpoints
     Features.BASIC_LOGIN: [
-        ('login/basic/', BasicAuthLoginView, URLNames.BASIC_LOGIN),  # Email/password login
+        ('login/basic/', 'blockauth.views.basic_auth_views.BasicAuthLoginView', URLNames.BASIC_LOGIN),
     ],
     Features.PASSWORDLESS_LOGIN: [
-        ('login/passwordless/', PasswordlessLoginView, URLNames.PASSWORDLESS_LOGIN),           # Request OTP
-        ('login/passwordless/confirm/', PasswordlessLoginConfirmView, URLNames.PASSWORDLESS_LOGIN_CONFIRM),  # Confirm OTP
+        ('login/passwordless/', 'blockauth.views.basic_auth_views.PasswordlessLoginView', URLNames.PASSWORDLESS_LOGIN),
+        ('login/passwordless/confirm/', 'blockauth.views.basic_auth_views.PasswordlessLoginConfirmView', URLNames.PASSWORDLESS_LOGIN_CONFIRM),
     ],
     Features.WALLET_LOGIN: [
-        ('login/wallet/', WalletAuthLoginView, URLNames.WALLET_LOGIN),  # Web3 wallet authentication
+        ('login/wallet/', 'blockauth.views.wallet_auth_views.WalletAuthLoginView', URLNames.WALLET_LOGIN),
     ],
     Features.TOKEN_REFRESH: [
-        ('token/refresh/', AuthRefreshTokenView, URLNames.TOKEN_REFRESH),  # Refresh JWT tokens
+        ('token/refresh/', 'blockauth.views.basic_auth_views.AuthRefreshTokenView', URLNames.TOKEN_REFRESH),
     ],
-    
+
     # Password management endpoints
     Features.PASSWORD_RESET: [
-        ('password/reset/', PasswordResetView, URLNames.PASSWORD_RESET),                       # Request reset OTP
-        ('password/reset/confirm/', PasswordResetConfirmView, URLNames.PASSWORD_RESET_CONFIRM), # Confirm reset
+        ('password/reset/', 'blockauth.views.basic_auth_views.PasswordResetView', URLNames.PASSWORD_RESET),
+        ('password/reset/confirm/', 'blockauth.views.basic_auth_views.PasswordResetConfirmView', URLNames.PASSWORD_RESET_CONFIRM),
     ],
     Features.PASSWORD_CHANGE: [
-        ('password/change/', PasswordChangeView, URLNames.PASSWORD_CHANGE),  # Change password (authenticated)
+        ('password/change/', 'blockauth.views.basic_auth_views.PasswordChangeView', URLNames.PASSWORD_CHANGE),
     ],
-    
+
     # Email management endpoints
     Features.EMAIL_CHANGE: [
-        ('email/change/', EmailChangeView, URLNames.EMAIL_CHANGE),                       # Request email change OTP
-        ('email/change/confirm/', EmailChangeConfirmView, URLNames.EMAIL_CHANGE_CONFIRM), # Confirm email change
+        ('email/change/', 'blockauth.views.basic_auth_views.EmailChangeView', URLNames.EMAIL_CHANGE),
+        ('email/change/confirm/', 'blockauth.views.basic_auth_views.EmailChangeConfirmView', URLNames.EMAIL_CHANGE_CONFIRM),
     ],
-    
+
     # Wallet management endpoints
     Features.WALLET_EMAIL_ADD: [
-        ('wallet/email/add/', WalletEmailAddView, URLNames.WALLET_EMAIL_ADD),  # Add email to wallet account
+        ('wallet/email/add/', 'blockauth.views.wallet_auth_views.WalletEmailAddView', URLNames.WALLET_EMAIL_ADD),
     ],
 }
 
-# Social authentication URL pattern mappings
-# These endpoints are only available if SOCIAL_AUTH feature is enabled
-# and the respective provider is configured in BLOCK_AUTH_SETTINGS['AUTH_PROVIDERS']
+# Social authentication URL pattern mappings (deferred imports)
 SOCIAL_URL_PATTERN_MAPPINGS = {
     SocialProviders.GOOGLE: [
-        ('google/', GoogleAuthLoginView, URLNames.GOOGLE_LOGIN),           # Initiate Google OAuth flow
-        ('google/callback/', GoogleAuthCallbackView, URLNames.GOOGLE_CALLBACK),  # Handle Google OAuth callback
+        ('google/', 'blockauth.views.google_auth_views.GoogleAuthLoginView', URLNames.GOOGLE_LOGIN),
+        ('google/callback/', 'blockauth.views.google_auth_views.GoogleAuthCallbackView', URLNames.GOOGLE_CALLBACK),
     ],
     SocialProviders.FACEBOOK: [
-        ('facebook/', FacebookAuthLoginView, URLNames.FACEBOOK_LOGIN),           # Initiate Facebook OAuth flow
-        ('facebook/callback/', FacebookAuthCallbackView, URLNames.FACEBOOK_CALLBACK),  # Handle Facebook OAuth callback
+        ('facebook/', 'blockauth.views.facebook_auth_views.FacebookAuthLoginView', URLNames.FACEBOOK_LOGIN),
+        ('facebook/callback/', 'blockauth.views.facebook_auth_views.FacebookAuthCallbackView', URLNames.FACEBOOK_CALLBACK),
     ],
     SocialProviders.LINKEDIN: [
-        ('linkedin/', LinkedInAuthLoginView, URLNames.LINKEDIN_LOGIN),           # Initiate LinkedIn OAuth flow
-        ('linkedin/callback/', LinkedInAuthCallbackView, URLNames.LINKEDIN_CALLBACK),  # Handle LinkedIn OAuth callback
+        ('linkedin/', 'blockauth.views.linkedin_auth_views.LinkedInAuthLoginView', URLNames.LINKEDIN_LOGIN),
+        ('linkedin/callback/', 'blockauth.views.linkedin_auth_views.LinkedInAuthCallbackView', URLNames.LINKEDIN_CALLBACK),
     ],
 }
 
@@ -113,44 +110,35 @@ SOCIAL_URL_PATTERN_MAPPINGS = {
 def build_urlpatterns():
     """
     Build URL patterns based on enabled features.
-    
+
     This function dynamically generates Django URL patterns by:
     1. Checking which features are enabled in BLOCK_AUTH_SETTINGS['FEATURES']
     2. Adding URL patterns only for enabled features
     3. Handling social authentication providers separately
-    
+
     Returns:
         list: List of Django URL patterns (path objects)
-        
-    Example:
-        If SIGNUP feature is enabled, the following URLs will be added:
-        - /auth/signup/
-        - /auth/signup/otp/resend/
-        - /auth/signup/confirm/
-        
-        If SIGNUP feature is disabled, none of these URLs will be available.
     """
     urlpatterns = []
-    
+
     # Build regular feature-based URLs
-    # Iterate through all defined features and add URLs only for enabled ones
     for feature, patterns in URL_PATTERN_MAPPINGS.items():
         if is_feature_enabled(feature):
-            for url_path, view_class, url_name in patterns:
+            for url_path, view_path, url_name in patterns:
+                view_class = _import_string(view_path)
                 urlpatterns.append(path(url_path, view_class.as_view(), name=url_name))
-    
+
     # Build social authentication URLs
-    # Social auth requires both the SOCIAL_AUTH feature flag and provider configuration
     if is_feature_enabled(Features.SOCIAL_AUTH):
         for provider, patterns in SOCIAL_URL_PATTERN_MAPPINGS.items():
             if is_social_auth_configured(provider):
-                for url_path, view_class, url_name in patterns:
+                for url_path, view_path, url_name in patterns:
+                    view_class = _import_string(view_path)
                     urlpatterns.append(path(url_path, view_class.as_view(), name=url_name))
-    
+
     return urlpatterns
 
 
 # Generate the final URL patterns list
-# This is the main export that Django will use for URL routing
 urlpatterns = build_urlpatterns()
 

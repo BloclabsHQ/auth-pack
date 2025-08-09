@@ -13,10 +13,12 @@ pyjwt = "2.9.0"
 requests = "2.32.3"
 djangorestframework = "3.15.2"
 setuptools = "^75.6.0"
-drf-spectacular="0.28.0"
-drf-spectacular-sidecar="2025.7.1"
-web3 = "^6.20.1"
-eth-account = "^0.11.0"
+
+[tool.poetry.extras]
+# Install with: pip install blockauth[docs]
+docs = ["drf-spectacular>=0.28.0", "drf-spectacular-sidecar>=2025.7.1"]
+# Install with: pip install blockauth[wallet]
+wallet = ["web3>=6.20.1", "eth-account>=0.11.0"]
 
 [build-system]
 requires = ["poetry-core"]
