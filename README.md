@@ -751,6 +751,7 @@ BlocAuth provides a unified logging interface for all authentication-related eve
 | fatal      | ☠️    | Fatal errors leading to shutdown or unrecoverable failure          |
 | success    | ✅    | Successful completion of an operation                              |
 | pending    | ⏳    | Operations in progress or waiting for completion                   |
+| failure    | 💔    | Failed operations or processes                                     |
 
 ### Custom Logger Integration
 

@@ -39,6 +39,7 @@ LOG_LEVEL_ICONS = {
     "fatal": "☠️",
     "success": "✅",
     "pending": "⏳",
+    "failure": "💔",
 }
 
 class BlockAuthLogger:
@@ -54,13 +55,14 @@ class BlockAuthLogger:
         blockauth_logger.error("Signup failed", error_data)
         blockauth_logger.success("Signup completed", data)
         blockauth_logger.pending("Signup in progress", data)
+        blockauth_logger.failure("Signup failed", data)
         blockauth_logger.trace("Trace message", data)
         blockauth_logger.notice("Notice message", data)
         blockauth_logger.alert("Alert message", data)
         blockauth_logger.fatal("Fatal error", data)
     
     The custom logger class must implement a .log(message, data, level, icon) method.
-    Supported levels: debug, info, warning, error, critical, exception, trace, notice, alert, fatal, success, pending
+    Supported levels: debug, info, warning, error, critical, exception, trace, notice, alert, fatal, success, pending, failure
     The icon is a unicode symbol representing the log level, provided as the 'icon' argument.
     """
     def __init__(self):
@@ -131,5 +133,10 @@ class BlockAuthLogger:
         """Call this to log operations that are in progress or waiting for completion (e.g., background job started)."""
         if self.logger:
             self.logger.log(message, data, "pending", icon=LOG_LEVEL_ICONS["pending"])
+
+    def failure(self, message, data=None):
+        """Call this to log failed operations or processes (e.g., user registration failed)."""
+        if self.logger:
+            self.logger.log(message, data, "failure", icon=LOG_LEVEL_ICONS["failure"])
 
 blockauth_logger = BlockAuthLogger()
