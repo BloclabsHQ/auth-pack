@@ -59,10 +59,22 @@ class WalletLoginSerializer(serializers.Serializer):
             )
 
         # Check if user exists or create new one
-        user, created = _User.objects.get_or_create(
-            wallet_address=wallet_address,
-            defaults={'is_verified': False}
-        )
+        # First check if wallet is already associated with another user
+        existing_user = _User.objects.filter(
+            wallet_address=wallet_address
+        ).first()
+        
+        if existing_user:
+            # Wallet exists, use existing user
+            user = existing_user
+            created = False
+        else:
+            # Wallet doesn't exist, create new user
+            user = _User.objects.create(
+                wallet_address=wallet_address,
+                is_verified=False
+            )
+            created = True
 
         # Update last login and add authentication type
         user.last_login = timezone.now()
