@@ -218,44 +218,9 @@ class SignUpConfirmView(APIView):
 
                 user_data = model_to_json(user, remove_fields=('password',))
 
-                # Call POST_SIGNUP_TRIGGER with appropriate context
+                # Call POST_SIGNUP_TRIGGER with user data - let fabric-auth handle the complexity
                 post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
-                
-                # Check if this is password-based signup (user has password) or passwordless
-                # Also check authentication types to determine the signup method
-                has_password = hasattr(user, 'password') and user.password and user.password != '' and user.password != '!'
-                auth_types = getattr(user, 'authentication_types', [])
-                
-                if has_password and 'EMAIL' in auth_types:
-                    # Password-based signup - include password for KDF wallet generation
-                    password = data.get('password')
-                    if password:
-                        trigger_context = {
-                            'user': user,
-                            'password': password,  # Include password for KDF wallet
-                            'signup_method': 'email_password',
-                            'provider_data': data
-                        }
-                    else:
-                        # Password required but not provided - treat as passwordless
-                        trigger_context = {
-                            'user': user,
-                            'signup_method': 'passwordless',
-                            'provider_data': data
-                        }
-                        blockauth_logger.warning(
-                            "Password-based user did not provide password during confirmation, treating as passwordless",
-                            {"user_id": user.id, "username": user.username}
-                        )
-                else:
-                    # Passwordless signup - no password needed
-                    trigger_context = {
-                        'user': user,
-                        'signup_method': 'passwordless',
-                        'provider_data': data
-                    }
-                
-                post_signup_trigger.trigger(context=trigger_context)
+                post_signup_trigger.trigger(context={'user': user, 'provider_data': data})
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
                 return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
             else:
