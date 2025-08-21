@@ -50,7 +50,70 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - Change password
 - Change email
 - Google, Facebook, LinkedIn login (OAuth2)
+- **🔐 KDF (Key Derivation Function) System** - Complete Web2→Web3 bridge
+- **🚀 Smart Contract Account Integration** - ERC-4337 account abstraction
+- **🔑 Dual Encryption** - User password + platform key security
+- **📱 Passwordless Authentication** - Email-only blockchain wallet generation
+- **🔄 Password Management Triggers** - Automatic wallet re-encryption
 
+---
+
+## 🔐 KDF (Key Derivation Function) System
+
+### Overview
+
+The **KDF System** is a revolutionary feature that bridges Web2 and Web3 by enabling email/password users to have blockchain accounts without ever seeing or managing crypto keys. This makes blockchain accessible to billions of Web2 users.
+
+### How It Works
+
+```
+Email + Password → KDF → Private Key → EOA → Smart Contract Account
+     ↓              ↓         ↓         ↓           ↓
+  Web2 Auth    Key Derivation  Hidden   Internal   User's Wallet
+```
+
+### Key Features
+
+- **🔐 Deterministic Generation**: Same email/password always generates same private key
+- **🚀 Smart Contract Accounts**: ERC-4337 accounts with programmable logic
+- **🔑 Dual Encryption**: Private keys encrypted with both user password and platform key
+- **📱 Passwordless Support**: Email-only authentication for blockchain wallets
+- **🔄 Automatic Recovery**: Platform can recover any user wallet when needed
+- **🛡️ Enterprise Security**: PBKDF2/Argon2 with configurable iterations
+
+### Security Architecture
+
+```
+Layer 1: User Credentials (Email + Password)
+Layer 2: Key Derivation (PBKDF2/Argon2 with 100k+ iterations)
+Layer 3: Private Key Generation (32-byte deterministic)
+Layer 4: Dual Encryption (AES-256-GCM)
+Layer 5: Secure Storage (Database + Platform key backup)
+```
+
+### Use Cases
+
+- **E-commerce**: Users can own NFTs without crypto knowledge
+- **Gaming**: True ownership of in-game items on blockchain
+- **Social Media**: Content creators can monetize with minimal fees
+- **DeFi**: Access to decentralized finance with familiar authentication
+- **Governance**: Participate in DAOs without MetaMask
+
+### Configuration
+
+```python
+BLOCK_AUTH_SETTINGS = {
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",  # or "argon2id"
+    "KDF_ITERATIONS": 100000,           # Production: 100k+, Dev: 1k
+    "KDF_SECURITY_LEVEL": "HIGH",       # LOW, MEDIUM, HIGH, CRITICAL
+    "KDF_MASTER_SALT": "your-32-char-minimum-salt",
+    "MASTER_ENCRYPTION_KEY": "0x" + "64-char-hex-key",
+    "PLATFORM_MASTER_SALT": "your-platform-salt-32-chars-minimum",
+}
+```
+
+---
 
 ## Requirements
 
@@ -62,6 +125,13 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - setuptools = ^75.6.0
 - drf-spectacular = 0.28.0
 - drf-spectacular-sidecar = 2025.7.1
+
+### KDF System Requirements
+
+- **cryptography** = ^41.0.0 (for AES-256-GCM encryption)
+- **web3** = ^6.0.0 (for Ethereum integration)
+- **eth-account** = ^0.9.0 (for wallet management)
+- **argon2-cffi** = ^21.3.0 (for Argon2 KDF algorithm)
 
 ## Installation
 
@@ -833,9 +903,168 @@ class ProtectedView(APIView):
 - "Email address required. Please add an email address to access this endpoint." - When user has no email
 - "Email verification required. Please verify your email address to access this endpoint." - When email is not verified
 
+---
+
+## 🔐 KDF Usage Examples
+
+### Basic KDF Wallet Creation
+
+```python
+from blockauth.kdf import get_kdf_manager
+
+# Get KDF manager
+kdf_manager = get_kdf_manager()
+
+# Create wallet for email user
+wallet_data = kdf_manager.create_wallet(
+    email="user@example.com",
+    password="SecurePassword123",
+    wallet_name="primary"
+)
+
+print(f"Wallet Address: {wallet_data['wallet_address']}")
+print(f"Wallet ID: {wallet_data['wallet_id']}")
+```
+
+### Passwordless Wallet Creation
+
+```python
+# Create wallet for passwordless user
+wallet_data = kdf_manager.create_wallet(
+    email="user@example.com",
+    wallet_name="primary",
+    auth_method='passwordless'  # No password required
+)
+
+print(f"Passwordless Wallet: {wallet_data['wallet_address']}")
+```
+
+### Multiple Wallets per User
+
+```python
+# Create multiple wallets with different names
+wallets = kdf_manager.create_multiple_wallets(
+    email="user@example.com",
+    password="SecurePassword123",
+    wallet_names=["primary", "trading", "savings"]
+)
+
+for wallet in wallets:
+    print(f"{wallet['wallet_name']}: {wallet['wallet_address']}")
+```
+
+### Password Change Integration
+
+```python
+from blockauth.triggers import PostPasswordChangeTrigger
+
+# Trigger automatically re-encrypts KDF wallets
+trigger = PostPasswordChangeTrigger()
+context = {
+    'user': user,
+    'old_password': 'OldPassword123',
+    'new_password': 'NewPassword456'
+}
+
+trigger.execute(context)
+# KDF wallets are automatically re-encrypted with new password
+```
+
+### KDF Configuration
+
+```python
+# In your Django settings
+BLOCK_AUTH_SETTINGS = {
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",  # or "argon2id"
+    "KDF_ITERATIONS": 100000,           # Production: 100k+, Dev: 1k
+    "KDF_SECURITY_LEVEL": "HIGH",       # LOW, MEDIUM, HIGH, CRITICAL
+    "KDF_MASTER_SALT": "your-32-char-minimum-salt",
+    "MASTER_ENCRYPTION_KEY": "0x" + "64-char-hex-key",
+    "PLATFORM_MASTER_SALT": "your-platform-salt-32-chars-minimum",
+}
+```
+
+---
+
 ## Rate Limiting
 Rate limiting is implemented for requests currently. The rate limit is based on the number of requests and the duration.
 The rate limit can be configured in the settings.
+
+---
+
+## 🧪 KDF Development & Testing
+
+### Development Setup
+
+1. **Install KDF Dependencies**
+```bash
+poetry add cryptography web3 eth-account argon2-cffi
+```
+
+2. **Configure KDF Settings**
+```python
+# In your Django settings
+BLOCK_AUTH_SETTINGS = {
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",
+    "KDF_ITERATIONS": 1000,  # Lower for development
+    "KDF_SECURITY_LEVEL": "LOW",
+    "KDF_MASTER_SALT": "dev-salt-32-chars-minimum-for-development",
+    "MASTER_ENCRYPTION_KEY": "0x" + "a" * 64,  # Development key
+    "PLATFORM_MASTER_SALT": "dev-platform-salt-32-chars-minimum",
+}
+```
+
+### Testing KDF Functionality
+
+```python
+# Test KDF wallet creation
+from blockauth.kdf import get_kdf_manager
+
+kdf_manager = get_kdf_manager()
+
+# Test with email/password
+wallet = kdf_manager.create_wallet(
+    email="test@example.com",
+    password="TestPassword123"
+)
+
+assert wallet['wallet_address'].startswith('0x')
+assert len(wallet['wallet_address']) == 42
+```
+
+### Production Deployment
+
+1. **Generate Secure Keys**
+```bash
+# Generate master encryption key
+openssl rand -hex 32
+
+# Generate platform master salt (minimum 32 characters)
+openssl rand -base64 32
+```
+
+2. **Update Production Settings**
+```python
+BLOCK_AUTH_SETTINGS = {
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",
+    "KDF_ITERATIONS": 100000,  # Production iterations
+    "KDF_SECURITY_LEVEL": "HIGH",
+    "KDF_MASTER_SALT": "your-production-salt-32-chars-minimum",
+    "MASTER_ENCRYPTION_KEY": "0x" + "your-64-char-hex-key",
+    "PLATFORM_MASTER_SALT": "your-platform-salt-32-chars-minimum",
+}
+```
+
+3. **Monitor Performance**
+- Wallet creation success rate
+- Average creation time (< 3 seconds)
+- Memory usage per operation (< 100MB)
+- Database query performance
+
+---
 
 ## Folder Structure
 
@@ -894,6 +1123,19 @@ blockauth/
 │   ├── validators.py
 │   └── web3/
 │       └── wallet.py
+├── kdf/                           # 🔐 KDF System Module
+│   ├── __init__.py
+│   ├── services.py                # Core KDF services
+│   ├── encryption.py              # AES-256-GCM encryption
+│   ├── algorithms/                # KDF algorithms
+│   │   ├── __init__.py
+│   │   ├── pbkdf2.py             # PBKDF2 implementation
+│   │   └── argon2.py              # Argon2 implementation
+│   └── utils.py                   # KDF utilities
+├── triggers/                      # 🔄 Password Management Triggers
+│   ├── __init__.py
+│   ├── password_triggers.py       # Password change/reset triggers
+│   └── dummy_triggers.py          # Placeholder triggers
 └── views/
     ├── __init__.py
     ├── basic_auth_views.py
@@ -914,4 +1156,7 @@ All rights reserved.
 - [Google OAuth2](https://developers.google.com/identity/protocols/oauth2)
 - [LinkedIn OAuth2](https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow?context=linkedin/context)
 - [Facebook OAuth2](https://developers.facebook.com/docs/facebook-login/)
+- [Cryptography](https://cryptography.io/) - For AES-256-GCM encryption
+- [Web3.py](https://web3py.readthedocs.io/) - For Ethereum integration
+- [Argon2](https://github.com/P-H-C/phc-winner-argon2) - For advanced KDF algorithms
 
