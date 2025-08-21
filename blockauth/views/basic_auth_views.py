@@ -473,8 +473,28 @@ class PasswordResetConfirmView(APIView):
                 context = {'identifier': phone_number}
                 method = 'sms'
 
+            # Reset user password
             user.set_password(data['new_password'])
             user.save()
+
+            # Trigger POST_PASSWORD_RESET_TRIGGER if configured
+            try:
+                post_password_reset_trigger = get_config('POST_PASSWORD_RESET_TRIGGER')()
+                trigger_context = {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'new_password': data['new_password'],
+                    'trigger_type': 'password_reset',
+                    'timestamp': timezone.now().isoformat()
+                }
+                post_password_reset_trigger.trigger(context=trigger_context)
+            except Exception as e:
+                # Trigger not configured or failed - log but don't break password reset
+                blockauth_logger.warning(
+                    "POST_PASSWORD_RESET_TRIGGER failed",
+                    {"user_id": user.id, "error": str(e)}
+                )
 
             # send notification to user
             communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
@@ -516,8 +536,32 @@ class PasswordChangeView(APIView):
             data = serializer.validated_data
             user = request.user
 
+            # Store old password for KDF wallet handling
+            old_password = data.get('old_password')
+            
+            # Change user password
             user.set_password(data['new_password'])
             user.save()
+
+            # Trigger POST_PASSWORD_CHANGE_TRIGGER if configured
+            try:
+                post_password_change_trigger = get_config('POST_PASSWORD_CHANGE_TRIGGER')()
+                trigger_context = {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'old_password': old_password,
+                    'new_password': data['new_password'],
+                    'trigger_type': 'password_change',
+                    'timestamp': timezone.now().isoformat()
+                }
+                post_password_change_trigger.trigger(context=trigger_context)
+            except Exception as e:
+                # Trigger not configured or failed - log but don't break password change
+                blockauth_logger.warning(
+                    "POST_PASSWORD_CHANGE_TRIGGER failed",
+                    {"user_id": user.id, "error": str(e)}
+                )
 
             # send notification to user
             if user.email:

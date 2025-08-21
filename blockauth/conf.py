@@ -50,6 +50,10 @@ DEFAULTS = {
     "POST_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPostSignupTrigger',
     "PRE_SIGNUP_TRIGGER": 'blockauth.triggers.DummyPreSignupTrigger',
     "POST_LOGIN_TRIGGER": 'blockauth.triggers.DummyPostLoginTrigger',
+    
+    # Password management triggers
+    "POST_PASSWORD_CHANGE_TRIGGER": 'blockauth.triggers.DummyPostPasswordChangeTrigger',
+    "POST_PASSWORD_RESET_TRIGGER": 'blockauth.triggers.DummyPostPasswordResetTrigger',
 
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
@@ -73,6 +77,8 @@ IMPORT_STRINGS = (
     "POST_SIGNUP_TRIGGER",
     "PRE_SIGNUP_TRIGGER",
     "POST_LOGIN_TRIGGER",
+    "POST_PASSWORD_CHANGE_TRIGGER",
+    "POST_PASSWORD_RESET_TRIGGER",
     "BLOCK_AUTH_LOGGER_CLASS",
 )
 
