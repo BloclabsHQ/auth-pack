@@ -57,8 +57,17 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         return data
 
 class SignUpConfirmationSerializer(OTPVerifySerializer):
+    password = serializers.CharField(
+        write_only=True, required=False,  # Optional - only needed for password-based signup
+        validators=[validate_password],
+        help_text="Password for KDF wallet generation (only for password-based signup)"
+    )
+    
     def validate(self, data):
         super().validate(data)
+        # Only validate password if it's provided
+        if 'password' in data and data['password']:
+            validate_password(data['password'])
         return data
 
 
