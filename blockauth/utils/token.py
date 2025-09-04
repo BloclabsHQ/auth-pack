@@ -321,7 +321,12 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
             return generate_auth_token(token_class, user_id, user_data)
         
         # Generate access token with custom claims
-        access_token = jwt_manager.generate_token(user)
+        access_token = jwt_manager.generate_token(
+            user_id=user_id,
+            token_type="access",
+            token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
+            user_data=user_data
+        )
 
         # Generate refresh token with longer lifetime (minimal payload, no custom claims)
         refresh_token = jwt_manager.generate_token(
