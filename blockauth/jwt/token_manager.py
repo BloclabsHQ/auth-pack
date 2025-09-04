@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from rest_framework.exceptions import AuthenticationFailed
 
-from blockauth.utils.config import get_config
+from blockauth.utils.config import get_config, get_block_auth_user_model
 from .interfaces import CustomClaimsProvider
 
 # Try to import Django timezone, fallback to datetime if not available
@@ -70,7 +70,7 @@ class JWTTokenManager:
                 
                 # Try to get user object for custom claims
                 try:
-                    user_model = get_config('USER_MODEL')
+                    user_model = get_block_auth_user_model()
                     if hasattr(user_model, 'objects'):
                         user = user_model.objects.get(id=user_id)
                         logger.info(f"✅ Got user from database: {user.email}")
