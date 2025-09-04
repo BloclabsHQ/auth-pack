@@ -310,14 +310,18 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
     # Try to use enhanced JWT manager if available
     try:
         from blockauth.jwt.token_manager import jwt_manager
+        from blockauth.utils.user import get_block_auth_user_model
+        
+        # Get the user object from user_id
+        user_model = get_block_auth_user_model()
+        try:
+            user = user_model.objects.get(id=user_id)
+        except user_model.DoesNotExist:
+            logger.warning(f"User with id {user_id} not found, using fallback implementation")
+            return generate_auth_token(token_class, user_id, user_data)
         
         # Generate access token with custom claims
-        access_token = jwt_manager.generate_token(
-            user_id=user_id,
-            token_type="access",
-            token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
-            user_data=user_data
-        )
+        access_token = jwt_manager.generate_token(user)
 
         # Generate refresh token with longer lifetime (minimal payload, no custom claims)
         refresh_token = jwt_manager.generate_token(
