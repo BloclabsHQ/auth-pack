@@ -316,7 +316,7 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         logger.info("✅ Successfully imported JWT manager")
         
         logger.info("🔍 Importing user model...")
-        from blockauth.utils.user import get_block_auth_user_model
+        from blockauth.utils.config import get_block_auth_user_model
         logger.info("✅ Successfully imported user model")
         
         # Get the user object from user_id
