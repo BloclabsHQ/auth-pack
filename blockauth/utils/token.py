@@ -312,15 +312,24 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         from blockauth.jwt.token_manager import jwt_manager
         from blockauth.utils.user import get_block_auth_user_model
         
+        logger.info("✅ Successfully imported JWT manager and user model")
+        
         # Get the user object from user_id
         user_model = get_block_auth_user_model()
         try:
             user = user_model.objects.get(id=user_id)
+            logger.info(f"✅ Found user: {user.email}")
         except user_model.DoesNotExist:
             logger.warning(f"User with id {user_id} not found, using fallback implementation")
             return generate_auth_token(token_class, user_id, user_data)
         
+        # Check if claims providers are registered
+        logger.info(f"✅ JWT manager has {len(jwt_manager._claims_providers)} claims providers registered")
+        for i, provider in enumerate(jwt_manager._claims_providers):
+            logger.info(f"  Provider {i}: {provider.__class__.__name__}")
+        
         # Generate access token with custom claims
+        logger.info("✅ Generating access token with custom claims...")
         access_token = jwt_manager.generate_token(
             user_id=user_id,
             token_type="access",
@@ -329,15 +338,21 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         )
 
         # Generate refresh token with longer lifetime (minimal payload, no custom claims)
+        logger.info("✅ Generating refresh token...")
         refresh_token = jwt_manager.generate_token(
             user_id=user_id,
             token_type="refresh",
             token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
         )
         
+        logger.info("✅ Successfully generated tokens with custom claims")
         return access_token, refresh_token
         
-    except ImportError:
+    except ImportError as e:
         # Fall back to original implementation if enhanced system is not available
-        logger.warning("Enhanced JWT system not available, using fallback implementation")
+        logger.warning(f"Enhanced JWT system not available (ImportError: {e}), using fallback implementation")
+        return generate_auth_token(token_class, user_id, user_data)
+    except Exception as e:
+        # Fall back to original implementation if there's any other error
+        logger.warning(f"Error using enhanced JWT system ({e}), using fallback implementation")
         return generate_auth_token(token_class, user_id, user_data)
