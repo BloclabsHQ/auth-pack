@@ -308,11 +308,16 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         }
     """
     # Try to use enhanced JWT manager if available
+    logger.info("🔍 Attempting to use enhanced JWT system...")
+    
     try:
+        logger.info("🔍 Importing JWT manager...")
         from blockauth.jwt.token_manager import jwt_manager
-        from blockauth.utils.user import get_block_auth_user_model
+        logger.info("✅ Successfully imported JWT manager")
         
-        logger.info("✅ Successfully imported JWT manager and user model")
+        logger.info("🔍 Importing user model...")
+        from blockauth.utils.user import get_block_auth_user_model
+        logger.info("✅ Successfully imported user model")
         
         # Get the user object from user_id
         user_model = get_block_auth_user_model()
@@ -350,9 +355,17 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         
     except ImportError as e:
         # Fall back to original implementation if enhanced system is not available
-        logger.warning(f"Enhanced JWT system not available (ImportError: {e}), using fallback implementation")
+        logger.error(f"❌ ImportError in enhanced JWT system: {e}")
+        logger.error(f"❌ ImportError type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        logger.warning("⚠️ Falling back to original implementation due to ImportError")
         return generate_auth_token(token_class, user_id, user_data)
     except Exception as e:
         # Fall back to original implementation if there's any other error
-        logger.warning(f"Error using enhanced JWT system ({e}), using fallback implementation")
+        logger.error(f"❌ Exception in enhanced JWT system: {e}")
+        logger.error(f"❌ Exception type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        logger.warning("⚠️ Falling back to original implementation due to Exception")
         return generate_auth_token(token_class, user_id, user_data)
