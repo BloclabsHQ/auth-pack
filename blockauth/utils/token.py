@@ -270,3 +270,65 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
 
 # Default token class instance for the application
 AUTH_TOKEN_CLASS = Token
+
+# Enhanced token generation function with custom claims support
+def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
+    """
+    Generate both access and refresh tokens for a user with custom claims support.
+    
+    This function creates a pair of JWT tokens - an access token for API authentication
+    and a refresh token for obtaining new access tokens. Both tokens are generated
+    using the same user ID but with different lifetimes and types.
+    
+    Args:
+        token_class (AbstractToken): Token class instance to use for generation
+        user_id (str): The unique identifier of the user (typically str(user.id))
+        user_data (Dict[str, Any], optional): Additional user data to include in tokens
+        
+    Returns:
+        Tuple[str, str]: A tuple containing (access_token, refresh_token)
+        
+    Configuration:
+        ACCESS_TOKEN_LIFETIME: Lifetime for access tokens (from Django settings)
+        REFRESH_TOKEN_LIFETIME: Lifetime for refresh tokens (from Django settings)
+        
+    Example:
+        from blockauth.utils.token import generate_auth_token_with_custom_claims, AUTH_TOKEN_CLASS
+        
+        # Generate tokens for a user with custom claims
+        access_token, refresh_token = generate_auth_token_with_custom_claims(
+            token_class=AUTH_TOKEN_CLASS(),
+            user_id=str(user.id)
+        )
+        
+        # Use tokens in API responses
+        return {
+            "access": access_token,
+            "refresh": refresh_token
+        }
+    """
+    # Try to use enhanced JWT manager if available
+    try:
+        from blockauth.jwt.token_manager import jwt_manager
+        
+        # Generate access token with custom claims
+        access_token = jwt_manager.generate_token(
+            user_id=user_id,
+            token_type="access",
+            token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
+            user_data=user_data
+        )
+
+        # Generate refresh token with longer lifetime (minimal payload, no custom claims)
+        refresh_token = jwt_manager.generate_token(
+            user_id=user_id,
+            token_type="refresh",
+            token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
+        )
+        
+        return access_token, refresh_token
+        
+    except ImportError:
+        # Fall back to original implementation if enhanced system is not available
+        logger.warning("Enhanced JWT system not available, using fallback implementation")
+        return generate_auth_token(token_class, user_id, user_data)
