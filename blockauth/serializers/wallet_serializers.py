@@ -85,11 +85,19 @@ class WalletLoginSerializer(serializers.Serializer):
         user_data = model_to_json(user, remove_fields=('password',))
         provider_data = {'provider': 'wallet', 'wallet_address': user.wallet_address}
 
-        # Generate tokens
-        access_token, refresh_token = generate_auth_token(
-            token_class=AUTH_TOKEN_CLASS(), 
-            user_id=str(user.id)
-        )
+        # Generate tokens with custom claims support
+        try:
+            from blockauth.utils.token import generate_auth_token_with_custom_claims
+            access_token, refresh_token = generate_auth_token_with_custom_claims(
+                token_class=AUTH_TOKEN_CLASS(), 
+                user_id=str(user.id)
+            )
+        except ImportError:
+            # Fall back to original implementation
+            access_token, refresh_token = generate_auth_token(
+                token_class=AUTH_TOKEN_CLASS(), 
+                user_id=str(user.id)
+            )
 
         # Store all the data for the view to use
         data['user'] = user
