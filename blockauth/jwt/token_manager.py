@@ -1,0 +1,132 @@
+import jwt
+import logging
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+from rest_framework.exceptions import AuthenticationFailed
+
+from blockauth.utils.config import get_config
+from .interfaces import CustomClaimsProvider
+
+# Try to import Django timezone, fallback to datetime if not available
+try:
+    from django.utils import timezone
+    def get_current_time():
+        return timezone.now()
+except ImportError:
+    def get_current_time():
+        return datetime.utcnow()
+
+logger = logging.getLogger(__name__)
+
+
+class JWTTokenManager:
+    """Enhanced JWT manager with custom claims support"""
+
+    def __init__(self):
+        # Use JWT_SECRET_KEY if provided, otherwise fall back to SECRET_KEY
+        try:
+            self.secret_key = get_config('JWT_SECRET_KEY')
+        except AttributeError:
+            # Fall back to SECRET_KEY if JWT_SECRET_KEY is not configured
+            self.secret_key = get_config('SECRET_KEY')
+        
+        self.algorithm = get_config('ALGORITHM')
+        self.expiry_hours = get_config('ACCESS_TOKEN_LIFETIME')
+        self._claims_providers: List[CustomClaimsProvider] = []
+
+    def register_claims_provider(self, provider: CustomClaimsProvider):
+        """Register a custom claims provider"""
+        if provider not in self._claims_providers:
+            self._claims_providers.append(provider)
+            logger.info(f"Registered custom claims provider: {provider.__class__.__name__}")
+
+    def unregister_claims_provider(self, provider: CustomClaimsProvider):
+        """Unregister a custom claims provider"""
+        if provider in self._claims_providers:
+            self._claims_providers.remove(provider)
+            logger.info(f"Unregistered custom claims provider: {provider.__class__.__name__}")
+
+    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
+        """Generate JWT token with base and custom claims"""
+        # Base claims (always included)
+        base_claims = {
+            'user_id': user_id,
+            'exp': get_current_time() + token_lifetime,
+            'iat': get_current_time(),
+            'type': token_type
+        }
+
+        # Add additional user data if provided
+        if user_data:
+            base_claims.update(user_data)
+
+        # Collect custom claims from all registered providers
+        custom_claims = {}
+        for provider in self._claims_providers:
+            try:
+                # Try to get user object for custom claims
+                try:
+                    user_model = get_config('USER_MODEL')
+                    if hasattr(user_model, 'objects'):
+                        user = user_model.objects.get(id=user_id)
+                    else:
+                        # Handle case where user_model is not a Django model
+                        user = user_model(id=user_id, email=f"user_{user_id}@example.com")
+                except Exception as user_error:
+                    # If we can't get the user from database, create a mock user
+                    logger.warning(f"Could not get user from database: {user_error}")
+                    user = type('MockUser', (), {'id': user_id, 'email': f"user_{user_id}@example.com"})()
+                
+                provider_claims = provider.get_custom_claims(user)
+                if provider_claims:
+                    custom_claims.update(provider_claims)
+                    logger.debug(f"Added custom claims from {provider.__class__.__name__}: {list(provider_claims.keys())}")
+            except Exception as e:
+                # Log error but don't fail token generation
+                logger.error(f"Error getting custom claims from {provider.__class__.__name__}: {e}")
+
+        # Merge all claims (custom claims can't override base claims)
+        all_claims = {**custom_claims, **base_claims}
+
+        # Generate token
+        token = jwt.encode(all_claims, self.secret_key, algorithm=self.algorithm)
+        return token
+
+    def decode_token(self, token: str) -> Dict[str, Any]:
+        """Decode and validate JWT token"""
+        try:
+            claims = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+
+            # Validate custom claims with providers
+            for provider in self._claims_providers:
+                try:
+                    if not provider.validate_custom_claims(claims):
+                        logger.warning(f"Custom claims validation failed for {provider.__class__.__name__}")
+                        raise jwt.InvalidTokenError("Custom claims validation failed")
+                except Exception as e:
+                    logger.error(f"Error validating custom claims with {provider.__class__.__name__}: {e}")
+                    raise jwt.InvalidTokenError("Custom claims validation failed")
+
+            return claims
+        except jwt.ExpiredSignatureError:
+            logger.error("Token has expired.")
+            raise AuthenticationFailed("Token has expired.")
+        except jwt.InvalidTokenError as e:
+            logger.error(f"Invalid token: {str(e)}")
+            raise AuthenticationFailed(f"Invalid token: {str(e)}")
+
+    def get_custom_claims(self, token: str) -> Dict[str, Any]:
+        """Extract only custom claims from a token"""
+        try:
+            claims = self.decode_token(token)
+            # Remove base claims to get only custom claims
+            base_claim_keys = {'user_id', 'exp', 'iat', 'type'}
+            custom_claims = {k: v for k, v in claims.items() if k not in base_claim_keys}
+            return custom_claims
+        except Exception as e:
+            logger.error(f"Error extracting custom claims: {e}")
+            return {}
+
+
+# Global instance
+jwt_manager = JWTTokenManager()

@@ -262,10 +262,19 @@ class BasicAuthLoginView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -350,10 +359,19 @@ class PasswordlessLoginConfirmView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
             blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -393,10 +411,19 @@ class AuthRefreshTokenView(APIView):
             user_model = get_block_auth_user_model()
             user = user_model.objects.get(id=user_id)
             
-            access_token, refresh_token = generate_auth_token(
-                token_class=token, 
-                user_id=user_id
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=token, 
+                    user_id=user_id
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=token, 
+                    user_id=user_id
+                )
             blockauth_logger.success("Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except Exception as e:

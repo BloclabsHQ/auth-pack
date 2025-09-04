@@ -24,6 +24,26 @@ class JWTAuthentication(BaseAuthentication):
     _HEADER_PREFIX = 'bearer'
     _TOKEN_CLASS = AUTH_TOKEN_CLASS
 
+    def __init__(self):
+        super().__init__()
+        # Try to get enhanced JWT manager if available
+        try:
+            from blockauth.jwt.token_manager import jwt_manager
+            self.jwt_manager = jwt_manager
+        except ImportError:
+            self.jwt_manager = None
+
+    def register_claims_provider(self, provider):
+        """Register a custom claims provider for enhanced JWT functionality"""
+        if self.jwt_manager:
+            from blockauth.jwt.interfaces import CustomClaimsProvider
+            if isinstance(provider, CustomClaimsProvider):
+                self.jwt_manager.register_claims_provider(provider)
+            else:
+                raise ValueError("Provider must implement CustomClaimsProvider interface")
+        else:
+            logger.warning("Enhanced JWT system not available, claims provider not registered")
+
     def authenticate(self, request):
         auth_header = _get_authorization_header(request).split()
         if not auth_header:
@@ -37,10 +57,26 @@ class JWTAuthentication(BaseAuthentication):
             )
 
         _, validated_token = auth_header
-        payload = self._TOKEN_CLASS().decode_token(validated_token)
+        
+        # Use enhanced JWT manager if available, otherwise fall back to original
+        if self.jwt_manager:
+            try:
+                payload = self.jwt_manager.decode_token(validated_token)
+            except Exception as e:
+                # Fall back to original token class if enhanced system fails
+                payload = self._TOKEN_CLASS().decode_token(validated_token)
+        else:
+            payload = self._TOKEN_CLASS().decode_token(validated_token)
+            
         if payload["type"] != "access":
             raise AuthenticationFailed("Invalid token type. Only access tokens are allowed")
-        return self._get_user(payload), validated_token
+        
+        user = self._get_user(payload)
+        # Attach claims to user object for easy access
+        if hasattr(user, 'jwt_claims'):
+            user.jwt_claims = payload
+        
+        return user, validated_token
 
     def _get_user(self, payload):
         user_model = get_block_auth_user_model()
