@@ -75,18 +75,9 @@ BLOCK_AUTH_SETTINGS = {
 }
 ```
 
-### Environment Variables (Alternative)
+### Configuration Notes
 
-For non-Django projects or additional security:
-
-```bash
-export KDF_ENABLED=true
-export KDF_ALGORITHM=pbkdf2_sha256
-export KDF_ITERATIONS=100000
-export KDF_MASTER_SALT=your-platform-salt-32-chars
-export MASTER_ENCRYPTION_KEY=0xyour-256-bit-key
-export PLATFORM_MASTER_SALT=your-platform-master-salt-32-chars
-```
+**Note**: Environment variable configuration has been removed to maintain a single source of truth. All KDF configuration must be provided through `BLOCK_AUTH_SETTINGS` in Django settings.
 
 ### Security Level Presets
 

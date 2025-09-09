@@ -50,8 +50,8 @@ BLOCK_AUTH_SETTINGS = {
     'PLATFORM_MASTER_SALT': 'dev-platform-master-salt-32-chars-minimum',
 }
 
-# Example 4: Environment Variable Configuration
-# Use environment variables for sensitive configuration
+# Example 4: Basic Configuration
+# Simple configuration with required settings
 
 import os
 
@@ -59,9 +59,9 @@ BLOCK_AUTH_SETTINGS = {
     'KDF_ENABLED': True,
     'KDF_ALGORITHM': 'pbkdf2_sha256',
     'KDF_SECURITY_LEVEL': 'MEDIUM',
-    'KDF_MASTER_SALT': os.environ.get('KDF_MASTER_SALT', ''),
-    'MASTER_ENCRYPTION_KEY': os.environ.get('MASTER_ENCRYPTION_KEY', ''),
-    'PLATFORM_MASTER_SALT': os.environ.get('PLATFORM_MASTER_SALT', ''),
+    'KDF_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
+    'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-encryption-key-in-hex',
+    'PLATFORM_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
 }
 
 # Example 5: Complete Configuration with All Options
@@ -91,20 +91,15 @@ BLOCK_AUTH_SETTINGS = {
     'KDF_ARGON2_PARALLELISM': 4,      # Number of parallel threads
 }
 
-# Example 6: Non-Django Configuration
-# For non-Django projects, use environment variables
+# Example 6: Configuration Notes
+# KDF configuration requires Django settings (BLOCK_AUTH_SETTINGS)
 
-# Set these environment variables in your system:
-# export KDF_ENABLED=true
-# export KDF_ALGORITHM=pbkdf2_sha256
-# export KDF_ITERATIONS=100000
-# export KDF_MASTER_SALT=your-platform-salt-32-chars
-# export MASTER_ENCRYPTION_KEY=0xyour-256-bit-key
-# export PLATFORM_MASTER_SALT=your-platform-master-salt-32-chars
+# Environment variables are no longer supported for KDF configuration.
+# All configuration must be provided through BLOCK_AUTH_SETTINGS in Django settings.
 
-# Then in your Python code:
-# from blockauth.kdf import get_kdf_manager
-# kdf_manager = get_kdf_manager()  # Will read from environment variables
+# For non-Django projects, you'll need to:
+# 1. Set up Django settings with BLOCK_AUTH_SETTINGS
+# 2. Or use the KDF services directly with explicit configuration
 
 # Example 7: Basic Usage Examples
 # Show how to use the KDF system

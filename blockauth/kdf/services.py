@@ -43,14 +43,26 @@ logger = logging.getLogger(__name__)
 
 def get_kdf_config():
     """
-    Get KDF configuration from project settings
+    Get KDF configuration from Django settings (BLOCK_AUTH_SETTINGS)
+    
+    This function now uses a single source of truth: BLOCK_AUTH_SETTINGS
+    in the Django settings. Environment variable fallbacks have been removed
+    to eliminate configuration duplication.
     
     Returns:
         dict: Configuration dictionary with defaults
+        
+    Raises:
+        ImportError: If Django settings are not available
+        ValueError: If required settings are missing
     """
     try:
         from django.conf import settings
         block_auth_settings = getattr(settings, 'BLOCK_AUTH_SETTINGS', {})
+        
+        # Validate that KDF is enabled
+        if not block_auth_settings.get('KDF_ENABLED', False):
+            raise ValueError("KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS")
         
         return {
             'algorithm': block_auth_settings.get('KDF_ALGORITHM', KDFAlgorithms.PBKDF2_SHA256),
@@ -61,15 +73,11 @@ def get_kdf_config():
             'platform_master_salt': block_auth_settings.get('PLATFORM_MASTER_SALT', ''),
         }
     except ImportError:
-        # Not in Django context, use environment variables
-        return {
-            'algorithm': os.environ.get('KDF_ALGORITHM', KDFAlgorithms.PBKDF2_SHA256),
-            'iterations': int(os.environ.get('KDF_ITERATIONS', '100000')),
-            'master_salt': os.environ.get('KDF_MASTER_SALT', ''),
-            'encryption_key': os.environ.get('MASTER_ENCRYPTION_KEY', ''),
-            'security_level': os.environ.get('KDF_SECURITY_LEVEL', 'MEDIUM'),
-            'platform_master_salt': os.environ.get('PLATFORM_MASTER_SALT', ''),
-        }
+        raise ImportError(
+            "Django settings not available. KDF configuration must be provided "
+            "through BLOCK_AUTH_SETTINGS in Django settings. Environment variable "
+            "fallbacks have been removed to maintain single source of truth."
+        )
 
 
 class BaseKDFService(ABC):
@@ -599,6 +607,9 @@ class KeyEncryptionService:
         
         Returns:
             Encryption key as bytes
+            
+        Raises:
+            ValueError: If encryption key is invalid or missing
         """
         if encryption_key:
             # Use provided key
@@ -610,27 +621,12 @@ class KeyEncryptionService:
             
             return bytes.fromhex(encryption_key)
         
-        # Try to get from environment
-        env_key = os.environ.get('MASTER_ENCRYPTION_KEY')
-        if env_key:
-            if env_key.startswith('0x'):
-                env_key = env_key[2:]
-            
-            if len(env_key) != 64:
-                raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
-            
-            return bytes.fromhex(env_key)
-        
-        # Generate new key (first time setup)
-        key = os.urandom(32)  # 256 bits
-        
-        logger.warning(
-            "Generated new master encryption key. "
-            "Set this as MASTER_ENCRYPTION_KEY environment variable "
-            "or in BLOCK_AUTH_SETTINGS for production use."
+        # No key provided - this should not happen with single source of truth
+        raise ValueError(
+            "Master encryption key is required. Set MASTER_ENCRYPTION_KEY "
+            "in BLOCK_AUTH_SETTINGS. Environment variable fallbacks have been "
+            "removed to maintain single source of truth."
         )
-        
-        return key
 
 
 class KDFManager:
