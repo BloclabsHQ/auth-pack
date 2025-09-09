@@ -34,7 +34,7 @@ from blockauth.serializers.user_account_serializers import PasswordChangeSeriali
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
-from blockauth.utils.rate_limiter import RequestThrottle
+from blockauth.utils.rate_limiter import RequestThrottle, OTPThrottle
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 from blockauth.utils.logger import blockauth_logger
 
@@ -83,11 +83,13 @@ class SignUpView(APIView):
 
 class SignUpResendOTPView(APIView):
     """
-    Send OTP/verification link for signup or wallet email verification
+    Send OTP/verification link for signup or wallet email verification.
+    
+    Enhanced with OTP-specific throttling for better security.
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
-    rate_limit_handler = RequestThrottle()
+    rate_limit_handler = OTPThrottle(rate=(2, 60), daily_limit=5)  # 2 OTPs per minute, 5 per day
     authentication_classes = []
 
     @extend_schema(**signup_resend_otp_docs)
@@ -289,10 +291,15 @@ class BasicAuthLoginView(APIView):
 class PasswordlessLoginView(APIView):
     """
     Send an otp/Login Link for passwordless login with email/phone number.
+    
+    Enhanced with OTP-specific throttling for better security:
+    - Prevents multiple active OTPs per identifier
+    - Daily limits per identifier
+    - Enhanced logging and monitoring
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
-    rate_limit_handler = RequestThrottle()
+    rate_limit_handler = OTPThrottle(rate=(2, 60), daily_limit=5)  # 2 OTPs per minute, 5 per day
     authentication_classes = []
 
     @extend_schema(**passwordless_login_docs)

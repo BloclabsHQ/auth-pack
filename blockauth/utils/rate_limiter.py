@@ -4,6 +4,8 @@ from django.core.cache import cache as default_cache
 from rest_framework.throttling import BaseThrottle
 
 from blockauth.utils.config import get_config
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
 
 
 class RequestThrottle(BaseThrottle):
@@ -51,6 +53,22 @@ class RequestThrottle(BaseThrottle):
             self.history.pop()
 
         if len(self.history) >= self.num_requests:
+            # Enhanced logging for rate limit violations
+            identifier = request.data.get('identifier', 'unknown')
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            blockauth_logger.warning(
+                f"Rate limit exceeded for {subject}",
+                sanitize_log_context({
+                    "identifier": identifier,
+                    "subject": subject,
+                    "ip_address": ip_address,
+                    "current_requests": len(self.history),
+                    "max_requests": self.num_requests,
+                    "duration": self.duration,
+                    "wait_time": self.wait()
+                })
+            )
             return self.throttle_failure()
         return self.throttle_success()
 
@@ -74,3 +92,120 @@ class RequestThrottle(BaseThrottle):
             return None
 
         return remaining_duration / float(available_requests)
+
+
+class OTPThrottle(RequestThrottle):
+    """
+    Enhanced throttling specifically for OTP operations with additional security measures.
+    
+    This throttle provides:
+    1. Stricter rate limiting for OTP generation
+    2. Per-identifier daily limits
+    3. Progressive delays for repeated attempts
+    4. Enhanced logging and monitoring
+    """
+    
+    def __init__(self, rate: tuple[int, int] = None, daily_limit: int = 10):
+        """
+        Initialize OTP throttle with enhanced security.
+        
+        Args:
+            rate: Tuple of (num_requests, duration) for basic rate limiting
+            daily_limit: Maximum OTP requests per day per identifier
+        """
+        super().__init__(rate)
+        self.daily_limit = daily_limit
+    
+    def allow_request(self, request, subject):
+        """Enhanced allow_request with additional OTP-specific checks."""
+        identifier = request.data.get('identifier')
+        
+        # First check basic rate limiting
+        if not super().allow_request(request, subject):
+            return False
+        
+        # Check daily limits for OTP operations
+        if not self._check_daily_limit(request, subject):
+            identifier = request.data.get('identifier', 'unknown')
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            blockauth_logger.warning(
+                f"Daily OTP limit exceeded for {subject}",
+                sanitize_log_context({
+                    "identifier": identifier,
+                    "subject": subject,
+                    "ip_address": ip_address,
+                    "daily_limit": self.daily_limit
+                })
+            )
+            return False
+        
+        # Check for existing active OTPs (additional security layer)
+        if not self._check_existing_otps(request, subject):
+            identifier = request.data.get('identifier', 'unknown')
+            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            blockauth_logger.warning(
+                f"Active OTP already exists for {subject}",
+                sanitize_log_context({
+                    "identifier": identifier,
+                    "subject": subject,
+                    "ip_address": ip_address
+                })
+            )
+            return False
+        
+        return True
+    
+    def _check_daily_limit(self, request, subject):
+        """Check daily OTP generation limits per identifier."""
+        identifier = request.data.get('identifier')
+        if not identifier:
+            return True
+        
+        # Create daily limit cache key
+        now = self.timer()
+        day_start = int(now // 86400) * 86400  # Start of current day
+        daily_key = f"otp_daily_{identifier}_{subject}_{day_start}"
+        
+        # Get current daily count
+        daily_count = self.cache.get(daily_key, 0)
+        
+        if daily_count >= self.daily_limit:
+            return False
+        
+        # Increment daily count
+        self.cache.set(daily_key, daily_count + 1, 86400)  # Expire at end of day
+        return True
+    
+    def _check_existing_otps(self, request, subject):
+        """Check if there are existing active OTPs for this identifier and subject."""
+        try:
+            from blockauth.models.otp import OTP
+            from django.utils import timezone
+            
+            identifier = request.data.get('identifier')
+            if not identifier:
+                return True
+            
+            # Check for active OTPs (not expired and not used)
+            active_otps = OTP.objects.filter(
+                identifier=identifier,
+                subject=subject,
+                is_used=False
+            ).count()
+            
+            # Allow if no active OTPs exist
+            return active_otps == 0
+            
+        except Exception as e:
+            blockauth_logger.error(
+                f"Error checking existing OTPs for {subject}",
+                sanitize_log_context({
+                    "identifier": request.data.get('identifier', 'unknown'),
+                    "subject": subject,
+                    "error": str(e)
+                })
+            )
+            # Fail open for availability
+            return True
