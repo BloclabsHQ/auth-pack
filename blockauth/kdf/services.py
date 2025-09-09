@@ -35,6 +35,7 @@ from .constants import (
     KDFAlgorithms, 
     ConfigKeys, 
     SecurityLevels, 
+    SecurityConstants,
     ErrorMessages
 )
 
@@ -68,11 +69,11 @@ def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str)
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
         
         # Use platform master salt as the salt for PBKDF2
-        salt_bytes = platform_master_salt.encode()[:16]  # Use first 16 bytes as salt
+        salt_bytes = platform_master_salt.encode()[:SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
         
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
-            length=32,  # 256 bits
+            length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
             salt=salt_bytes,
             iterations=100000,  # High iteration count for security
         )
@@ -147,7 +148,7 @@ class PBKDF2Service(BaseKDFService):
     """PBKDF2-based key derivation service"""
     
     def __init__(self, iterations: int = 100000, hash_algorithm: str = 'sha256'):
-        self.iterations = max(1000, iterations)  # Minimum security threshold
+        self.iterations = max(SecurityConstants.MIN_ITERATIONS, iterations)  # Minimum security threshold
         self.hash_algorithm = hash_algorithm
         
         if hash_algorithm not in ['sha256', 'sha512']:
@@ -170,7 +171,7 @@ class PBKDF2Service(BaseKDFService):
                 kdf_input.encode('utf-8'),
                 salt.encode('utf-8'),
                 self.iterations,
-                dklen=32  # 32 bytes for private key
+                dklen=SecurityConstants.AES_KEY_LENGTH  # 32 bytes for private key
             )
             
             return '0x' + key_material.hex()
@@ -232,7 +233,7 @@ class Argon2Service(BaseKDFService):
                 time_cost=self.time_cost,
                 memory_cost=self.memory_cost,
                 parallelism=self.parallelism,
-                hash_len=32,
+                hash_len=SecurityConstants.AES_KEY_LENGTH,
                 type=argon2.Type.ID  # Argon2id variant
             )
             
@@ -240,7 +241,7 @@ class Argon2Service(BaseKDFService):
             hash_result = hasher.hash(kdf_input, salt=salt.encode())
             
             # Extract key material (last 64 hex chars = 32 bytes)
-            key_material = hash_result[-64:]
+            key_material = hash_result[-(SecurityConstants.AES_KEY_LENGTH * 2):]
             
             return '0x' + key_material
             
@@ -279,8 +280,8 @@ class PasswordlessKDFService:
         if not self.platform_master_salt:
             raise ValueError("Platform master salt required for passwordless wallets")
         
-        if len(self.platform_master_salt) < 32:
-            raise ValueError("Platform master salt must be at least 32 characters")
+        if len(self.platform_master_salt) < SecurityConstants.MIN_SALT_LENGTH:
+            raise ValueError(f"Platform master salt must be at least {SecurityConstants.MIN_SALT_LENGTH} characters")
     
     def create_user_wallet(self, email: str) -> Dict[str, str]:
         """
@@ -403,7 +404,7 @@ class KeyDerivationService:
             self.algorithm = preset['algorithm']
             self.iterations = preset['iterations']
         
-        self.iterations = max(1000, self.iterations)
+        self.iterations = max(SecurityConstants.MIN_ITERATIONS, self.iterations)
         
         # Initialize algorithm-specific service
         if self.algorithm == KDFAlgorithms.ARGON2ID:
@@ -414,7 +415,7 @@ class KeyDerivationService:
             self.kdf_service = PBKDF2Service(self.iterations, 'sha256')
         
         # Validate master salt if provided
-        if self.master_salt and len(self.master_salt) < 32:
+        if self.master_salt and len(self.master_salt) < SecurityConstants.MIN_SALT_LENGTH:
             raise ValueError(ErrorMessages.INVALID_MASTER_SALT)
     
     def create_user_wallet(self, email: str, password: str, 
@@ -436,7 +437,7 @@ class KeyDerivationService:
         try:
             # Generate unique salt for this user if not provided
             if not user_salt:
-                user_salt = os.urandom(32).hex()
+                user_salt = os.urandom(SecurityConstants.AES_KEY_LENGTH).hex()
             
             # Derive private key
             private_key = self.derive_private_key(email, password, user_salt)
@@ -578,7 +579,7 @@ class KeyEncryptionService:
         """
         try:
             # Generate random nonce
-            nonce = os.urandom(12)  # 96 bits for GCM
+            nonce = os.urandom(SecurityConstants.AES_NONCE_LENGTH)  # 96 bits for GCM
             
             # Import cryptography library
             try:
@@ -666,7 +667,7 @@ class KeyEncryptionService:
             if encryption_key.startswith('0x'):
                 encryption_key = encryption_key[2:]
             
-            if len(encryption_key) != 64:  # 32 bytes = 64 hex chars
+            if len(encryption_key) != (SecurityConstants.AES_KEY_LENGTH * 2):  # 32 bytes = 64 hex chars
                 raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
             
             return bytes.fromhex(encryption_key)
@@ -1021,7 +1022,7 @@ class KDFManager:
         
         # Generate deterministic but unique salt
         salt_hash = hashlib.sha256(salt_input.encode()).hexdigest()
-        return salt_hash[:32]  # 32 characters for salt
+        return salt_hash[:SecurityConstants.MIN_SALT_LENGTH]  # 32 characters for salt
     
     def _generate_email_salt(self, email: str, wallet_name: str = None) -> str:
         """Generate deterministic salt from email"""
@@ -1036,7 +1037,7 @@ class KDFManager:
         """Generate unique wallet ID"""
         wallet_input = f"{email}:{user_salt}:{time.time()}"
         wallet_hash = hashlib.sha256(wallet_input.encode()).hexdigest()
-        return wallet_hash[:16]  # 16 characters for wallet ID
+        return wallet_hash[:SecurityConstants.MIN_SALT_BYTES * 2]  # 16 characters for wallet ID
     
     def _derive_user_encryption_key(self, email: str, password: str, user_salt: str) -> bytes:
         """Derive user-specific encryption key using PBKDF2"""
@@ -1048,11 +1049,11 @@ class KDFManager:
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
             
             # Use user_salt as the salt for PBKDF2
-            salt_bytes = user_salt.encode()[:16]  # Use first 16 bytes as salt
+            salt_bytes = user_salt.encode()[:SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
             
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
-                length=32,  # 256 bits
+                length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
                 salt=salt_bytes,
                 iterations=100000,  # High iteration count for security
             )
@@ -1079,7 +1080,7 @@ class KDFManager:
             from cryptography.hazmat.backends import default_backend
             
             # Generate random nonce for GCM
-            nonce = os.urandom(12)  # 96 bits for GCM
+            nonce = os.urandom(SecurityConstants.AES_NONCE_LENGTH)  # 96 bits for GCM
             
             # Create AES-GCM cipher
             cipher = Cipher(
@@ -1116,13 +1117,14 @@ class KDFManager:
             encrypted_bytes = bytes.fromhex(encrypted_key)
             
             # Check minimum length (nonce + tag + some ciphertext)
-            if len(encrypted_bytes) < 28:  # 12 (nonce) + 16 (tag) + minimum data
+            min_length = SecurityConstants.AES_NONCE_LENGTH + SecurityConstants.AES_TAG_LENGTH
+            if len(encrypted_bytes) < min_length:
                 raise ValueError("Invalid encrypted data: too short")
             
             # Extract nonce, tag, and ciphertext
-            nonce = encrypted_bytes[:12]
-            tag = encrypted_bytes[12:28]
-            ciphertext = encrypted_bytes[28:]
+            nonce = encrypted_bytes[:SecurityConstants.AES_NONCE_LENGTH]
+            tag = encrypted_bytes[SecurityConstants.AES_NONCE_LENGTH:min_length]
+            ciphertext = encrypted_bytes[min_length:]
             
             # Create AES-GCM cipher
             cipher = Cipher(

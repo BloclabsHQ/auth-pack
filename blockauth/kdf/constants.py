@@ -84,6 +84,23 @@ class ConfigKeys:
     CACHE_TTL_SECONDS = 'CACHE_TTL_SECONDS'          # Cache TTL in seconds
 
 
+class SecurityConstants:
+    """Security-related constants and thresholds"""
+    
+    # Salt requirements
+    MIN_SALT_LENGTH = 32                    # Minimum salt length in characters
+    MIN_SALT_BYTES = 16                     # Minimum salt length in bytes (for binary salts)
+    
+    # Key requirements
+    MIN_PASSWORD_LENGTH = 8                 # Minimum password length
+    MIN_ITERATIONS = 1000                   # Minimum KDF iterations
+    
+    # Encryption requirements
+    AES_KEY_LENGTH = 32                     # AES-256 key length in bytes
+    AES_NONCE_LENGTH = 12                   # AES-GCM nonce length in bytes
+    AES_TAG_LENGTH = 16                     # AES-GCM tag length in bytes
+
+
 class SecurityLevels:
     """Security level presets for different use cases"""
     

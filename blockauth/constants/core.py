@@ -1,7 +1,7 @@
 """
-Centralized constants for BlockAuth package.
+Core constants for BlockAuth package.
 
-This module defines all constants used throughout the BlockAuth package,
+This module defines all core constants used throughout the BlockAuth package,
 including feature flags, configuration keys, error messages, and URL names.
 
 Constants are organized into logical groups:
@@ -224,4 +224,4 @@ class URLNames:
     FACEBOOK_LOGIN = 'facebook-login'
     FACEBOOK_CALLBACK = 'facebook-login-callback'
     LINKEDIN_LOGIN = 'linkedin-login'
-    LINKEDIN_CALLBACK = 'linkedin-login-callback' 
+    LINKEDIN_CALLBACK = 'linkedin-login-callback'
