@@ -38,7 +38,55 @@ from .constants import (
     ErrorMessages
 )
 
+# Import blockauth logger and sanitization
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.generics import sanitize_log_context
+
 logger = logging.getLogger(__name__)
+
+
+def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str) -> str:
+    """
+    Securely derive private key from email + salt using PBKDF2
+    
+    This is a shared utility function to avoid code duplication.
+    
+    Args:
+        email: User email address
+        salt: User-specific salt
+        platform_master_salt: Platform master salt
+        
+    Returns:
+        Private key as hex string with 0x prefix
+    """
+    email = email.lower().strip()
+    kdf_input = f"{email}:{salt}:{platform_master_salt}"
+    
+    # Use PBKDF2 for secure key derivation
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        
+        # Use platform master salt as the salt for PBKDF2
+        salt_bytes = platform_master_salt.encode()[:16]  # Use first 16 bytes as salt
+        
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,  # 256 bits
+            salt=salt_bytes,
+            iterations=100000,  # High iteration count for security
+        )
+        key_material = kdf.derive(kdf_input.encode())
+        return '0x' + key_material.hex()
+        
+    except ImportError:
+        # Fallback to hashlib if cryptography not available (less secure)
+        blockauth_logger.warning(
+            "cryptography library not available, using SHA-256 fallback",
+            sanitize_log_context({"function": "_derive_private_key_secure", "email": email})
+        )
+        key_material = hashlib.sha256(kdf_input.encode()).digest()
+        return '0x' + key_material.hex()
 
 
 def get_kdf_config():
@@ -128,7 +176,10 @@ class PBKDF2Service(BaseKDFService):
             return '0x' + key_material.hex()
             
         except Exception as e:
-            logger.error(f"PBKDF2 key derivation failed: {e}")
+            blockauth_logger.error(
+                "PBKDF2 key derivation failed",
+                sanitize_log_context({"error": str(e), "email": email, "salt": salt})
+            )
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
     
     def verify_key(self, email: str, password: str, salt: str, 
@@ -155,7 +206,10 @@ class Argon2Service(BaseKDFService):
             import argon2
             self.argon2_available = True
         except ImportError:
-            logger.warning("Argon2 not available, falling back to PBKDF2")
+            blockauth_logger.warning(
+                "Argon2 not available, falling back to PBKDF2",
+                sanitize_log_context({"service": "Argon2Service"})
+            )
             self.argon2_available = False
     
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
@@ -194,7 +248,10 @@ class Argon2Service(BaseKDFService):
             return '0x' + key_material
             
         except Exception as e:
-            logger.error(f"Argon2 key derivation failed: {e}")
+            blockauth_logger.error(
+                "Argon2 key derivation failed",
+                sanitize_log_context({"error": str(e), "email": email, "salt": salt})
+            )
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
     
     def verify_key(self, email: str, password: str, salt: str, 
@@ -267,7 +324,10 @@ class PasswordlessKDFService:
             }
             
         except Exception as e:
-            logger.error(f"Passwordless wallet creation failed: {e}")
+            blockauth_logger.error(
+                "Passwordless wallet creation failed",
+                sanitize_log_context({"error": str(e), "email": email})
+            )
             raise ValueError(f"Failed to create passwordless wallet: {str(e)}")
     
     def get_wallet_address(self, email: str) -> str:
@@ -293,7 +353,10 @@ class PasswordlessKDFService:
             return address
             
         except Exception as e:
-            logger.error(f"Failed to get passwordless wallet address: {e}")
+            blockauth_logger.error(
+                "Failed to get passwordless wallet address",
+                sanitize_log_context({"error": str(e), "email": email})
+            )
             raise ValueError(f"Failed to get wallet address: {str(e)}")
     
     def _generate_email_salt(self, email: str) -> str:
@@ -303,13 +366,8 @@ class PasswordlessKDFService:
         return hashlib.sha256(salt_input.encode()).hexdigest()
     
     def _derive_private_key(self, email: str, salt: str) -> str:
-        """Derive private key from email + platform salt"""
-        email = email.lower().strip()
-        kdf_input = f"{email}:{salt}:{self.platform_master_salt}"
-        
-        # Use SHA-256 for deterministic generation
-        key_material = hashlib.sha256(kdf_input.encode()).digest()
-        return '0x' + key_material.hex()
+        """Derive private key from email + platform salt using PBKDF2"""
+        return _derive_private_key_secure(email, salt, self.platform_master_salt)
 
 
 class KeyDerivationService:
@@ -411,7 +469,10 @@ class KeyDerivationService:
             }
             
         except Exception as e:
-            logger.error(f"Wallet creation failed: {e}")
+            blockauth_logger.error(
+                "Wallet creation failed",
+                sanitize_log_context({"error": str(e), "email": email, "wallet_name": wallet_name})
+            )
             raise ValueError(f"Failed to create wallet: {str(e)}")
     
     def derive_private_key(self, email: str, password: str, salt: str) -> str:
@@ -463,7 +524,10 @@ class KeyDerivationService:
             return derived_address.lower() == stored_address.lower()
             
         except Exception as e:
-            logger.error(f"Password verification failed: {e}")
+            blockauth_logger.error(
+                "Password verification failed",
+                sanitize_log_context({"error": str(e), "email": email})
+            )
             return False
     
     def get_wallet_address(self, email: str, password: str, salt: str) -> str:
@@ -555,7 +619,10 @@ class KeyEncryptionService:
             }
             
         except Exception as e:
-            logger.error(f"Encryption failed: {e}")
+            blockauth_logger.error(
+                "Encryption failed",
+                sanitize_log_context({"error": str(e), "private_key": private_key[:10] + "..."})
+            )
             raise ValueError(ErrorMessages.ENCRYPTION_FAILED)
     
     def decrypt_private_key(self, encrypted_data: Dict[str, str]) -> str:
@@ -595,7 +662,10 @@ class KeyEncryptionService:
             return private_key.decode()
             
         except Exception as e:
-            logger.error(f"Decryption failed: {e}")
+            blockauth_logger.error(
+                "Decryption failed",
+                sanitize_log_context({"error": str(e), "encrypted_data_keys": list(encrypted_data.keys())})
+            )
             raise ValueError(ErrorMessages.DECRYPTION_FAILED)
     
     def _get_or_create_key(self, encryption_key: str = None) -> bytes:
@@ -671,7 +741,10 @@ class KDFManager:
         self.platform_master_salt = platform_master_salt or config.get('platform_master_salt', '')
         
         if not self.platform_master_salt:
-            logger.warning("Platform master salt not set. Passwordless wallets will not work.")
+            blockauth_logger.warning(
+                "Platform master salt not set. Passwordless wallets will not work.",
+                sanitize_log_context({"service": "KDFManager"})
+            )
     
     def create_wallet(self, email: str, password: str = None, 
                      wallet_name: str = None, 
@@ -986,10 +1059,34 @@ class KDFManager:
         return wallet_hash[:16]  # 16 characters for wallet ID
     
     def _derive_user_encryption_key(self, email: str, password: str, user_salt: str) -> bytes:
-        """Derive user-specific encryption key"""
+        """Derive user-specific encryption key using PBKDF2"""
         key_input = f"{email}:{password}:{user_salt}:user_encryption"
-        key_material = hashlib.sha256(key_input.encode()).digest()
-        return key_material
+        
+        # Use PBKDF2 for secure key derivation
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+            
+            # Use user_salt as the salt for PBKDF2
+            salt_bytes = user_salt.encode()[:16]  # Use first 16 bytes as salt
+            
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,  # 256 bits
+                salt=salt_bytes,
+                iterations=100000,  # High iteration count for security
+            )
+            key_material = kdf.derive(key_input.encode())
+            return key_material
+            
+        except ImportError:
+            # Fallback to hashlib if cryptography not available (less secure)
+            blockauth_logger.warning(
+                "cryptography library not available, using SHA-256 fallback",
+                sanitize_log_context({"function": "_derive_user_encryption_key", "email": email})
+            )
+            key_material = hashlib.sha256(key_input.encode()).digest()
+            return key_material
     
     def _encrypt_with_user_key(self, private_key: str, email: str, 
                               password: str, user_salt: str) -> str:
@@ -1024,7 +1121,10 @@ class KDFManager:
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM encryption")
         except Exception as e:
-            logger.error(f"User key encryption failed: {e}")
+            blockauth_logger.error(
+                "User key encryption failed",
+                sanitize_log_context({"error": str(e), "email": email, "private_key": private_key[:10] + "..."})
+            )
             raise ValueError(f"Failed to encrypt private key: {str(e)}")
     
     def _decrypt_with_user_key(self, encrypted_key: str, user_key: bytes) -> str:
@@ -1061,17 +1161,15 @@ class KDFManager:
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM decryption")
         except Exception as e:
-            logger.error(f"User key decryption failed: {e}")
+            blockauth_logger.error(
+                "User key decryption failed",
+                sanitize_log_context({"error": str(e), "encrypted_key_length": len(encrypted_key)})
+            )
             raise ValueError(f"Failed to decrypt private key: {str(e)}")
     
     def _derive_private_key(self, email: str, salt: str) -> str:
-        """Derive private key from email + platform salt"""
-        email = email.lower().strip()
-        kdf_input = f"{email}:{salt}:{self.platform_master_salt}"
-        
-        # Use SHA-256 for deterministic generation
-        key_material = hashlib.sha256(kdf_input.encode()).digest()
-        return '0x' + key_material.hex()
+        """Derive private key from email + platform salt using PBKDF2"""
+        return _derive_private_key_secure(email, salt, self.platform_master_salt)
 
 
 class MultipleWalletService:

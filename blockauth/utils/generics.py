@@ -44,12 +44,12 @@ def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any
     Returns:
         Sanitized dictionary safe for logging
     """
-    sensitive_fields = {'password', 'token', 'access', 'refresh', 'signature', 'code'}
+    from blockauth.constants import SENSITIVE_FIELDS, REDACTION_STRING
     
     sanitized = {}
     for key, value in data.items():
-        if key.lower() in sensitive_fields:
-            sanitized[key] = '***REDACTED***'
+        if key.lower() in SENSITIVE_FIELDS:
+            sanitized[key] = REDACTION_STRING
         else:
             sanitized[key] = value
     
