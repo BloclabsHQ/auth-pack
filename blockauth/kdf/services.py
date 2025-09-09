@@ -997,24 +997,76 @@ class KDFManager:
     
     def _encrypt_with_user_key(self, private_key: str, email: str, 
                               password: str, user_salt: str) -> str:
-        """Encrypt private key with user-derived key"""
+        """Encrypt private key with user-derived key using AES-256-GCM"""
         user_key = self._derive_user_encryption_key(email, password, user_salt)
         
-        # Simple XOR encryption for demonstration
-        # In production, use proper encryption like AES
-        private_key_bytes = private_key.encode()
-        encrypted_bytes = bytes(a ^ b for a, b in zip(private_key_bytes, user_key))
-        
-        return encrypted_bytes.hex()
+        try:
+            # Import cryptography library
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            from cryptography.hazmat.backends import default_backend
+            
+            # Generate random nonce for GCM
+            nonce = os.urandom(12)  # 96 bits for GCM
+            
+            # Create AES-GCM cipher
+            cipher = Cipher(
+                algorithms.AES(user_key),
+                modes.GCM(nonce),
+                backend=default_backend()
+            )
+            encryptor = cipher.encryptor()
+            
+            # Encrypt the private key
+            private_key_bytes = private_key.encode()
+            ciphertext = encryptor.update(private_key_bytes) + encryptor.finalize()
+            
+            # Combine nonce + tag + ciphertext for storage
+            encrypted_data = nonce + encryptor.tag + ciphertext
+            
+            return encrypted_data.hex()
+            
+        except ImportError:
+            raise ImportError("cryptography library required for AES-GCM encryption")
+        except Exception as e:
+            logger.error(f"User key encryption failed: {e}")
+            raise ValueError(f"Failed to encrypt private key: {str(e)}")
     
     def _decrypt_with_user_key(self, encrypted_key: str, user_key: bytes) -> str:
-        """Decrypt private key with user key"""
-        encrypted_bytes = bytes.fromhex(encrypted_key)
-        
-        # XOR decryption (same as encryption)
-        decrypted_bytes = bytes(a ^ b for a, b in zip(encrypted_bytes, user_key))
-        
-        return decrypted_bytes.decode()
+        """Decrypt private key with user key using AES-256-GCM"""
+        try:
+            # Import cryptography library
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+            from cryptography.hazmat.backends import default_backend
+            
+            encrypted_bytes = bytes.fromhex(encrypted_key)
+            
+            # Check minimum length (nonce + tag + some ciphertext)
+            if len(encrypted_bytes) < 28:  # 12 (nonce) + 16 (tag) + minimum data
+                raise ValueError("Invalid encrypted data: too short")
+            
+            # Extract nonce, tag, and ciphertext
+            nonce = encrypted_bytes[:12]
+            tag = encrypted_bytes[12:28]
+            ciphertext = encrypted_bytes[28:]
+            
+            # Create AES-GCM cipher
+            cipher = Cipher(
+                algorithms.AES(user_key),
+                modes.GCM(nonce, tag),
+                backend=default_backend()
+            )
+            decryptor = cipher.decryptor()
+            
+            # Decrypt the private key
+            decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
+            
+            return decrypted_bytes.decode()
+            
+        except ImportError:
+            raise ImportError("cryptography library required for AES-GCM decryption")
+        except Exception as e:
+            logger.error(f"User key decryption failed: {e}")
+            raise ValueError(f"Failed to decrypt private key: {str(e)}")
     
     def _derive_private_key(self, email: str, salt: str) -> str:
         """Derive private key from email + platform salt"""
