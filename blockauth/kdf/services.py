@@ -176,10 +176,7 @@ class PBKDF2Service(BaseKDFService):
             return '0x' + key_material.hex()
             
         except Exception as e:
-            blockauth_logger.error(
-                "PBKDF2 key derivation failed",
-                sanitize_log_context({"error": str(e), "email": email, "salt": salt})
-            )
+            logger.error(f"PBKDF2 key derivation failed: {e}")
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
     
     def verify_key(self, email: str, password: str, salt: str, 
@@ -248,10 +245,7 @@ class Argon2Service(BaseKDFService):
             return '0x' + key_material
             
         except Exception as e:
-            blockauth_logger.error(
-                "Argon2 key derivation failed",
-                sanitize_log_context({"error": str(e), "email": email, "salt": salt})
-            )
+            logger.error(f"Argon2 key derivation failed: {e}")
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
     
     def verify_key(self, email: str, password: str, salt: str, 
@@ -324,11 +318,10 @@ class PasswordlessKDFService:
             }
             
         except Exception as e:
-            blockauth_logger.error(
-                "Passwordless wallet creation failed",
-                sanitize_log_context({"error": str(e), "email": email})
-            )
-            raise ValueError(f"Failed to create passwordless wallet: {str(e)}")
+            # Log error using normal logger for debugging
+            logger.error(f"Passwordless wallet creation failed: {e}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Wallet creation failed. Please try again.")
     
     def get_wallet_address(self, email: str) -> str:
         """
@@ -353,11 +346,9 @@ class PasswordlessKDFService:
             return address
             
         except Exception as e:
-            blockauth_logger.error(
-                "Failed to get passwordless wallet address",
-                sanitize_log_context({"error": str(e), "email": email})
-            )
-            raise ValueError(f"Failed to get wallet address: {str(e)}")
+            # Use secure error handling to prevent information disclosure
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Unable to retrieve wallet address. Please try again.")
     
     def _generate_email_salt(self, email: str) -> str:
         """Generate deterministic salt from email"""
@@ -469,11 +460,8 @@ class KeyDerivationService:
             }
             
         except Exception as e:
-            blockauth_logger.error(
-                "Wallet creation failed",
-                sanitize_log_context({"error": str(e), "email": email, "wallet_name": wallet_name})
-            )
-            raise ValueError(f"Failed to create wallet: {str(e)}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Wallet creation failed. Please try again.")
     
     def derive_private_key(self, email: str, password: str, salt: str) -> str:
         """
@@ -524,10 +512,7 @@ class KeyDerivationService:
             return derived_address.lower() == stored_address.lower()
             
         except Exception as e:
-            blockauth_logger.error(
-                "Password verification failed",
-                sanitize_log_context({"error": str(e), "email": email})
-            )
+            logger.error(f"Password verification failed: {e}")
             return False
     
     def get_wallet_address(self, email: str, password: str, salt: str) -> str:
@@ -554,8 +539,9 @@ class KeyDerivationService:
             return address
             
         except Exception as e:
-            logger.error(f"Failed to get wallet address: {e}")
-            raise ValueError(f"Failed to get wallet address: {str(e)}")
+            # Use secure error handling to prevent information disclosure
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Unable to retrieve wallet address. Please try again.")
 
 
 class KeyEncryptionService:
@@ -619,10 +605,7 @@ class KeyEncryptionService:
             }
             
         except Exception as e:
-            blockauth_logger.error(
-                "Encryption failed",
-                sanitize_log_context({"error": str(e), "private_key": private_key[:10] + "..."})
-            )
+            logger.error(f"Encryption failed: {e}")
             raise ValueError(ErrorMessages.ENCRYPTION_FAILED)
     
     def decrypt_private_key(self, encrypted_data: Dict[str, str]) -> str:
@@ -662,10 +645,7 @@ class KeyEncryptionService:
             return private_key.decode()
             
         except Exception as e:
-            blockauth_logger.error(
-                "Decryption failed",
-                sanitize_log_context({"error": str(e), "encrypted_data_keys": list(encrypted_data.keys())})
-            )
+            logger.error(f"Decryption failed: {e}")
             raise ValueError(ErrorMessages.DECRYPTION_FAILED)
     
     def _get_or_create_key(self, encryption_key: str = None) -> bytes:
@@ -776,7 +756,7 @@ class KDFManager:
             return self._create_passwordless_wallet(email, wallet_name, custom_salt)
         
         else:
-            raise ValueError(f"Invalid authentication method: {auth_method}")
+            raise ValueError("Invalid authentication method provided.")
     
     def _create_password_wallet(self, email: str, password: str, 
                               wallet_name: str = None, custom_salt: str = None) -> Dict[str, str]:
@@ -941,8 +921,8 @@ class KDFManager:
             return private_key
             
         except Exception as e:
-            logger.error(f"User password decryption failed: {e}")
-            raise ValueError(f"Failed to decrypt with user password: {str(e)}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Decryption failed. Please check your credentials.")
     
     def decrypt_with_platform_key(self, platform_encrypted_key: str) -> str:
         """
@@ -963,8 +943,8 @@ class KDFManager:
             return private_key
             
         except Exception as e:
-            logger.error(f"Platform key decryption failed: {e}")
-            raise ValueError(f"Failed to decrypt with platform key: {str(e)}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Decryption failed. Please try again.")
     
     def verify_wallet_ownership(self, email: str, password: str, 
                                wallet_address: str, user_salt: str) -> bool:
@@ -1027,8 +1007,8 @@ class KDFManager:
             return address
             
         except Exception as e:
-            logger.error(f"Failed to get wallet address: {e}")
-            raise ValueError(f"Failed to get wallet address: {str(e)}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Unable to retrieve wallet address. Please try again.")
     
     def _generate_wallet_salt(self, email: str, wallet_name: str = None) -> str:
         """Generate unique salt for wallet"""
@@ -1121,11 +1101,10 @@ class KDFManager:
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM encryption")
         except Exception as e:
-            blockauth_logger.error(
-                "User key encryption failed",
-                sanitize_log_context({"error": str(e), "email": email, "private_key": private_key[:10] + "..."})
-            )
-            raise ValueError(f"Failed to encrypt private key: {str(e)}")
+            # Log error using normal logger for debugging
+            logger.error(f"User key encryption failed: {e}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Encryption failed. Please try again.")
     
     def _decrypt_with_user_key(self, encrypted_key: str, user_key: bytes) -> str:
         """Decrypt private key with user key using AES-256-GCM"""
@@ -1161,11 +1140,10 @@ class KDFManager:
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM decryption")
         except Exception as e:
-            blockauth_logger.error(
-                "User key decryption failed",
-                sanitize_log_context({"error": str(e), "encrypted_key_length": len(encrypted_key)})
-            )
-            raise ValueError(f"Failed to decrypt private key: {str(e)}")
+            # Log error using normal logger for debugging
+            logger.error(f"User key decryption failed: {e}")
+            # Return generic error message to prevent information disclosure
+            raise ValueError("Decryption failed. Please try again.")
     
     def _derive_private_key(self, email: str, salt: str) -> str:
         """Derive private key from email + platform salt using PBKDF2"""
