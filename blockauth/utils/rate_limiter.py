@@ -12,8 +12,7 @@ class RequestThrottle(BaseThrottle):
     """
     Limits request to a specific identifier, subject & IP address.
     """
-    rate = get_config('REQUEST_LIMIT')
-    cache = default_cache
+     cache = default_cache
     timer = time.time
 
     def __init__(self, rate: tuple[int,int] = None):
@@ -21,7 +20,9 @@ class RequestThrottle(BaseThrottle):
         :param rate: A tuple of (num_requests, duration) to limit the number of requests.
                      Meaning user can make at most `num_requests` within `duration` seconds.
         """
-        self.num_requests, self.duration = rate or self.rate
+        if rate is None:
+            rate = get_config('REQUEST_LIMIT')
+        self.num_requests, self.duration = rate
         self.history = None
         self.now = None
         self.key = None
@@ -53,6 +54,10 @@ class RequestThrottle(BaseThrottle):
             self.history.pop()
 
         if len(self.history) >= self.num_requests:
+            # Set rate limit type for OTPThrottle to use
+            if hasattr(self, 'daily_limit'):
+                self._rate_limit_type = 'per_minute'
+            
             # Enhanced logging for rate limit violations
             identifier = request.data.get('identifier', 'unknown')
             ip_address = request.META.get('REMOTE_ADDR', 'unknown')
@@ -113,21 +118,31 @@ class OTPThrottle(RequestThrottle):
             rate: Tuple of (num_requests, duration) for basic rate limiting
             daily_limit: Maximum OTP requests per day per identifier
         """
-        super().__init__(rate)
+        # Don't call super().__init__ yet - we need to handle rate properly
+        if rate is None:
+            rate = get_config('REQUEST_LIMIT')
+        
+        # Now set up the base throttle properly with our rate
+        self.cache = default_cache
+        self.timer = time.time
+        self.num_requests, self.duration = rate
+        self.history = None
+        self.now = None
+        self.key = None
         self.daily_limit = daily_limit
+        self._rate_limit_type = None
     
     def allow_request(self, request, subject):
         """Enhanced allow_request with additional OTP-specific checks."""
         identifier = request.data.get('identifier')
         
-        # First check basic rate limiting
-        if not super().allow_request(request, subject):
-            return False
-        
-        # Check daily limits for OTP operations
+        # Check daily limits first (more restrictive)
         if not self._check_daily_limit(request, subject):
             identifier = request.data.get('identifier', 'unknown')
             ip_address = request.META.get('REMOTE_ADDR', 'unknown')
+            
+            # Set a flag to indicate this is a daily limit
+            self._rate_limit_type = 'daily'
             
             blockauth_logger.warning(
                 f"Daily OTP limit exceeded for {subject}",
@@ -140,22 +155,28 @@ class OTPThrottle(RequestThrottle):
             )
             return False
         
-        # Check for existing active OTPs (additional security layer)
-        if not self._check_existing_otps(request, subject):
-            identifier = request.data.get('identifier', 'unknown')
-            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
-            
-            blockauth_logger.warning(
-                f"Active OTP already exists for {subject}",
-                sanitize_log_context({
-                    "identifier": identifier,
-                    "subject": subject,
-                    "ip_address": ip_address
-                })
-            )
+        # Then check basic rate limiting (per-minute limit)
+        if not super().allow_request(request, subject):
+            # Set a flag to indicate this is a per-minute rate limit
+            self._rate_limit_type = 'per_minute'
             return False
         
+        # Note: We allow new OTPs even if active ones exist
+        # The send_otp function will invalidate old OTPs automatically
+        # This provides better UX while maintaining security through rate limiting
+        
         return True
+    
+    def get_error_message(self):
+        """Get specific error message based on the type of rate limit exceeded."""
+        if hasattr(self, '_rate_limit_type') and self._rate_limit_type:
+            if self._rate_limit_type == 'per_minute':
+                wait_time = self.wait()
+                wait_seconds = int(wait_time) if wait_time else 60
+                return f"Rate limit exceeded. You can request {self.num_requests} OTPs per {self.duration} seconds. Please try again after {wait_seconds} seconds."
+            elif self._rate_limit_type == 'daily':
+                return f"Daily limit exceeded. You can request {self.daily_limit} OTPs per day. Please try again tomorrow."
+        return "Request limit exceeded. Please try again later."
     
     def _check_daily_limit(self, request, subject):
         """Check daily OTP generation limits per identifier."""

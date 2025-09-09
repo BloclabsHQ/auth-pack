@@ -89,16 +89,16 @@ class SignUpResendOTPView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
-    rate_limit_handler = OTPThrottle(rate=(2, 60), daily_limit=5)  # 2 OTPs per minute, 5 per day
+    rate_limit_handler = OTPThrottle(rate=(5, 60), daily_limit=20)  # 5 OTPs per minute, 20 per day
     authentication_classes = []
 
     @extend_schema(**signup_resend_otp_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+            error_message = self.rate_limit_handler.get_error_message()
+            blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
             return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": error_message},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -116,13 +116,13 @@ class SignUpResendOTPView(APIView):
             if is_wallet_verification:
                 # Check rate limit for wallet email verification
                 if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
-                    wait_time = int(self.rate_limit_handler.wait())
+                    error_message = self.rate_limit_handler.get_error_message()
                     blockauth_logger.warning(
                         "Wallet email OTP resend rate limit hit", 
-                        sanitize_log_context(request.data, {"wait_time": wait_time})
+                        sanitize_log_context(request.data, {"error_message": error_message})
                     )
                     return Response(
-                        data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                        data={"detail": error_message},
                         status=status.HTTP_429_TOO_MANY_REQUESTS
                     )
                 
@@ -299,16 +299,16 @@ class PasswordlessLoginView(APIView):
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
-    rate_limit_handler = OTPThrottle(rate=(2, 60), daily_limit=5)  # 2 OTPs per minute, 5 per day
+    rate_limit_handler = OTPThrottle(rate=(5, 60), daily_limit=20)  # 5 OTPs per minute, 20 per day
     authentication_classes = []
 
     @extend_schema(**passwordless_login_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+            error_message = self.rate_limit_handler.get_error_message()
+            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
             return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": error_message},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
