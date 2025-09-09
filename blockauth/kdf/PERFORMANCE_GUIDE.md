@@ -4,12 +4,21 @@ This guide provides detailed performance characteristics for different security 
 
 ## 📊 Performance Overview
 
+### Security Level Performance
 | Security Level | Time (ms) | Memory (MB) | CPU Usage | Algorithm | Use Case |
 |----------------|-----------|-------------|-----------|-----------|----------|
 | **LOW** | ~5ms | ~1MB | Low | PBKDF2-SHA256 | Development/Testing |
 | **MEDIUM** | ~50ms | ~1MB | Moderate | PBKDF2-SHA256 | General Production |
 | **HIGH** | ~200ms | ~64MB | High | Argon2id | Enterprise/Security-Critical |
 | **CRITICAL** | ~500ms | ~128MB | Very High | Argon2id | Financial/Critical Systems |
+
+### Algorithm Performance Comparison
+| Algorithm | Time (ms) | Memory (MB) | GPU Resistant | Security | Primary Use Case |
+|-----------|-----------|-------------|---------------|----------|------------------|
+| **PBKDF2-SHA256** | ~5ms | ~1MB | ❌ No | Moderate | General Purpose |
+| **PBKDF2-SHA512** | ~8ms | ~1MB | ❌ No | Moderate | High Security |
+| **Argon2id** | ~200ms | ~64MB | ✅ Yes | High | Enterprise/Critical |
+| **Scrypt** | ~150ms | ~32MB | ✅ Yes | High | Crypto/High Security |
 
 ## 🔍 Detailed Performance Analysis
 
@@ -134,6 +143,49 @@ This guide provides detailed performance characteristics for different security 
 - Login time: ~500ms additional delay
 - Memory footprint: ~128MB per operation
 - Server load: Very high
+
+## 🔧 Algorithm Selection Guide
+
+### Algorithm Characteristics
+
+#### PBKDF2-SHA256
+- **Speed**: ⚡ Very Fast (5ms per 10K iterations)
+- **Memory**: 💾 Low (1MB)
+- **Security**: 🛡️ Moderate
+- **GPU Resistance**: ❌ No
+- **Best For**: General web applications, mobile apps, legacy systems
+
+#### PBKDF2-SHA512
+- **Speed**: ⚡ Fast (8ms per 10K iterations)
+- **Memory**: 💾 Low (1MB)
+- **Security**: 🛡️ Moderate-High
+- **GPU Resistance**: ❌ No
+- **Best For**: High-security applications, government systems
+
+#### Argon2id
+- **Speed**: 🐌 Moderate (200ms per 10K iterations)
+- **Memory**: 💾 High (64MB)
+- **Security**: 🛡️ High
+- **GPU Resistance**: ✅ Yes
+- **Best For**: Enterprise systems, financial applications, critical infrastructure
+
+#### Scrypt
+- **Speed**: 🐌 Moderate (150ms per 10K iterations)
+- **Memory**: 💾 Medium (32MB)
+- **Security**: 🛡️ High
+- **GPU Resistance**: ✅ Yes
+- **Best For**: Cryptocurrency applications, high-security systems
+
+### Algorithm Selection Matrix
+
+| Requirement | PBKDF2-SHA256 | PBKDF2-SHA512 | Argon2id | Scrypt |
+|-------------|---------------|---------------|----------|--------|
+| **Fast Performance** | ✅ Best | ✅ Good | ❌ Slow | ❌ Slow |
+| **Low Memory** | ✅ Best | ✅ Best | ❌ High | ❌ Medium |
+| **GPU Resistance** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| **High Security** | ❌ Moderate | ✅ Good | ✅ Best | ✅ Good |
+| **Legacy Support** | ✅ Best | ✅ Good | ❌ New | ✅ Good |
+| **Future-Proof** | ❌ No | ❌ No | ✅ Best | ✅ Good |
 
 ## 🎯 Choosing the Right Security Level
 
@@ -260,6 +312,199 @@ KDF_SECURITY_LEVEL = 'HIGH'  # Upgrade from MEDIUM
 # Not recommended for production
 # Only for development/testing scenarios
 KDF_SECURITY_LEVEL = 'LOW'  # Downgrade for testing
+```
+
+## 🔧 Programmatic Algorithm Selection
+
+### Using the Algorithm Benchmark API
+
+The KDF system provides a programmatic API for algorithm selection and comparison:
+
+```python
+from blockauth.kdf.constants import KDFAlgorithms
+
+# Get algorithm recommendations based on requirements
+requirements = {
+    'max_time_ms': 100,        # Maximum execution time
+    'max_memory_mb': 10,       # Maximum memory usage
+    'gpu_resistant': True,     # Require GPU resistance
+    'high_security': False     # Security level requirement
+}
+
+recommended = KDFAlgorithms.recommend_algorithm(requirements)
+print(f"Recommended algorithm: {recommended}")
+```
+
+### Algorithm Information and Comparison
+
+```python
+# Get detailed information about an algorithm
+info = KDFAlgorithms.get_algorithm_info('argon2id')
+print(f"Algorithm: {info['name']}")
+print(f"Time: {info['performance']['time_per_10k_iterations_ms']}ms")
+print(f"Memory: {info['performance']['memory_usage_mb']}MB")
+print(f"GPU Resistant: {info['performance']['gpu_resistant']}")
+
+# Compare multiple algorithms
+comparison = KDFAlgorithms.compare_algorithms(['pbkdf2_sha256', 'argon2id'])
+for algo, data in comparison.items():
+    print(f"{data['name']}: {data['time_ms']}ms, {data['memory_mb']}MB")
+```
+
+### Real-World Usage Examples
+
+#### Web Application Configuration
+```python
+# Fast performance for web applications
+requirements = {
+    'max_time_ms': 50,         # Fast login required
+    'max_memory_mb': 5,        # Limited server memory
+    'gpu_resistant': False     # Not critical for web apps
+}
+
+algorithm = KDFAlgorithms.recommend_algorithm(requirements)
+# Returns: 'pbkdf2_sha256'
+
+# Use in Django settings
+BLOCK_AUTH_SETTINGS = {
+    'KDF_ALGORITHM': algorithm,
+    'KDF_ITERATIONS': 100000,
+    'KDF_SECURITY_LEVEL': 'MEDIUM'
+}
+```
+
+#### Financial System Configuration
+```python
+# High security for financial systems
+requirements = {
+    'max_time_ms': 500,        # Can tolerate slower login
+    'max_memory_mb': 100,      # Sufficient memory available
+    'gpu_resistant': True,     # Must resist GPU attacks
+    'high_security': True      # Maximum security required
+}
+
+algorithm = KDFAlgorithms.recommend_algorithm(requirements)
+# Returns: 'argon2id'
+
+# Use in KDF Manager
+from blockauth.kdf.services import KDFManager
+kdf_manager = KDFManager(
+    algorithm=algorithm,
+    iterations=500000,
+    security_level='HIGH'
+)
+```
+
+#### Mobile Application Configuration
+```python
+# Balanced performance for mobile apps
+requirements = {
+    'max_time_ms': 100,        # Reasonable login time
+    'max_memory_mb': 20,       # Limited mobile memory
+    'gpu_resistant': False     # Not critical for mobile
+}
+
+algorithm = KDFAlgorithms.recommend_algorithm(requirements)
+# Returns: 'pbkdf2_sha512'
+
+# Use in mobile app configuration
+KDF_CONFIG = {
+    'algorithm': algorithm,
+    'iterations': 100000,
+    'security_level': 'MEDIUM'
+}
+```
+
+### Helper Function for Easy Integration
+
+```python
+def get_optimal_kdf_config(use_case: str, custom_requirements: dict = None):
+    """
+    Get optimal KDF configuration based on use case
+    
+    Args:
+        use_case: 'web_app', 'mobile_app', 'enterprise', 'financial'
+        custom_requirements: Additional performance requirements
+    
+    Returns:
+        dict: Optimal KDF configuration
+    """
+    # Predefined requirements for common use cases
+    use_case_requirements = {
+        'web_app': {
+            'max_time_ms': 50,
+            'max_memory_mb': 5,
+            'gpu_resistant': False
+        },
+        'mobile_app': {
+            'max_time_ms': 100,
+            'max_memory_mb': 20,
+            'gpu_resistant': False
+        },
+        'enterprise': {
+            'max_time_ms': 300,
+            'max_memory_mb': 100,
+            'gpu_resistant': True,
+            'high_security': True
+        },
+        'financial': {
+            'max_time_ms': 500,
+            'max_memory_mb': 128,
+            'gpu_resistant': True,
+            'high_security': True
+        }
+    }
+    
+    # Get base requirements for use case
+    requirements = use_case_requirements.get(use_case, {})
+    
+    # Override with custom requirements if provided
+    if custom_requirements:
+        requirements.update(custom_requirements)
+    
+    # Get recommended algorithm
+    algorithm = KDFAlgorithms.recommend_algorithm(requirements)
+    
+    # Return complete configuration
+    return {
+        'algorithm': algorithm,
+        'iterations': 100000,  # Default iterations
+        'security_level': 'MEDIUM',  # Default security level
+        'requirements': requirements
+    }
+
+# Usage examples
+web_config = get_optimal_kdf_config('web_app')
+financial_config = get_optimal_kdf_config('financial')
+custom_config = get_optimal_kdf_config('enterprise', {'max_time_ms': 200})
+```
+
+### Algorithm Learning and Exploration
+
+```python
+# Learn about all available algorithms
+def explore_algorithms():
+    """Explore all available algorithms and their characteristics"""
+    print("🔍 Available KDF Algorithms:")
+    print("=" * 50)
+    
+    for algorithm in KDFAlgorithms.all_algorithms():
+        info = KDFAlgorithms.get_algorithm_info(algorithm)
+        perf = info['performance']
+        security = info['security']
+        
+        print(f"\n📊 {info['name']}")
+        print(f"   Description: {info['description']}")
+        print(f"   Time: {perf['time_per_10k_iterations_ms']}ms per 10K iterations")
+        print(f"   Memory: {perf['memory_usage_mb']}MB")
+        print(f"   GPU Resistant: {'Yes' if perf['gpu_resistant'] else 'No'}")
+        print(f"   Security: {security['attack_resistance']}")
+        print(f"   Best for: {', '.join(info['use_cases'][:3])}...")
+        print(f"   Pros: {', '.join(info['pros'][:2])}...")
+        print(f"   Cons: {', '.join(info['cons'][:2])}...")
+
+# Run exploration
+explore_algorithms()
 ```
 
 ## 📚 Additional Resources

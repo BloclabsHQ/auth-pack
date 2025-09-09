@@ -43,12 +43,44 @@ class KDFFeatures:
 
 
 class KDFAlgorithms:
-    """Supported key derivation algorithms"""
+    """Supported key derivation algorithms with performance characteristics"""
     
     PBKDF2_SHA256 = 'pbkdf2_sha256'      # PBKDF2 with SHA-256 (default)
     PBKDF2_SHA512 = 'pbkdf2_sha512'      # PBKDF2 with SHA-512
     ARGON2ID = 'argon2id'                 # Argon2id (most secure)
     SCRYPT = 'scrypt'                     # Scrypt (memory-hard)
+    
+    # Algorithm performance data (simplified)
+    ALGORITHM_DATA = {
+        PBKDF2_SHA256: {
+            'name': 'PBKDF2-SHA256',
+            'time_ms': 5,                    # per 10K iterations
+            'memory_mb': 1,                  # constant memory
+            'gpu_resistant': False,
+            'attack_resistance': 'Moderate'
+        },
+        PBKDF2_SHA512: {
+            'name': 'PBKDF2-SHA512', 
+            'time_ms': 8,                    # per 10K iterations
+            'memory_mb': 1,                  # constant memory
+            'gpu_resistant': False,
+            'attack_resistance': 'Moderate'
+        },
+        ARGON2ID: {
+            'name': 'Argon2id',
+            'time_ms': 200,                  # per 10K iterations
+            'memory_mb': 64,                 # configurable memory
+            'gpu_resistant': True,
+            'attack_resistance': 'High'
+        },
+        SCRYPT: {
+            'name': 'Scrypt',
+            'time_ms': 150,                  # per 10K iterations
+            'memory_mb': 32,                 # configurable memory
+            'gpu_resistant': True,
+            'attack_resistance': 'High'
+        }
+    }
     
     @classmethod
     def all_algorithms(cls):
@@ -64,6 +96,107 @@ class KDFAlgorithms:
     def is_supported(cls, algorithm: str) -> bool:
         """Check if algorithm is supported"""
         return algorithm in cls.all_algorithms()
+    
+    @classmethod
+    def get_algorithm_info(cls, algorithm: str) -> dict:
+        """
+        Get basic information about a specific algorithm
+        
+        Args:
+            algorithm: Algorithm name (e.g., 'pbkdf2_sha256')
+            
+        Returns:
+            dict: Algorithm information including performance data
+        """
+        if algorithm not in cls.ALGORITHM_DATA:
+            raise ValueError(f"Unknown algorithm: {algorithm}")
+        
+        return cls.ALGORITHM_DATA[algorithm]
+    
+    @classmethod
+    def compare_algorithms(cls, algorithms: list = None) -> dict:
+        """
+        Compare performance characteristics of different algorithms
+        
+        Args:
+            algorithms: List of algorithms to compare (default: all)
+            
+        Returns:
+            dict: Comparison data for specified algorithms
+        """
+        if algorithms is None:
+            algorithms = cls.all_algorithms()
+        
+        comparison = {}
+        for algo in algorithms:
+            if algo in cls.ALGORITHM_DATA:
+                data = cls.ALGORITHM_DATA[algo]
+                comparison[algo] = {
+                    'name': data['name'],
+                    'time_ms': data['time_ms'],
+                    'memory_mb': data['memory_mb'],
+                    'gpu_resistant': data['gpu_resistant'],
+                    'attack_resistance': data['attack_resistance']
+                }
+        
+        return comparison
+    
+    @classmethod
+    def recommend_algorithm(cls, requirements: dict) -> str:
+        """
+        Recommend an algorithm based on requirements
+        
+        Args:
+            requirements: Dict with keys like 'max_time_ms', 'max_memory_mb', 
+                         'gpu_resistant', 'high_security', etc.
+        
+        Returns:
+            str: Recommended algorithm name
+        """
+        max_time = requirements.get('max_time_ms', float('inf'))
+        max_memory = requirements.get('max_memory_mb', float('inf'))
+        gpu_resistant = requirements.get('gpu_resistant', False)
+        high_security = requirements.get('high_security', False)
+        
+        # Filter algorithms based on requirements
+        candidates = []
+        
+        for algo, data in cls.ALGORITHM_DATA.items():
+            # Check time constraint
+            if data['time_ms'] > max_time:
+                continue
+            
+            # Check memory constraint
+            if data['memory_mb'] > max_memory:
+                continue
+            
+            # Check GPU resistance requirement
+            if gpu_resistant and not data['gpu_resistant']:
+                continue
+            
+            candidates.append((algo, data))
+        
+        if not candidates:
+            # Fallback to most permissive option
+            return cls.PBKDF2_SHA256
+        
+        # If high security required, prefer Argon2id
+        if high_security:
+            for algo, data in candidates:
+                if algo == cls.ARGON2ID:
+                    return algo
+        
+        # If GPU resistance required, prefer Argon2id or Scrypt
+        if gpu_resistant:
+            for algo, data in candidates:
+                if algo in [cls.ARGON2ID, cls.SCRYPT]:
+                    return algo
+            # If no GPU-resistant candidates found, return None to indicate no suitable option
+            return None
+        
+        # Default to fastest option
+        fastest = min(candidates, key=lambda x: x[1]['time_ms'])
+        return fastest[0]
 
 
 class ConfigKeys:
