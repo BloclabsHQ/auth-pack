@@ -12,7 +12,7 @@ class RequestThrottle(BaseThrottle):
     """
     Limits request to a specific identifier, subject & IP address.
     """
-     cache = default_cache
+    cache = default_cache
     timer = time.time
 
     def __init__(self, rate: tuple[int,int] = None):
