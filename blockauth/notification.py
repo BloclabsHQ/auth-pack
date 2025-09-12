@@ -84,8 +84,8 @@ def send_otp(data, subject):
         # Step 3: Prepare context for notification
         context = {**data, 'code': code, 'otp_subject': subject}
         
-        if verification_type == 'link' and get_config('CLIENT_APP_URL'):
-            context['verification_url'] = f'{get_config('CLIENT_APP_URL')}/{subject}/verify?code={code}&identifier={identifier}'
+        # Note: verification_url formation is now handled by the notification handler
+        # This allows each service to customize URL structure as needed
         
         # Step 4: Send notification
         communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
