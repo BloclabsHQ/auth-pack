@@ -29,6 +29,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - [Utility Classes](#utility-classes)
   - [Communication Class](#communication-class)
   - [Trigger Classes](#trigger-classes)
+- [Custom JWT Claims](#custom-jwt-claims)
 - [Logging in BlocAuth](#logging-in-blocauth)
   - [Supported Log Levels and Icons](#supported-log-levels-and-icons)
   - [Custom Logger Integration](#custom-logger-integration)
@@ -55,6 +56,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - **🔑 Dual Encryption** - User password + platform key security
 - **📱 Passwordless Authentication** - Email-only blockchain wallet generation
 - **🔄 Password Management Triggers** - Automatic wallet re-encryption
+- **🎯 Custom JWT Claims** - Extensible claims provider system for adding custom data to tokens
 
 ---
 
@@ -984,6 +986,41 @@ BLOCK_AUTH_SETTINGS = {
     "PLATFORM_MASTER_SALT": "your-platform-salt-32-chars-minimum",
 }
 ```
+
+---
+
+## Custom JWT Claims
+
+BlockAuth provides a flexible JWT claims provider system that allows you to add custom data to JWT tokens. This enables you to include application-specific information (like user roles, permissions, organization IDs, etc.) directly in the authentication token.
+
+### Quick Start
+
+1. **Create a claims provider class** with a `get_custom_claims` method
+2. **Register the provider** with the JWT manager
+3. **Custom claims are automatically included** in all generated tokens
+
+### Example
+
+```python
+# myapp/jwt_claims.py
+class MyClaimsProvider:
+    def get_custom_claims(self, user):
+        return {
+            "role": user.role,
+            "organization_id": str(user.organization_id),
+            "permissions": list(user.permissions.all())
+        }
+
+# Register in Django app's ready() method
+from blockauth.jwt.token_manager import jwt_manager
+jwt_manager.register_claims_provider(MyClaimsProvider())
+```
+
+### Documentation
+
+For detailed documentation on creating and managing custom JWT claims providers, including best practices, advanced usage, and troubleshooting, see:
+
+📚 **[Custom JWT Claims Guide](docs/CUSTOM_JWT_CLAIMS.md)**
 
 ---
 
