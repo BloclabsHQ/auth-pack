@@ -45,4 +45,22 @@ class DummyPostLoginTrigger(BaseTrigger):
         """
         blockauth_logger.info(f"Post login trigger called with context")
 
+# post password change trigger
+class DummyPostPasswordChangeTrigger(BaseTrigger):
+    def trigger(self, context: dict) -> None:
+        """
+        This trigger will be called after the user changes their password.
+        """
+        blockauth_logger.info(f"Post password change trigger called with context")
+
+
+# post password reset trigger
+class DummyPostPasswordResetTrigger(BaseTrigger):
+    def trigger(self, context: dict) -> None:
+        """
+        This trigger will be called after the user resets their password.
+        """
+        blockauth_logger.info(f"Post password reset trigger called with context")
+
+
 # NOTE: For custom triggers, always use blockauth_logger and sanitize_log_context for any logging or print statements to avoid leaking sensitive data.

@@ -30,8 +30,17 @@ def social_login(email: str, name: str, provider_data: dict) -> Response:
     post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
     post_login_trigger.trigger(context=context)
 
-    access_token, refresh_token = generate_auth_token(
-        token_class=AUTH_TOKEN_CLASS(), 
-        user_id=str(user.id)
-    )
+    # Generate tokens with custom claims support
+    try:
+        from blockauth.utils.token import generate_auth_token_with_custom_claims
+        access_token, refresh_token = generate_auth_token_with_custom_claims(
+            token_class=AUTH_TOKEN_CLASS(), 
+            user_id=str(user.id)
+        )
+    except ImportError:
+        # Fall back to original implementation
+        access_token, refresh_token = generate_auth_token(
+            token_class=AUTH_TOKEN_CLASS(), 
+            user_id=str(user.id)
+        )
     return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)

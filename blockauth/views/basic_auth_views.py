@@ -34,7 +34,7 @@ from blockauth.serializers.user_account_serializers import PasswordChangeSeriali
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
-from blockauth.utils.rate_limiter import RequestThrottle
+from blockauth.utils.rate_limiter import RequestThrottle, OTPThrottle
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 from blockauth.utils.logger import blockauth_logger
 
@@ -83,20 +83,22 @@ class SignUpView(APIView):
 
 class SignUpResendOTPView(APIView):
     """
-    Send OTP/verification link for signup or wallet email verification
+    Send OTP/verification link for signup or wallet email verification.
+    
+    Enhanced with OTP-specific throttling for better security.
     """
     permission_classes = (AllowAny,)
     serializer_class = SignUpResendOTPSerializer
-    rate_limit_handler = RequestThrottle()
+    rate_limit_handler = OTPThrottle(rate=(5, 60), daily_limit=20)  # 5 OTPs per minute, 20 per day
     authentication_classes = []
 
     @extend_schema(**signup_resend_otp_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+            error_message = self.rate_limit_handler.get_error_message()
+            blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
             return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": error_message},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -114,13 +116,13 @@ class SignUpResendOTPView(APIView):
             if is_wallet_verification:
                 # Check rate limit for wallet email verification
                 if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
-                    wait_time = int(self.rate_limit_handler.wait())
+                    error_message = self.rate_limit_handler.get_error_message()
                     blockauth_logger.warning(
                         "Wallet email OTP resend rate limit hit", 
-                        sanitize_log_context(request.data, {"wait_time": wait_time})
+                        sanitize_log_context(request.data, {"error_message": error_message})
                     )
                     return Response(
-                        data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                        data={"detail": error_message},
                         status=status.HTTP_429_TOO_MANY_REQUESTS
                     )
                 
@@ -218,8 +220,9 @@ class SignUpConfirmView(APIView):
 
                 user_data = model_to_json(user, remove_fields=('password',))
 
+                # Call POST_SIGNUP_TRIGGER with user data - let fabric-auth handle the complexity
                 post_signup_trigger = get_config('POST_SIGNUP_TRIGGER')()
-                post_signup_trigger.trigger(context=user_data)
+                post_signup_trigger.trigger(context={'user': user, 'provider_data': data})
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
                 return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
             else:
@@ -261,10 +264,19 @@ class BasicAuthLoginView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -279,19 +291,24 @@ class BasicAuthLoginView(APIView):
 class PasswordlessLoginView(APIView):
     """
     Send an otp/Login Link for passwordless login with email/phone number.
+    
+    Enhanced with OTP-specific throttling for better security:
+    - Prevents multiple active OTPs per identifier
+    - Daily limits per identifier
+    - Enhanced logging and monitoring
     """
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginSerializer
-    rate_limit_handler = RequestThrottle()
+    rate_limit_handler = OTPThrottle(rate=(5, 60), daily_limit=20)  # 5 OTPs per minute, 20 per day
     authentication_classes = []
 
     @extend_schema(**passwordless_login_docs)
     def post(self, request):
         if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+            error_message = self.rate_limit_handler.get_error_message()
+            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
             return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                data={"detail": error_message},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
 
@@ -349,10 +366,19 @@ class PasswordlessLoginConfirmView(APIView):
             post_login_trigger = get_config('POST_LOGIN_TRIGGER')()
             post_login_trigger.trigger(context={'user': user_data})
 
-            access_token, refresh_token = generate_auth_token(
-                token_class=AUTH_TOKEN_CLASS(), 
-                user_id=str(user.id)
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=AUTH_TOKEN_CLASS(), 
+                    user_id=str(user.id)
+                )
             blockauth_logger.success("Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
@@ -392,10 +418,19 @@ class AuthRefreshTokenView(APIView):
             user_model = get_block_auth_user_model()
             user = user_model.objects.get(id=user_id)
             
-            access_token, refresh_token = generate_auth_token(
-                token_class=token, 
-                user_id=user_id
-            )
+            # Use enhanced token generation with custom claims support
+            try:
+                from blockauth.utils.token import generate_auth_token_with_custom_claims
+                access_token, refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=token, 
+                    user_id=user_id
+                )
+            except ImportError:
+                # Fall back to original implementation
+                access_token, refresh_token = generate_auth_token(
+                    token_class=token, 
+                    user_id=user_id
+                )
             blockauth_logger.success("Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -473,8 +508,28 @@ class PasswordResetConfirmView(APIView):
                 context = {'identifier': phone_number}
                 method = 'sms'
 
+            # Reset user password
             user.set_password(data['new_password'])
             user.save()
+
+            # Trigger POST_PASSWORD_RESET_TRIGGER if configured
+            try:
+                post_password_reset_trigger = get_config('POST_PASSWORD_RESET_TRIGGER')()
+                trigger_context = {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'new_password': data['new_password'],
+                    'trigger_type': 'password_reset',
+                    'timestamp': timezone.now().isoformat()
+                }
+                post_password_reset_trigger.trigger(context=trigger_context)
+            except Exception as e:
+                # Trigger not configured or failed - log but don't break password reset
+                blockauth_logger.warning(
+                    "POST_PASSWORD_RESET_TRIGGER failed",
+                    {"user_id": user.id, "error": str(e)}
+                )
 
             # send notification to user
             communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
@@ -516,8 +571,32 @@ class PasswordChangeView(APIView):
             data = serializer.validated_data
             user = request.user
 
+            # Store old password for KDF wallet handling
+            old_password = data.get('old_password')
+            
+            # Change user password
             user.set_password(data['new_password'])
             user.save()
+
+            # Trigger POST_PASSWORD_CHANGE_TRIGGER if configured
+            try:
+                post_password_change_trigger = get_config('POST_PASSWORD_CHANGE_TRIGGER')()
+                trigger_context = {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'old_password': old_password,
+                    'new_password': data['new_password'],
+                    'trigger_type': 'password_change',
+                    'timestamp': timezone.now().isoformat()
+                }
+                post_password_change_trigger.trigger(context=trigger_context)
+            except Exception as e:
+                # Trigger not configured or failed - log but don't break password change
+                blockauth_logger.warning(
+                    "POST_PASSWORD_CHANGE_TRIGGER failed",
+                    {"user_id": user.id, "error": str(e)}
+                )
 
             # send notification to user
             if user.email:
