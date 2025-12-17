@@ -15,10 +15,26 @@ from drf_spectacular.utils import extend_schema
 from blockauth.jwt.token_manager import jwt_manager
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.config import get_block_auth_user_model
+from blockauth.utils.rate_limiter import RequestThrottle
+from blockauth.utils.generics import sanitize_log_context
 
 from .services.passkey_service import PasskeyService
 from .exceptions import PasskeyError, PasskeyNotEnabledError, MaxCredentialsReachedError, CredentialNotFoundError
 from . import is_enabled
+
+
+# Passkey rate limiting subjects
+class PasskeySubject:
+    REGISTER_OPTIONS = "passkey_register_options"
+    REGISTER_VERIFY = "passkey_register_verify"
+    AUTH_OPTIONS = "passkey_auth_options"
+    AUTH_VERIFY = "passkey_auth_verify"
+    CREDENTIALS = "passkey_credentials"
+
+
+# Generic error messages to prevent information leakage
+GENERIC_AUTH_ERROR = {"error_code": "AUTH_FAILED", "message": "Authentication failed."}
+GENERIC_PASSKEY_ERROR = {"error_code": "PASSKEY_ERROR", "message": "An error occurred. Please try again."}
 
 # Import documentation from separate docs module
 from .docs import (
@@ -48,9 +64,16 @@ class PasskeyRegistrationOptionsView(APIView):
     to navigator.credentials.create() on the frontend.
     """
     permission_classes = [IsAuthenticated]
+    rate_limit_handler = RequestThrottle(rate=(10, 60))  # 10 requests per minute
 
     @extend_schema(**passkey_registration_options_docs)
     def post(self, request):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.REGISTER_OPTIONS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             display_name = request.data.get('display_name')
@@ -69,16 +92,14 @@ class PasskeyRegistrationOptionsView(APIView):
             return Response(options)
 
         except MaxCredentialsReachedError as e:
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.warning("Passkey max credentials reached", sanitize_log_context({"user_id": str(request.user.id)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except PasskeyError as e:
-            blockauth_logger.error("Passkey registration options error", {"error": str(e)})
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey registration options error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            blockauth_logger.error("Passkey registration options error", {"error": str(e)})
-            return Response(
-                {"error_code": "PASSKEY_ERROR", "message": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            blockauth_logger.error("Passkey registration options error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PasskeyRegistrationVerifyView(APIView):
@@ -89,9 +110,16 @@ class PasskeyRegistrationVerifyView(APIView):
     authenticator and stores it for future authentication.
     """
     permission_classes = [IsAuthenticated]
+    rate_limit_handler = RequestThrottle(rate=(5, 60))  # 5 requests per minute
 
     @extend_schema(**passkey_registration_verify_docs)
     def post(self, request):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.REGISTER_VERIFY):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             credential_name = request.data.get('name', '')
@@ -120,15 +148,12 @@ class PasskeyRegistrationVerifyView(APIView):
         except PasskeyError as e:
             blockauth_logger.error(
                 "Passkey registration verification failed",
-                {"error": str(e), "user_id": str(request.user.id)}
+                sanitize_log_context({"error": str(e), "user_id": str(request.user.id)})
             )
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            blockauth_logger.error("Passkey registration error", {"error": str(e)})
-            return Response(
-                {"error_code": "PASSKEY_ERROR", "message": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            blockauth_logger.error("Passkey registration error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PasskeyAuthenticationOptionsView(APIView):
@@ -140,9 +165,16 @@ class PasskeyAuthenticationOptionsView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
+    rate_limit_handler = RequestThrottle(rate=(20, 60))  # 20 requests per minute (public endpoint)
 
     @extend_schema(**passkey_authentication_options_docs)
     def post(self, request):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.AUTH_OPTIONS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             username = request.data.get('username')
@@ -171,14 +203,11 @@ class PasskeyAuthenticationOptionsView(APIView):
             return Response(options)
 
         except PasskeyError as e:
-            blockauth_logger.error("Passkey auth options error", {"error": str(e)})
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey auth options error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            blockauth_logger.error("Passkey auth options error", {"error": str(e)})
-            return Response(
-                {"error_code": "PASSKEY_ERROR", "message": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            blockauth_logger.error("Passkey auth options error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PasskeyAuthenticationVerifyView(APIView):
@@ -190,9 +219,16 @@ class PasskeyAuthenticationVerifyView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
+    rate_limit_handler = RequestThrottle(rate=(10, 60))  # 10 requests per minute
 
     @extend_schema(**passkey_authentication_verify_docs)
     def post(self, request):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.AUTH_VERIFY):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
 
@@ -234,17 +270,14 @@ class PasskeyAuthenticationVerifyView(APIView):
             })
 
         except CredentialNotFoundError as e:
-            blockauth_logger.error("Passkey authentication failed - credential not found", {"error": str(e)})
-            return Response(e.to_dict(), status=status.HTTP_404_NOT_FOUND)
+            blockauth_logger.error("Passkey authentication failed", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except PasskeyError as e:
-            blockauth_logger.error("Passkey authentication failed", {"error": str(e)})
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey authentication failed", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            blockauth_logger.error("Passkey authentication error", {"error": str(e)})
-            return Response(
-                {"error_code": "PASSKEY_ERROR", "message": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            blockauth_logger.error("Passkey authentication error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PasskeyCredentialListView(APIView):
@@ -254,9 +287,16 @@ class PasskeyCredentialListView(APIView):
     Requires authentication.
     """
     permission_classes = [IsAuthenticated]
+    rate_limit_handler = RequestThrottle(rate=(30, 60))  # 30 requests per minute
 
     @extend_schema(**passkey_credentials_list_docs)
     def get(self, request):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             credentials = service.get_credentials_for_user(request.user.id)
@@ -281,12 +321,11 @@ class PasskeyCredentialListView(APIView):
             })
 
         except PasskeyError as e:
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey credentials list error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"error_code": "PASSKEY_ERROR", "message": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            blockauth_logger.error("Passkey credentials list error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PasskeyCredentialDetailView(APIView):
@@ -296,9 +335,16 @@ class PasskeyCredentialDetailView(APIView):
     Requires authentication. Supports GET, PATCH (update name), and DELETE.
     """
     permission_classes = [IsAuthenticated]
+    rate_limit_handler = RequestThrottle(rate=(30, 60))  # 30 requests per minute
 
     @extend_schema(**passkey_credential_detail_docs)
     def get(self, request, credential_id):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             credentials = service.get_credentials_for_user(request.user.id)
@@ -324,12 +370,20 @@ class PasskeyCredentialDetailView(APIView):
             })
 
         except CredentialNotFoundError as e:
-            return Response(e.to_dict(), status=status.HTTP_404_NOT_FOUND)
+            blockauth_logger.warning("Passkey credential not found", sanitize_log_context({"credential_id": str(credential_id)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey credential detail error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(**passkey_credential_update_docs)
     def patch(self, request, credential_id):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
             name = request.data.get('name')
@@ -379,12 +433,20 @@ class PasskeyCredentialDetailView(APIView):
             })
 
         except CredentialNotFoundError as e:
-            return Response(e.to_dict(), status=status.HTTP_404_NOT_FOUND)
+            blockauth_logger.warning("Passkey credential not found for update", sanitize_log_context({"credential_id": str(credential_id)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey credential update error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(**passkey_credential_delete_docs)
     def delete(self, request, credential_id):
+        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+            return Response(
+                {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         try:
             service = get_passkey_service()
 
@@ -409,6 +471,8 @@ class PasskeyCredentialDetailView(APIView):
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         except CredentialNotFoundError as e:
-            return Response(e.to_dict(), status=status.HTTP_404_NOT_FOUND)
+            blockauth_logger.warning("Passkey credential not found for delete", sanitize_log_context({"credential_id": str(credential_id)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
-            return Response(e.to_dict(), status=status.HTTP_400_BAD_REQUEST)
+            blockauth_logger.error("Passkey credential delete error", sanitize_log_context({"error": str(e)}))
+            return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
