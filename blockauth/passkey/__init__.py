@@ -6,7 +6,7 @@ It enables users to authenticate using biometrics (Face ID, Touch ID, Windows He
 or hardware security keys (YubiKey, Titan Key).
 
 IMPORTANT: This is an OPTIONAL module that must be explicitly enabled.
-It will not be loaded unless PASSKEY_ENABLED=True is set in BLOCK_AUTH_SETTINGS.
+It will not be loaded unless FEATURES.PASSKEY_AUTH=True is set in BLOCK_AUTH_SETTINGS.
 
 Key Features:
 - Passwordless authentication using WebAuthn/FIDO2
@@ -20,7 +20,9 @@ Key Features:
 Usage:
     # In your project's settings.py
     BLOCK_AUTH_SETTINGS = {
-        'PASSKEY_ENABLED': True,
+        'FEATURES': {
+            'PASSKEY_AUTH': True,  # Enable passkey authentication
+        },
         'PASSKEY_RP_ID': 'example.com',
         'PASSKEY_RP_NAME': 'My Application',
         'PASSKEY_ALLOWED_ORIGINS': ['https://example.com'],
@@ -128,14 +130,15 @@ def is_enabled() -> bool:
     Check if Passkey module is enabled in the current project.
 
     Returns:
-        bool: True if PASSKEY_ENABLED=True in BLOCK_AUTH_SETTINGS
+        bool: True if Features.PASSKEY_AUTH is enabled in settings
     """
     try:
-        from django.conf import settings
-        block_auth_settings = getattr(settings, 'BLOCK_AUTH_SETTINGS', {})
-        return block_auth_settings.get('PASSKEY_ENABLED', False)
-    except ImportError:
-        # Not in Django context
+        from blockauth.utils.config import get_config
+        from blockauth.constants import ConfigKeys
+        features = get_config(ConfigKeys.FEATURES)
+        return features.get('PASSKEY_AUTH', False)
+    except (ImportError, AttributeError):
+        # Not in Django context or config not available
         return False
 
 
