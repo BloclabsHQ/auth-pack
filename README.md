@@ -611,9 +611,8 @@ BlockAuth supports passwordless authentication using WebAuthn/FIDO2 standard. Us
 ```python
 BLOCK_AUTH_SETTINGS = {
     "FEATURES": {
-        Features.PASSKEY_AUTH: True,  # Enable passkey URLs
+        "PASSKEY_AUTH": True,  # Enable passkey authentication
     },
-    "PASSKEY_ENABLED": True,
     "PASSKEY_RP_ID": "example.com",  # Your domain (no protocol)
     "PASSKEY_RP_NAME": "My Application",
     "PASSKEY_ALLOWED_ORIGINS": ["https://example.com"],

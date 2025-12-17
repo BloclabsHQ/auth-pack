@@ -31,7 +31,7 @@ class PasskeyError(Exception):
 class PasskeyNotEnabledError(PasskeyError):
     """Raised when passkey module is not enabled"""
     error_code = PasskeyErrorCodes.NOT_ENABLED
-    default_message = 'Passkey module is not enabled. Set PASSKEY_ENABLED=True in BLOCK_AUTH_SETTINGS.'
+    default_message = 'Passkey module is not enabled. Set FEATURES.PASSKEY_AUTH=True in BLOCK_AUTH_SETTINGS.'
 
 
 class ChallengeExpiredError(PasskeyError):

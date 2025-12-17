@@ -21,16 +21,11 @@ Passkeys enable passwordless authentication using:
 
 ```python
 # settings.py
-from blockauth.constants import Features
-
 BLOCK_AUTH_SETTINGS = {
-    # Enable passkey URLs
+    # Enable passkey authentication
     "FEATURES": {
-        Features.PASSKEY_AUTH: True,
+        "PASSKEY_AUTH": True,
     },
-
-    # Enable passkey module
-    "PASSKEY_ENABLED": True,
 
     # REQUIRED: Your domain (no protocol, no port)
     "PASSKEY_RP_ID": "localhost",  # Production: "example.com"
@@ -581,7 +576,7 @@ All error responses follow this format:
 
 | Setting | Description | Example |
 |---------|-------------|---------|
-| `PASSKEY_ENABLED` | Master switch | `True` |
+| `FEATURES.PASSKEY_AUTH` | Enable passkey authentication | `True` |
 | `PASSKEY_RP_ID` | Your domain (no protocol) | `"example.com"` |
 | `PASSKEY_RP_NAME` | Display name for users | `"My App"` |
 | `PASSKEY_ALLOWED_ORIGINS` | Frontend origins with protocol | `["https://example.com"]` |
@@ -813,7 +808,9 @@ Challenges expire after `PASSKEY_CHALLENGE_EXPIRY` seconds (default 5 minutes) t
 ### "Passkey module is not enabled"
 ```python
 BLOCK_AUTH_SETTINGS = {
-    "PASSKEY_ENABLED": True,  # Add this
+    "FEATURES": {
+        "PASSKEY_AUTH": True,  # Add this
+    },
 }
 ```
 
