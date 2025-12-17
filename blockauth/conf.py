@@ -44,6 +44,9 @@ DEFAULTS = {
         
         # Social authentication (controlled by provider configuration)
         "SOCIAL_AUTH": True,               # Master switch for social authentication
+
+        # Passkey/WebAuthn authentication
+        "PASSKEY_AUTH": True,              # Enable passkey/WebAuthn authentication (Face ID, Touch ID, Windows Hello)
     },
 
     # Trigger classes

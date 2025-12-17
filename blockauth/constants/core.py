@@ -69,7 +69,10 @@ class Features:
     
     # Social authentication features
     SOCIAL_AUTH = 'SOCIAL_AUTH'          # Master switch for social authentication
-    
+
+    # Passkey/WebAuthn authentication
+    PASSKEY_AUTH = 'PASSKEY_AUTH'        # WebAuthn/Passkey authentication (Face ID, Touch ID, Windows Hello)
+
     @classmethod
     def all_features(cls):
         """
@@ -94,6 +97,7 @@ class Features:
             cls.EMAIL_VERIFICATION,
             cls.WALLET_EMAIL_ADD,
             cls.SOCIAL_AUTH,
+            cls.PASSKEY_AUTH,
         ]
 
 
@@ -225,3 +229,11 @@ class URLNames:
     FACEBOOK_CALLBACK = 'facebook-login-callback'
     LINKEDIN_LOGIN = 'linkedin-login'
     LINKEDIN_CALLBACK = 'linkedin-login-callback'
+
+    # Passkey/WebAuthn
+    PASSKEY_REGISTER_OPTIONS = 'passkey-register-options'
+    PASSKEY_REGISTER_VERIFY = 'passkey-register-verify'
+    PASSKEY_AUTH_OPTIONS = 'passkey-auth-options'
+    PASSKEY_AUTH_VERIFY = 'passkey-auth-verify'
+    PASSKEY_CREDENTIALS = 'passkey-credentials'
+    PASSKEY_CREDENTIAL_DETAIL = 'passkey-credential-detail'

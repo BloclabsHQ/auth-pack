@@ -24,6 +24,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Token Refresh](#token-refresh)
   - [Password Reset](#password-reset)
   - [Change Email](#change-email)
+  - [Passkey/WebAuthn Authentication](#passkeywebauthn-authentication)
   - [Web3 Wallet Authentication](#web3-wallet-authentication)
 - [Social Providers Login Mechanism (Google, LinkedIn, Facebook, etc.)](#social-providers-login-mechanism-google-linkedin-facebook-etc)
 - [Utility Classes](#utility-classes)
@@ -47,6 +48,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - Login with email and password (Basic Auth)
 - Login via OTP (Passwordless login)
 - Web3 Wallet Authentication (Ethereum/MetaMask)
+- **🔐 Passkey/WebAuthn Authentication** - Face ID, Touch ID, Windows Hello, hardware keys
 - Reset password
 - Change password
 - Change email
@@ -247,6 +249,9 @@ BLOCK_AUTH_SETTINGS = {
         
         # Social authentication (controlled by provider configuration)
         "SOCIAL_AUTH": True,               # Master switch for social authentication
+
+        # Passkey/WebAuthn authentication
+        "PASSKEY_AUTH": True,              # Enable passkey authentication (Face ID, Touch ID, Windows Hello)
     },
         
     "AUTH_PROVIDERS": {
@@ -345,6 +350,7 @@ BlockAuth supports feature flags to enable/disable specific authentication featu
 - **EMAIL_VERIFICATION**: Enable email verification requirement
 - **WALLET_EMAIL_ADD**: Enable adding email to wallet accounts
 - **SOCIAL_AUTH**: Master switch for social authentication
+- **PASSKEY_AUTH**: Enable passkey/WebAuthn authentication (Face ID, Touch ID, Windows Hello, hardware keys)
 
 #### Example Configuration
 
@@ -367,6 +373,7 @@ BLOCK_AUTH_SETTINGS = {
         Features.EMAIL_VERIFICATION: True,
         Features.WALLET_EMAIL_ADD: True,
         Features.SOCIAL_AUTH: True,
+        Features.PASSKEY_AUTH: True,  # Passkey/WebAuthn authentication
     },
 }
 ```
@@ -508,6 +515,14 @@ Basic Auth:
 - `auth/wallet/email/add/`: Add email address for wallet user and automatically send verification.
 - `auth/signup/confirm/`: Verify email using OTP (works for both signup and wallet email verification).
 
+**Passkey/WebAuthn Authentication:**
+- `auth/passkey/register/options/`: Get registration options for new passkey (requires auth)
+- `auth/passkey/register/verify/`: Verify passkey registration (requires auth)
+- `auth/passkey/auth/options/`: Get authentication options (public)
+- `auth/passkey/auth/verify/`: Verify passkey authentication and get JWT tokens (public)
+- `auth/passkey/credentials/`: List user's registered passkeys (requires auth)
+- `auth/passkey/credentials/<uuid>/`: Get, update, or delete a specific passkey (requires auth)
+
 Providers:
 - `auth/google`: Redirect URL to Google login page.
 - `auth/google/callback`: Callback URL after succesfull Google login. **This URL should be added to the Google OAuth2 client configuration**.
@@ -572,6 +587,40 @@ Token validity can be configured in the settings.
 2. The user confirms the email change by calling `auth/email/change/confirm` with current email, new email, and OTP. It will do the following:
    - Validate the current email, new email, and OTP.
    - Update the user email with the new email.
+
+### Passkey/WebAuthn Authentication
+BlockAuth supports passwordless authentication using WebAuthn/FIDO2 standard. Users can authenticate using biometrics (Face ID, Touch ID, Windows Hello) or hardware security keys.
+
+#### Registration Flow (Authenticated User)
+1. User calls `auth/passkey/register/options/` with optional display name
+2. Backend generates registration options (challenge, RP info, user info)
+3. Frontend calls `navigator.credentials.create()` with options (triggers biometric prompt)
+4. User verifies identity with biometric/PIN
+5. Frontend sends credential response to `auth/passkey/register/verify/`
+6. Backend verifies and stores the credential
+
+#### Authentication Flow (Public)
+1. User calls `auth/passkey/auth/options/` with optional username
+2. Backend generates authentication options (challenge, allowed credentials)
+3. Frontend calls `navigator.credentials.get()` with options (triggers biometric prompt)
+4. User verifies identity with biometric/PIN
+5. Frontend sends assertion to `auth/passkey/auth/verify/`
+6. Backend verifies signature and returns JWT tokens
+
+#### Configuration
+```python
+BLOCK_AUTH_SETTINGS = {
+    "FEATURES": {
+        Features.PASSKEY_AUTH: True,  # Enable passkey URLs
+    },
+    "PASSKEY_ENABLED": True,
+    "PASSKEY_RP_ID": "example.com",  # Your domain (no protocol)
+    "PASSKEY_RP_NAME": "My Application",
+    "PASSKEY_ALLOWED_ORIGINS": ["https://example.com"],
+}
+```
+
+For detailed documentation, see: **[Passkey Developer Guide](blockauth/passkey/README.md)**
 
 ### Web3 Wallet Authentication
 BlockAuth supports Ethereum wallet-based authentication using cryptographic signature verification. This allows users to authenticate using their Web3 wallets (like MetaMask) without requiring email or password.
@@ -1169,6 +1218,20 @@ blockauth/
 │   │   ├── pbkdf2.py             # PBKDF2 implementation
 │   │   └── argon2.py              # Argon2 implementation
 │   └── utils.py                   # KDF utilities
+├── passkey/                       # 🔐 Passkey/WebAuthn Module
+│   ├── __init__.py
+│   ├── views.py                   # API views
+│   ├── models.py                  # PasskeyCredential, PasskeyChallenge
+│   ├── config.py                  # Configuration manager
+│   ├── constants.py               # Constants and defaults
+│   ├── exceptions.py              # Custom exceptions
+│   ├── services/                  # Business logic
+│   │   ├── passkey_service.py    # WebAuthn operations
+│   │   └── challenge_service.py  # Challenge management
+│   ├── storage/                   # Credential storage
+│   │   ├── base.py               # Abstract interface
+│   │   └── django_storage.py     # Django ORM implementation
+│   └── README.md                  # Developer guide
 ├── triggers/                      # 🔄 Password Management Triggers
 │   ├── __init__.py
 │   ├── password_triggers.py       # Password change/reset triggers
