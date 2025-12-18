@@ -270,12 +270,9 @@ class PasskeyService:
             elif any(t in transports for t in ['usb', 'nfc', 'ble']):
                 authenticator_attachment = AuthenticatorAttachment.CROSS_PLATFORM.value
 
-            # Determine backup eligibility from credential_device_type
+            # Determine backup state from verification
             is_backup_eligible = False
             is_backup_state = False
-            if hasattr(verification, 'credential_device_type'):
-                # multi_device means it can be backed up/synced
-                is_backup_eligible = str(verification.credential_device_type.value) == 'multi_device'
             if hasattr(verification, 'credential_backed_up'):
                 is_backup_state = verification.credential_backed_up
 
