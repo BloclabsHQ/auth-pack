@@ -142,6 +142,46 @@ class JWTTokenManager:
             logger.error(f"Error extracting custom claims: {e}")
             return {}
 
+    def generate_tokens_for_user(self, user) -> Dict[str, str]:
+        """
+        Generate access and refresh tokens for a user.
+
+        Args:
+            user: User object with id and email attributes
+
+        Returns:
+            Dict with 'access' and 'refresh' token strings
+        """
+        # Get token lifetimes from config
+        access_lifetime = get_config('ACCESS_TOKEN_LIFETIME')
+        refresh_lifetime = get_config('REFRESH_TOKEN_LIFETIME')
+
+        # Prepare user data
+        user_data = {
+            'email': getattr(user, 'email', None),
+        }
+
+        # Generate access token
+        access_token = self.generate_token(
+            user_id=str(user.id),
+            token_type='access',
+            token_lifetime=access_lifetime,
+            user_data=user_data
+        )
+
+        # Generate refresh token
+        refresh_token = self.generate_token(
+            user_id=str(user.id),
+            token_type='refresh',
+            token_lifetime=refresh_lifetime,
+            user_data=user_data
+        )
+
+        return {
+            'access': access_token,
+            'refresh': refresh_token
+        }
+
 
 # Global instance
 jwt_manager = JWTTokenManager()
