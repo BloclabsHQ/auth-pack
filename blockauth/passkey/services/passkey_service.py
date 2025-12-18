@@ -251,9 +251,17 @@ class PasskeyService:
 
             # Build clean credential structure for py-webauthn (remove non-standard fields like 'name')
             # py-webauthn 2.0.x expects snake_case field names
+            # Note: id and rawId contain the same credential ID - id is base64url string from browser,
+            # rawId is our base64url encoding of the ArrayBuffer. Use id as fallback if rawId missing.
+            cred_id = credential_data.get('id')
+            raw_id = credential_data.get('rawId') or cred_id  # Fallback to id if rawId not provided
+
+            if not raw_id:
+                raise InvalidCredentialDataError("Credential missing required rawId")
+
             webauthn_credential = {
-                'id': credential_data.get('id'),
-                'raw_id': credential_data.get('rawId'),
+                'id': cred_id,
+                'raw_id': raw_id,
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
                     'client_data_json': client_data_json,
@@ -443,9 +451,13 @@ class PasskeyService:
 
             # Build clean credential structure for py-webauthn (remove non-standard fields)
             # py-webauthn 2.0.x expects snake_case field names
+            # Note: id and rawId contain the same credential ID - use id as fallback if rawId missing
+            cred_id = credential_data.get('id')
+            raw_id = credential_data.get('rawId') or cred_id  # Fallback to id if rawId not provided
+
             webauthn_credential = {
-                'id': credential_data.get('id'),
-                'raw_id': credential_data.get('rawId'),
+                'id': cred_id,
+                'raw_id': raw_id,
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
                     'client_data_json': client_data_json,
