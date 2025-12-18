@@ -37,6 +37,14 @@ from blockauth.views.facebook_auth_views import FacebookAuthLoginView, FacebookA
 from blockauth.views.google_auth_views import GoogleAuthLoginView, GoogleAuthCallbackView
 from blockauth.views.linkedin_auth_views import LinkedInAuthLoginView, LinkedInAuthCallbackView
 from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView
+from blockauth.passkey.views import (
+    PasskeyRegistrationOptionsView,
+    PasskeyRegistrationVerifyView,
+    PasskeyAuthenticationOptionsView,
+    PasskeyAuthenticationVerifyView,
+    PasskeyCredentialListView,
+    PasskeyCredentialDetailView,
+)
 from django.urls import path
 
 
@@ -88,6 +96,16 @@ URL_PATTERN_MAPPINGS = {
     # Wallet management endpoints
     Features.WALLET_EMAIL_ADD: [
         ('wallet/email/add/', WalletEmailAddView, URLNames.WALLET_EMAIL_ADD),  # Add email to wallet account
+    ],
+
+    # Passkey/WebAuthn authentication endpoints
+    Features.PASSKEY_AUTH: [
+        ('passkey/register/options/', PasskeyRegistrationOptionsView, URLNames.PASSKEY_REGISTER_OPTIONS),  # Get registration options
+        ('passkey/register/verify/', PasskeyRegistrationVerifyView, URLNames.PASSKEY_REGISTER_VERIFY),  # Verify registration
+        ('passkey/auth/options/', PasskeyAuthenticationOptionsView, URLNames.PASSKEY_AUTH_OPTIONS),  # Get authentication options
+        ('passkey/auth/verify/', PasskeyAuthenticationVerifyView, URLNames.PASSKEY_AUTH_VERIFY),  # Verify authentication
+        ('passkey/credentials/', PasskeyCredentialListView, URLNames.PASSKEY_CREDENTIALS),  # List user's passkeys
+        ('passkey/credentials/<uuid:credential_id>/', PasskeyCredentialDetailView, URLNames.PASSKEY_CREDENTIAL_DETAIL),  # Manage single passkey
     ],
 }
 
