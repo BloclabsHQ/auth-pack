@@ -250,7 +250,7 @@ class PasskeyService:
                 raise InvalidOriginError(f"Origin '{origin}' not in allowed origins")
 
             # Build clean credential structure for py-webauthn (remove non-standard fields like 'name')
-            # py-webauthn 2.0.x expects snake_case field names
+            # py-webauthn 2.x expects camelCase field names when passing as dict/JSON
             # Note: id and rawId contain the same credential ID - id is base64url string from browser,
             # rawId is our base64url encoding of the ArrayBuffer. Use id as fallback if rawId missing.
             cred_id = credential_data.get('id')
@@ -261,20 +261,20 @@ class PasskeyService:
 
             webauthn_credential = {
                 'id': cred_id,
-                'raw_id': raw_id,
+                'rawId': raw_id,  # camelCase for py-webauthn 2.x
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
-                    'client_data_json': client_data_json,
-                    'attestation_object': attestation_object,
+                    'clientDataJSON': client_data_json,  # camelCase
+                    'attestationObject': attestation_object,  # camelCase
                 },
             }
 
-            # Add optional fields if available
+            # Add optional fields if available (camelCase)
             if credential_data.get('authenticatorAttachment'):
-                webauthn_credential['authenticator_attachment'] = credential_data.get('authenticatorAttachment')
+                webauthn_credential['authenticatorAttachment'] = credential_data.get('authenticatorAttachment')
 
             if credential_data.get('clientExtensionResults'):
-                webauthn_credential['client_extension_results'] = credential_data.get('clientExtensionResults')
+                webauthn_credential['clientExtensionResults'] = credential_data.get('clientExtensionResults')
 
             # Add transports to response if available
             if transports:
@@ -450,32 +450,32 @@ class PasskeyService:
                 raise InvalidOriginError(f"Origin '{origin}' not in allowed origins")
 
             # Build clean credential structure for py-webauthn (remove non-standard fields)
-            # py-webauthn 2.0.x expects snake_case field names
+            # py-webauthn 2.x expects camelCase field names when passing as dict/JSON
             # Note: id and rawId contain the same credential ID - use id as fallback if rawId missing
             cred_id = credential_data.get('id')
             raw_id = credential_data.get('rawId') or cred_id  # Fallback to id if rawId not provided
 
             webauthn_credential = {
                 'id': cred_id,
-                'raw_id': raw_id,
+                'rawId': raw_id,  # camelCase for py-webauthn 2.x
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
-                    'client_data_json': client_data_json,
-                    'authenticator_data': authenticator_data,
+                    'clientDataJSON': client_data_json,  # camelCase
+                    'authenticatorData': authenticator_data,  # camelCase
                     'signature': signature,
                 },
             }
 
-            # Add optional fields if available
+            # Add optional fields if available (camelCase)
             if credential_data.get('authenticatorAttachment'):
-                webauthn_credential['authenticator_attachment'] = credential_data.get('authenticatorAttachment')
+                webauthn_credential['authenticatorAttachment'] = credential_data.get('authenticatorAttachment')
 
             if credential_data.get('clientExtensionResults'):
-                webauthn_credential['client_extension_results'] = credential_data.get('clientExtensionResults')
+                webauthn_credential['clientExtensionResults'] = credential_data.get('clientExtensionResults')
 
-            # Add userHandle to response if available
+            # Add userHandle to response if available (camelCase)
             if user_handle:
-                webauthn_credential['response']['user_handle'] = user_handle
+                webauthn_credential['response']['userHandle'] = user_handle
 
             # Verify authentication using py-webauthn
             verification = verify_authentication_response(
