@@ -15,8 +15,6 @@ from webauthn import (
     generate_authentication_options,
     verify_authentication_response,
     options_to_json,
-    parse_registration_credential_json,
-    parse_authentication_credential_json,
 )
 from webauthn.helpers import (
     bytes_to_base64url,
@@ -251,29 +249,32 @@ class PasskeyService:
             if origin not in self._config.allowed_origins:
                 raise InvalidOriginError(f"Origin '{origin}' not in allowed origins")
 
-            # Build credential structure for py-webauthn (remove non-standard fields like 'name')
+            # Build clean credential structure for py-webauthn (remove non-standard fields like 'name')
+            # py-webauthn 2.0.x expects snake_case field names
             webauthn_credential = {
                 'id': credential_data.get('id'),
-                'rawId': credential_data.get('rawId'),
+                'raw_id': credential_data.get('rawId'),
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
-                    'clientDataJSON': client_data_json,
-                    'attestationObject': attestation_object,
+                    'client_data_json': client_data_json,
+                    'attestation_object': attestation_object,
                 },
-                'authenticatorAttachment': credential_data.get('authenticatorAttachment'),
-                'clientExtensionResults': credential_data.get('clientExtensionResults', {}),
             }
+
+            # Add optional fields if available
+            if credential_data.get('authenticatorAttachment'):
+                webauthn_credential['authenticator_attachment'] = credential_data.get('authenticatorAttachment')
+
+            if credential_data.get('clientExtensionResults'):
+                webauthn_credential['client_extension_results'] = credential_data.get('clientExtensionResults')
 
             # Add transports to response if available
             if transports:
                 webauthn_credential['response']['transports'] = transports
 
-            # Parse credential using py-webauthn's parser
-            parsed_credential = parse_registration_credential_json(json.dumps(webauthn_credential))
-
             # Verify registration using py-webauthn
             verification = verify_registration_response(
-                credential=parsed_credential,
+                credential=webauthn_credential,
                 expected_challenge=base64url_to_bytes(challenge),
                 expected_rp_id=self._config.rp_id,
                 expected_origin=self._config.allowed_origins,
@@ -440,30 +441,33 @@ class PasskeyService:
             if origin not in self._config.allowed_origins:
                 raise InvalidOriginError(f"Origin '{origin}' not in allowed origins")
 
-            # Build credential structure for py-webauthn (remove non-standard fields)
+            # Build clean credential structure for py-webauthn (remove non-standard fields)
+            # py-webauthn 2.0.x expects snake_case field names
             webauthn_credential = {
                 'id': credential_data.get('id'),
-                'rawId': credential_data.get('rawId'),
+                'raw_id': credential_data.get('rawId'),
                 'type': credential_data.get('type', 'public-key'),
                 'response': {
-                    'clientDataJSON': client_data_json,
-                    'authenticatorData': authenticator_data,
+                    'client_data_json': client_data_json,
+                    'authenticator_data': authenticator_data,
                     'signature': signature,
                 },
-                'authenticatorAttachment': credential_data.get('authenticatorAttachment'),
-                'clientExtensionResults': credential_data.get('clientExtensionResults', {}),
             }
+
+            # Add optional fields if available
+            if credential_data.get('authenticatorAttachment'):
+                webauthn_credential['authenticator_attachment'] = credential_data.get('authenticatorAttachment')
+
+            if credential_data.get('clientExtensionResults'):
+                webauthn_credential['client_extension_results'] = credential_data.get('clientExtensionResults')
 
             # Add userHandle to response if available
             if user_handle:
-                webauthn_credential['response']['userHandle'] = user_handle
-
-            # Parse credential using py-webauthn's parser
-            parsed_credential = parse_authentication_credential_json(json.dumps(webauthn_credential))
+                webauthn_credential['response']['user_handle'] = user_handle
 
             # Verify authentication using py-webauthn
             verification = verify_authentication_response(
-                credential=parsed_credential,
+                credential=webauthn_credential,
                 expected_challenge=base64url_to_bytes(challenge),
                 expected_rp_id=self._config.rp_id,
                 expected_origin=self._config.allowed_origins,
