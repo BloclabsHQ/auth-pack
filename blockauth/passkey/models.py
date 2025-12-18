@@ -164,7 +164,7 @@ class PasskeyCredential(models.Model):
 
     class Meta:
         app_label = 'blockauth'  # Part of main blockauth app
-        db_table = 'blockauth_passkey_credential'
+        db_table = 'passkey_credential'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', 'is_active'], name='passkey_user_active_idx'),
@@ -292,7 +292,7 @@ class PasskeyChallenge(models.Model):
 
     class Meta:
         app_label = 'blockauth'  # Part of main blockauth app
-        db_table = 'blockauth_passkey_challenge'
+        db_table = 'passkey_challenge'
         indexes = [
             models.Index(fields=['challenge'], name='passkey_challenge_idx'),
             models.Index(fields=['expires_at'], name='passkey_expires_idx'),

@@ -124,6 +124,14 @@ class PasskeyRegistrationVerifyView(APIView):
             service = get_passkey_service()
             credential_name = request.data.get('name', '')
 
+            # Debug: Log received credential keys (not values for security)
+            received_keys = list(request.data.keys()) if hasattr(request.data, 'keys') else 'not-dict'
+            has_raw_id = 'rawId' in request.data if hasattr(request.data, '__contains__') else False
+            blockauth_logger.info(
+                "Passkey registration verify request received",
+                {"user_id": str(request.user.id), "keys": str(received_keys), "has_rawId": has_raw_id}
+            )
+
             credential = service.verify_registration(
                 credential_data=request.data,
                 user_id=request.user.id,
