@@ -978,7 +978,9 @@ cryptographic key to verify it's you. You can delete your passkeys anytime.
 
 ### Data Protection Impact Assessment (DPIA)
 
-For your DPIA documentation, include:
+Full DPIA documentation: [`docs/WEBAUTHN_PASSKEY_DPIA.md`](../../docs/WEBAUTHN_PASSKEY_DPIA.md)
+
+**Summary**:
 
 ```markdown
 ## WebAuthn/Passkey Authentication - DPIA Summary
