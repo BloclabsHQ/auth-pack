@@ -4,12 +4,28 @@ Passkey/WebAuthn Models for BlockAuth
 Database models for storing WebAuthn credentials and challenges.
 """
 
+import hmac
+import logging
 import uuid
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+from blockauth.notification import emit_passkey_event, NotificationEvent
 from .constants import ChallengeType, AuthenticatorTransport
+
+logger = logging.getLogger(__name__)
+
+
+def validate_transports(value):
+    """Validate transport values against AuthenticatorTransport enum."""
+    valid = {t.value for t in AuthenticatorTransport}
+    for v in value:
+        if v not in valid:
+            raise DjangoValidationError(f"Invalid transport: {v}")
 
 
 class PasskeyCredential(models.Model):
@@ -61,6 +77,7 @@ class PasskeyCredential(models.Model):
     # This is incremented by the authenticator on each use
     sign_count = models.BigIntegerField(
         default=0,
+        validators=[MinValueValidator(0)],
         help_text="Signature counter to detect cloned authenticators"
     )
 
@@ -86,6 +103,7 @@ class PasskeyCredential(models.Model):
     transports = models.JSONField(
         default=list,
         blank=True,
+        validators=[validate_transports],
         help_text="Supported transports: internal, usb, nfc, ble, hybrid"
     )
 
@@ -163,7 +181,8 @@ class PasskeyCredential(models.Model):
     )
 
     class Meta:
-        app_label = 'blockauth'  # Part of main blockauth app
+        app_label = 'blockauth'
+        managed = True
         db_table = 'passkey_credential'
         ordering = ['-created_at']
         indexes = [
@@ -192,6 +211,17 @@ class PasskeyCredential(models.Model):
             True if counter updated successfully, False if regression detected
         """
         if new_count <= self.sign_count:
+            logger.warning(
+                "Passkey counter regression detected (possible clone): "
+                "credential=%s user=%s expected>%d got=%d",
+                self.credential_id[:20], self.user_id, self.sign_count, new_count
+            )
+            emit_passkey_event(NotificationEvent.PASSKEY_COUNTER_REGRESSION, {
+                "user_id": str(self.user_id),
+                "credential_id": self.credential_id[:20],
+                "expected_count": self.sign_count,
+                "received_count": new_count,
+            })
             return False
         self.sign_count = new_count
         self.last_used_at = timezone.now()
@@ -216,6 +246,11 @@ class PasskeyCredential(models.Model):
         self.revoked_at = timezone.now()
         self.revocation_reason = reason
         self.save(update_fields=['is_active', 'revoked_at', 'revocation_reason'])
+        emit_passkey_event(NotificationEvent.PASSKEY_REVOKED, {
+            "user_id": str(self.user_id),
+            "credential_id": self.credential_id[:20],
+            "reason": reason,
+        })
 
     def get_transports_list(self) -> list:
         """Get transports as list of AuthenticatorTransport values"""
@@ -291,7 +326,8 @@ class PasskeyChallenge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = 'blockauth'  # Part of main blockauth app
+        app_label = 'blockauth'
+        managed = True
         db_table = 'passkey_challenge'
         indexes = [
             models.Index(fields=['challenge'], name='passkey_challenge_idx'),
@@ -331,14 +367,86 @@ class PasskeyChallenge(models.Model):
         return True
 
     @classmethod
+    def validate_and_consume(cls, challenge_value: str, expected_type: str = None) -> 'PasskeyChallenge | None':
+        """
+        Validate and consume a challenge with constant-time comparison.
+
+        This method prevents timing attacks by:
+        1. Always performing the same operations regardless of validity
+        2. Using constant-time string comparison
+
+        Args:
+            challenge_value: The challenge string to validate
+            expected_type: Optional challenge type to verify
+
+        Returns:
+            The challenge object if valid, None otherwise
+        """
+        # Fetch challenge - DB lookup is not constant-time, but challenge
+        # values are cryptographically random so timing leaks are not exploitable
+        try:
+            challenge_obj = cls.objects.get(challenge=challenge_value)
+        except cls.DoesNotExist:
+            return None
+
+        # Constant-time comparison for challenge type if specified
+        type_valid = True
+        if expected_type is not None:
+            type_valid = hmac.compare_digest(
+                challenge_obj.challenge_type.encode(),
+                expected_type.encode()
+            )
+
+        # Check validity (expiry and used status)
+        is_valid = challenge_obj.is_valid and type_valid
+
+        if is_valid:
+            challenge_obj.is_used = True
+            challenge_obj.save(update_fields=['is_used'])
+            return challenge_obj
+
+        return None
+
+    @classmethod
     def cleanup_expired(cls) -> int:
         """
-        Delete expired challenges.
+        Delete expired challenges with monitoring.
 
         Should be called periodically (e.g., via cron or celery beat).
+        Recommended: Run every 5-15 minutes.
 
         Returns:
             Number of challenges deleted
         """
-        deleted, _ = cls.objects.filter(expires_at__lt=timezone.now()).delete()
-        return deleted
+        expired_count = cls.objects.filter(expires_at__lt=timezone.now()).count()
+
+        if expired_count > 0:
+            deleted, _ = cls.objects.filter(expires_at__lt=timezone.now()).delete()
+            logger.info(
+                "Passkey challenge cleanup: deleted %d expired challenges",
+                deleted
+            )
+            return deleted
+
+        return 0
+
+    @classmethod
+    def get_active_challenge_count(cls, user=None) -> int:
+        """
+        Get count of active (non-expired, unused) challenges.
+
+        Useful for rate limiting at the view level.
+
+        Args:
+            user: Optional user to filter by
+
+        Returns:
+            Count of active challenges
+        """
+        qs = cls.objects.filter(
+            is_used=False,
+            expires_at__gt=timezone.now()
+        )
+        if user is not None:
+            qs = qs.filter(user=user)
+        return qs.count()

@@ -8,6 +8,14 @@ from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.generics import sanitize_log_context
 
 
+def get_client_ip(request) -> str:
+    """Extract client IP from request, handling proxies."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
 class RequestThrottle(BaseThrottle):
     """
     Limits request to a specific identifier, subject & IP address.
@@ -29,7 +37,7 @@ class RequestThrottle(BaseThrottle):
 
     def get_cache_key(self, request, subject):
         identifier = request.data.get('identifier')
-        ip_address = request.META.get('REMOTE_ADDR')
+        ip_address = get_client_ip(request)
 
         if not identifier and request.user.id:
             identifier = str(request.user.id)
@@ -57,11 +65,11 @@ class RequestThrottle(BaseThrottle):
             # Set rate limit type for OTPThrottle to use
             if hasattr(self, 'daily_limit'):
                 self._rate_limit_type = 'per_minute'
-            
+
             # Enhanced logging for rate limit violations
             identifier = request.data.get('identifier', 'unknown')
-            ip_address = request.META.get('REMOTE_ADDR', 'unknown')
-            
+            ip_address = get_client_ip(request)
+
             blockauth_logger.warning(
                 f"Rate limit exceeded for {subject}",
                 sanitize_log_context({
@@ -97,6 +105,155 @@ class RequestThrottle(BaseThrottle):
             return None
 
         return remaining_duration / float(available_requests)
+
+
+class EnhancedThrottle(BaseThrottle):
+    """
+    Enhanced throttle with daily limits, cooldowns, and failure tracking.
+
+    Features:
+    - Per-minute rate limiting (IP + user/identifier)
+    - Daily limits
+    - Cooldown after repeated failures
+    - Separate IP and user tracking
+    """
+    cache = default_cache
+    timer = time.time
+
+    def __init__(
+        self,
+        rate: tuple[int, int] = None,
+        daily_limit: int = None,
+        max_failures: int = 5,
+        cooldown_minutes: int = 15,
+    ):
+        """
+        Args:
+            rate: (num_requests, duration_seconds) - e.g., (10, 60) = 10/min
+            daily_limit: Max requests per day (None = no daily limit)
+            max_failures: Failures before cooldown triggers
+            cooldown_minutes: Cooldown duration after max failures
+        """
+        if rate is None:
+            rate = get_config('REQUEST_LIMIT')
+        self.num_requests, self.duration = rate
+        self.daily_limit = daily_limit
+        self.max_failures = max_failures
+        self.cooldown_minutes = cooldown_minutes
+        self._block_reason = None
+
+    def _get_identifier(self, request):
+        """Get user identifier from request."""
+        identifier = request.data.get('identifier')
+        if not identifier and hasattr(request, 'user') and request.user.is_authenticated:
+            identifier = str(request.user.id)
+        return identifier
+
+    def allow_request(self, request, subject) -> bool:
+        """Check all rate limits."""
+        ip = get_client_ip(request)
+        identifier = self._get_identifier(request)
+        now = self.timer()
+
+        # Check cooldown first
+        if not self._check_cooldown(ip, identifier, subject):
+            self._block_reason = 'cooldown'
+            self._log_blocked(request, subject, 'cooldown')
+            return False
+
+        # Check daily limit
+        if self.daily_limit and not self._check_daily(ip, identifier, subject, now):
+            self._block_reason = 'daily'
+            self._log_blocked(request, subject, 'daily_limit')
+            return False
+
+        # Check rate limit
+        if not self._check_rate(ip, identifier, subject, now):
+            self._block_reason = 'rate'
+            self._log_blocked(request, subject, 'rate_limit')
+            return False
+
+        return True
+
+    def _check_rate(self, ip, identifier, subject, now) -> bool:
+        """Check per-minute rate limit."""
+        key = f"throttle_rate_{subject}_{ip}_{identifier or 'anon'}"
+        history = self.cache.get(key, [])
+        history = [t for t in history if now - t < self.duration]
+
+        if len(history) >= self.num_requests:
+            return False
+
+        history.append(now)
+        self.cache.set(key, history, self.duration)
+        return True
+
+    def _check_daily(self, ip, identifier, subject, now) -> bool:
+        """Check daily limit."""
+        day_key = f"throttle_daily_{subject}_{identifier or ip}_{int(now // 86400)}"
+        count = self.cache.get(day_key, 0)
+
+        if count >= self.daily_limit:
+            return False
+
+        self.cache.set(day_key, count + 1, 86400)
+        return True
+
+    def _check_cooldown(self, ip, identifier, subject) -> bool:
+        """Check if in cooldown period."""
+        key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+        return not self.cache.get(key, False)
+
+    def record_failure(self, request, subject):
+        """Record a failed attempt. Call when operation fails."""
+        ip = get_client_ip(request)
+        identifier = self._get_identifier(request)
+        key = f"throttle_failures_{subject}_{ip}_{identifier or 'anon'}"
+
+        count = self.cache.get(key, 0) + 1
+        self.cache.set(key, count, 3600)  # Track for 1 hour
+
+        if count >= self.max_failures:
+            cooldown_key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+            self.cache.set(cooldown_key, True, self.cooldown_minutes * 60)
+            blockauth_logger.warning(
+                f"Cooldown triggered for {subject}",
+                sanitize_log_context({
+                    "ip": ip,
+                    "identifier": identifier,
+                    "failures": count,
+                    "cooldown_minutes": self.cooldown_minutes,
+                })
+            )
+
+    def record_success(self, request, subject):
+        """Record successful attempt. Resets failure counter."""
+        ip = get_client_ip(request)
+        identifier = self._get_identifier(request)
+
+        # Clear failures
+        key = f"throttle_failures_{subject}_{ip}_{identifier or 'anon'}"
+        self.cache.delete(key)
+
+        # Clear cooldown
+        cooldown_key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+        self.cache.delete(cooldown_key)
+
+    def _log_blocked(self, request, subject, reason):
+        """Log blocked request."""
+        blockauth_logger.warning(
+            f"Request blocked: {reason}",
+            sanitize_log_context({
+                "subject": subject,
+                "reason": reason,
+                "ip": get_client_ip(request),
+                "identifier": self._get_identifier(request),
+            })
+        )
+
+    def get_block_reason(self) -> str:
+        """Get reason for last block."""
+        return self._block_reason
 
 
 class OTPThrottle(RequestThrottle):
