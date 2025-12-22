@@ -23,6 +23,12 @@ class NotificationEvent:
     SUCCESS_PASSWORD_CHANGE = "success.password_change"
     SUCCESS_EMAIL_CHANGE = "success.email_change"
 
+    # Passkey events
+    PASSKEY_REGISTERED = "passkey.registered"
+    PASSKEY_AUTHENTICATED = "passkey.authenticated"
+    PASSKEY_REVOKED = "passkey.revoked"
+    PASSKEY_COUNTER_REGRESSION = "passkey.counter_regression"
+
 
 class BaseNotification(ABC):
     """
@@ -168,3 +174,13 @@ def _invalidate_existing_otps(identifier: str, subject: str) -> int:
         )
         # Don't raise exception - allow OTP generation to continue
         return 0
+
+
+def emit_passkey_event(event: str, context: dict) -> None:
+    """Emit a passkey-related event."""
+    try:
+        communication_class = get_config('DEFAULT_NOTIFICATION_CLASS')()
+        communication_class.notify(method="event", event=event, context=context)
+        blockauth_logger.info(f"Passkey event: {event}", sanitize_log_context(context))
+    except Exception as e:
+        blockauth_logger.error(f"Failed to emit passkey event: {event}", {"error": str(e)})
