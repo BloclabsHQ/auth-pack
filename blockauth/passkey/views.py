@@ -13,9 +13,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema
 
 from blockauth.jwt.token_manager import jwt_manager
+from blockauth.notification import emit_passkey_event, NotificationEvent
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.config import get_block_auth_user_model
-from blockauth.utils.rate_limiter import RequestThrottle
+from blockauth.utils.rate_limiter import EnhancedThrottle
 from blockauth.utils.generics import sanitize_log_context
 
 from .services.passkey_service import PasskeyService
@@ -30,6 +31,21 @@ class PasskeySubject:
     AUTH_OPTIONS = "passkey_auth_options"
     AUTH_VERIFY = "passkey_auth_verify"
     CREDENTIALS = "passkey_credentials"
+
+
+# Throttle configurations
+class PasskeyThrottles:
+    """Centralized passkey throttle configurations."""
+    # Challenge generation: 10/min, 50/day
+    REGISTER_OPTIONS = EnhancedThrottle(rate=(10, 60), daily_limit=50)
+    # Registration: 5/min, 10/day (creates credentials)
+    REGISTER_VERIFY = EnhancedThrottle(rate=(5, 60), daily_limit=10, max_failures=3, cooldown_minutes=30)
+    # Auth options: 20/min, 100/day (public endpoint)
+    AUTH_OPTIONS = EnhancedThrottle(rate=(20, 60), daily_limit=100)
+    # Auth verify: 10/min, cooldown after 5 failures
+    AUTH_VERIFY = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
+    # Credential management: 30/min
+    CREDENTIALS = EnhancedThrottle(rate=(30, 60))
 
 
 # Generic error messages to prevent information leakage
@@ -64,11 +80,11 @@ class PasskeyRegistrationOptionsView(APIView):
     to navigator.credentials.create() on the frontend.
     """
     permission_classes = [IsAuthenticated]
-    rate_limit_handler = RequestThrottle(rate=(10, 60))  # 10 requests per minute
 
     @extend_schema(**passkey_registration_options_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.REGISTER_OPTIONS):
+        throttle = PasskeyThrottles.REGISTER_OPTIONS
+        if not throttle.allow_request(request, PasskeySubject.REGISTER_OPTIONS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -91,7 +107,7 @@ class PasskeyRegistrationOptionsView(APIView):
 
             return Response(options)
 
-        except MaxCredentialsReachedError as e:
+        except MaxCredentialsReachedError:
             blockauth_logger.warning("Passkey max credentials reached", sanitize_log_context({"user_id": str(request.user.id)}))
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except PasskeyError as e:
@@ -110,11 +126,11 @@ class PasskeyRegistrationVerifyView(APIView):
     authenticator and stores it for future authentication.
     """
     permission_classes = [IsAuthenticated]
-    rate_limit_handler = RequestThrottle(rate=(5, 60))  # 5 requests per minute
 
     @extend_schema(**passkey_registration_verify_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.REGISTER_VERIFY):
+        throttle = PasskeyThrottles.REGISTER_VERIFY
+        if not throttle.allow_request(request, PasskeySubject.REGISTER_VERIFY):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -124,19 +140,18 @@ class PasskeyRegistrationVerifyView(APIView):
             service = get_passkey_service()
             credential_name = request.data.get('name', '')
 
-            # Debug: Log received credential keys (not values for security)
-            received_keys = list(request.data.keys()) if hasattr(request.data, 'keys') else 'not-dict'
-            has_raw_id = 'rawId' in request.data if hasattr(request.data, '__contains__') else False
-            blockauth_logger.info(
-                "Passkey registration verify request received",
-                {"user_id": str(request.user.id), "keys": str(received_keys), "has_rawId": has_raw_id}
-            )
-
             credential = service.verify_registration(
                 credential_data=request.data,
                 user_id=request.user.id,
                 credential_name=credential_name,
             )
+
+            # Record success and emit event
+            throttle.record_success(request, PasskeySubject.REGISTER_VERIFY)
+            emit_passkey_event(NotificationEvent.PASSKEY_REGISTERED, {
+                "user_id": str(request.user.id),
+                "credential_id": str(credential.id),
+            })
 
             blockauth_logger.success(
                 "Passkey registered successfully",
@@ -154,12 +169,14 @@ class PasskeyRegistrationVerifyView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         except PasskeyError as e:
+            throttle.record_failure(request, PasskeySubject.REGISTER_VERIFY)
             blockauth_logger.error(
                 "Passkey registration verification failed",
                 sanitize_log_context({"error": str(e), "user_id": str(request.user.id)})
             )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            throttle.record_failure(request, PasskeySubject.REGISTER_VERIFY)
             blockauth_logger.error("Passkey registration error", sanitize_log_context({"error": str(e)}))
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -173,11 +190,11 @@ class PasskeyAuthenticationOptionsView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
-    rate_limit_handler = RequestThrottle(rate=(20, 60))  # 20 requests per minute (public endpoint)
 
     @extend_schema(**passkey_authentication_options_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.AUTH_OPTIONS):
+        throttle = PasskeyThrottles.AUTH_OPTIONS
+        if not throttle.allow_request(request, PasskeySubject.AUTH_OPTIONS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -227,11 +244,11 @@ class PasskeyAuthenticationVerifyView(APIView):
     """
     permission_classes = [AllowAny]
     authentication_classes = []
-    rate_limit_handler = RequestThrottle(rate=(10, 60))  # 10 requests per minute
 
     @extend_schema(**passkey_authentication_verify_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.AUTH_VERIFY):
+        throttle = PasskeyThrottles.AUTH_VERIFY
+        if not throttle.allow_request(request, PasskeySubject.AUTH_VERIFY):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -250,6 +267,13 @@ class PasskeyAuthenticationVerifyView(APIView):
 
             # Generate JWT tokens
             tokens = jwt_manager.generate_tokens_for_user(user)
+
+            # Record success and emit event
+            throttle.record_success(request, PasskeySubject.AUTH_VERIFY)
+            emit_passkey_event(NotificationEvent.PASSKEY_AUTHENTICATED, {
+                "user_id": str(result.user_id),
+                "credential_id": result.credential_id[:20] if result.credential_id else None,
+            })
 
             # Get credential info for response
             credentials = service.get_credentials_for_user(result.user_id)
@@ -278,12 +302,15 @@ class PasskeyAuthenticationVerifyView(APIView):
             })
 
         except CredentialNotFoundError as e:
+            throttle.record_failure(request, PasskeySubject.AUTH_VERIFY)
             blockauth_logger.error("Passkey authentication failed", sanitize_log_context({"error": str(e)}))
             return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except PasskeyError as e:
+            throttle.record_failure(request, PasskeySubject.AUTH_VERIFY)
             blockauth_logger.error("Passkey authentication failed", sanitize_log_context({"error": str(e)}))
             return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            throttle.record_failure(request, PasskeySubject.AUTH_VERIFY)
             blockauth_logger.error("Passkey authentication error", sanitize_log_context({"error": str(e)}))
             return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
 
@@ -295,11 +322,11 @@ class PasskeyCredentialListView(APIView):
     Requires authentication.
     """
     permission_classes = [IsAuthenticated]
-    rate_limit_handler = RequestThrottle(rate=(30, 60))  # 30 requests per minute
 
     @extend_schema(**passkey_credentials_list_docs)
     def get(self, request):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+        throttle = PasskeyThrottles.CREDENTIALS
+        if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -343,11 +370,11 @@ class PasskeyCredentialDetailView(APIView):
     Requires authentication. Supports GET, PATCH (update name), and DELETE.
     """
     permission_classes = [IsAuthenticated]
-    rate_limit_handler = RequestThrottle(rate=(30, 60))  # 30 requests per minute
 
     @extend_schema(**passkey_credential_detail_docs)
     def get(self, request, credential_id):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+        throttle = PasskeyThrottles.CREDENTIALS
+        if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -386,7 +413,8 @@ class PasskeyCredentialDetailView(APIView):
 
     @extend_schema(**passkey_credential_update_docs)
     def patch(self, request, credential_id):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+        throttle = PasskeyThrottles.CREDENTIALS
+        if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
@@ -449,7 +477,8 @@ class PasskeyCredentialDetailView(APIView):
 
     @extend_schema(**passkey_credential_delete_docs)
     def delete(self, request, credential_id):
-        if not self.rate_limit_handler.allow_request(request, PasskeySubject.CREDENTIALS):
+        throttle = PasskeyThrottles.CREDENTIALS
+        if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS
