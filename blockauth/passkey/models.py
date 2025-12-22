@@ -163,7 +163,8 @@ class PasskeyCredential(models.Model):
     )
 
     class Meta:
-        app_label = 'blockauth'  # Part of main blockauth app
+        app_label = 'blockauth'
+        managed = True
         db_table = 'passkey_credential'
         ordering = ['-created_at']
         indexes = [
@@ -291,7 +292,8 @@ class PasskeyChallenge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = 'blockauth'  # Part of main blockauth app
+        app_label = 'blockauth'
+        managed = True
         db_table = 'passkey_challenge'
         indexes = [
             models.Index(fields=['challenge'], name='passkey_challenge_idx'),
