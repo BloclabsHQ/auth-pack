@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 
 from django.db import models
@@ -17,7 +17,7 @@ class OTPSubject(models.TextChoices):
 
 
 class OTP(models.Model):
-    identifier = models.CharField(max_length=100, help_text="Email to send OTP")
+    identifier = models.CharField(max_length=100, help_text="Email or phone to send OTP")
     code = models.CharField(max_length=12)
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -43,8 +43,9 @@ class OTP(models.Model):
 
     @staticmethod
     def generate_otp(length):
+        """Generate cryptographically secure OTP using secrets module."""
         characters = string.digits + string.ascii_letters
-        otp = ''.join(random.choice(characters) for _ in range(length))
+        otp = ''.join(secrets.choice(characters) for _ in range(length))
         return otp
 
     class Meta:
