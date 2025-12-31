@@ -114,18 +114,29 @@ class TOTPService:
     # =========================================================================
 
     @staticmethod
-    def generate_secret(length: int = 20) -> str:
+    def generate_secret(length: int = 32) -> str:
         """
         Generate a cryptographically secure TOTP secret.
 
+        Security: Default 32 bytes (256 bits) per SECURITY_STANDARDS.md.
+        RFC 4226 minimum is 16 bytes (128 bits), but we enforce 20 bytes
+        (160 bits) as the absolute minimum for compatibility while
+        defaulting to 256-bit security.
+
         Args:
-            length: Length in bytes (minimum 16, default 20 = 160 bits)
+            length: Length in bytes (minimum 20, default 32 = 256 bits)
 
         Returns:
             Base32-encoded secret string
+
+        Raises:
+            ValueError: If length is below 20 bytes (160 bits)
         """
-        if length < 16:
-            raise ValueError("Secret length must be at least 16 bytes")
+        if length < 20:
+            raise ValueError(
+                "Secret length must be at least 20 bytes (160 bits). "
+                "Recommended: 32 bytes (256 bits) for optimal security."
+            )
 
         secret_bytes = secrets.token_bytes(length)
         return base64.b32encode(secret_bytes).decode('ascii').rstrip('=')

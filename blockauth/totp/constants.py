@@ -82,6 +82,7 @@ class TOTPAlgorithm(str, Enum):
 
 
 # Default configuration values
+# Security: Aligned with SECURITY_STANDARDS.md requirements
 DEFAULTS = {
     TOTPConfigKeys.ENABLED: False,
     TOTPConfigKeys.ISSUER_NAME: "BlockAuth",
@@ -89,7 +90,7 @@ DEFAULTS = {
     TOTPConfigKeys.TIME_STEP: 30,  # 30 seconds (RFC 6238 standard)
     TOTPConfigKeys.ALGORITHM: TOTPAlgorithm.SHA1.value,
     TOTPConfigKeys.WINDOW: 1,  # ±1 time step tolerance for clock skew
-    TOTPConfigKeys.SECRET_LENGTH: 20,  # 160 bits (RFC 4226 minimum)
+    TOTPConfigKeys.SECRET_LENGTH: 32,  # 256 bits (SECURITY_STANDARDS.md requirement)
     TOTPConfigKeys.BACKUP_CODES_COUNT: 10,
     TOTPConfigKeys.BACKUP_CODE_LENGTH: 8,
     TOTPConfigKeys.MAX_ATTEMPTS: 5,
