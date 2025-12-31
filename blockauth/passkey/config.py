@@ -2,12 +2,15 @@
 Passkey Configuration Manager for BlockAuth
 
 Handles loading and validating passkey configuration from BLOCK_AUTH_SETTINGS.
+
+Configuration is read from BLOCK_AUTH_SETTINGS["PASSKEY_CONFIG"].
 """
 
 from typing import Any, List, Optional
 from dataclasses import dataclass, field
 
 from .constants import (
+    PASSKEY_CONFIG_KEY,
     PasskeyConfigKeys,
     PASSKEY_DEFAULTS,
     AttestationConveyance,
@@ -92,7 +95,7 @@ class PasskeyConfigManager:
     """
     Manages passkey configuration loading and validation.
 
-    Reads from Django's BLOCK_AUTH_SETTINGS and provides
+    Reads from Django's BLOCK_AUTH_SETTINGS["PASSKEY_CONFIG"] and provides
     a validated PasskeyConfiguration object.
     """
 
@@ -104,19 +107,19 @@ class PasskeyConfigManager:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def _get_setting(self, key: str, default: Any = None) -> Any:
-        """Get a setting from BLOCK_AUTH_SETTINGS"""
+    def _get_passkey_config_dict(self) -> dict:
+        """Get the PASSKEY_CONFIG dict from settings"""
         try:
             from django.conf import settings
             block_auth_settings = getattr(settings, 'BLOCK_AUTH_SETTINGS', {})
-            return block_auth_settings.get(key, default)
+            return block_auth_settings.get(PASSKEY_CONFIG_KEY, {})
         except ImportError:
-            return default
+            return {}
 
-    def _get_with_default(self, key: str) -> Any:
-        """Get setting with default from PASSKEY_DEFAULTS"""
+    def _get_with_default(self, key: str, passkey_config: dict) -> Any:
+        """Get setting from PASSKEY_CONFIG with default from PASSKEY_DEFAULTS"""
         default = PASSKEY_DEFAULTS.get(key)
-        return self._get_setting(key, default)
+        return passkey_config.get(key, default)
 
     def get_config(self, force_reload: bool = False) -> PasskeyConfiguration:
         """
@@ -140,18 +143,21 @@ class PasskeyConfigManager:
     def _load_config(self) -> PasskeyConfiguration:
         """Load and validate configuration from settings"""
 
+        # Get the PASSKEY_CONFIG object
+        passkey_config = self._get_passkey_config_dict()
+
         # Get RP ID (required)
-        rp_id = self._get_with_default(PasskeyConfigKeys.RP_ID)
+        rp_id = self._get_with_default(PasskeyConfigKeys.RP_ID, passkey_config)
         if not rp_id:
             raise ConfigurationError(
-                "PASSKEY_RP_ID is required. Set it to your domain (e.g., 'example.com')"
+                "PASSKEY_CONFIG.RP_ID is required. Set it to your domain (e.g., 'example.com')"
             )
 
         # Get RP name
-        rp_name = self._get_with_default(PasskeyConfigKeys.RP_NAME)
+        rp_name = self._get_with_default(PasskeyConfigKeys.RP_NAME, passkey_config)
 
         # Get allowed origins
-        allowed_origins = self._get_with_default(PasskeyConfigKeys.ALLOWED_ORIGINS)
+        allowed_origins = self._get_with_default(PasskeyConfigKeys.ALLOWED_ORIGINS, passkey_config)
         if not allowed_origins:
             # Auto-generate from RP ID if not set
             allowed_origins = [f'https://{rp_id}']
@@ -164,91 +170,91 @@ class PasskeyConfigManager:
                 )
 
         # Get and validate attestation
-        attestation = self._get_with_default(PasskeyConfigKeys.ATTESTATION)
+        attestation = self._get_with_default(PasskeyConfigKeys.ATTESTATION, passkey_config)
         valid_attestations = [a.value for a in AttestationConveyance]
         if attestation not in valid_attestations:
             raise ConfigurationError(
-                f"Invalid PASSKEY_ATTESTATION '{attestation}'. "
+                f"Invalid PASSKEY_CONFIG.ATTESTATION '{attestation}'. "
                 f"Valid values: {valid_attestations}"
             )
 
         # Get authenticator attachment (can be None)
         authenticator_attachment = self._get_with_default(
-            PasskeyConfigKeys.AUTHENTICATOR_ATTACHMENT
+            PasskeyConfigKeys.AUTHENTICATOR_ATTACHMENT, passkey_config
         )
         if authenticator_attachment is not None:
             valid_attachments = [a.value for a in AuthenticatorAttachment]
             if authenticator_attachment not in valid_attachments:
                 raise ConfigurationError(
-                    f"Invalid PASSKEY_AUTHENTICATOR_ATTACHMENT '{authenticator_attachment}'. "
+                    f"Invalid PASSKEY_CONFIG.AUTHENTICATOR_ATTACHMENT '{authenticator_attachment}'. "
                     f"Valid values: {valid_attachments} or None"
                 )
 
         # Get and validate resident key requirement
-        resident_key = self._get_with_default(PasskeyConfigKeys.RESIDENT_KEY)
+        resident_key = self._get_with_default(PasskeyConfigKeys.RESIDENT_KEY, passkey_config)
         valid_resident_keys = [r.value for r in ResidentKeyRequirement]
         if resident_key not in valid_resident_keys:
             raise ConfigurationError(
-                f"Invalid PASSKEY_RESIDENT_KEY '{resident_key}'. "
+                f"Invalid PASSKEY_CONFIG.RESIDENT_KEY '{resident_key}'. "
                 f"Valid values: {valid_resident_keys}"
             )
 
         # Get and validate user verification
-        user_verification = self._get_with_default(PasskeyConfigKeys.USER_VERIFICATION)
+        user_verification = self._get_with_default(PasskeyConfigKeys.USER_VERIFICATION, passkey_config)
         valid_user_verifications = [u.value for u in UserVerificationRequirement]
         if user_verification not in valid_user_verifications:
             raise ConfigurationError(
-                f"Invalid PASSKEY_USER_VERIFICATION '{user_verification}'. "
+                f"Invalid PASSKEY_CONFIG.USER_VERIFICATION '{user_verification}'. "
                 f"Valid values: {valid_user_verifications}"
             )
 
         # Get timeouts
-        registration_timeout = self._get_with_default(PasskeyConfigKeys.REGISTRATION_TIMEOUT)
-        authentication_timeout = self._get_with_default(PasskeyConfigKeys.AUTHENTICATION_TIMEOUT)
+        registration_timeout = self._get_with_default(PasskeyConfigKeys.REGISTRATION_TIMEOUT, passkey_config)
+        authentication_timeout = self._get_with_default(PasskeyConfigKeys.AUTHENTICATION_TIMEOUT, passkey_config)
 
         if not isinstance(registration_timeout, int) or registration_timeout <= 0:
-            raise ConfigurationError("PASSKEY_REGISTRATION_TIMEOUT must be a positive integer")
+            raise ConfigurationError("PASSKEY_CONFIG.REGISTRATION_TIMEOUT must be a positive integer")
         if not isinstance(authentication_timeout, int) or authentication_timeout <= 0:
-            raise ConfigurationError("PASSKEY_AUTHENTICATION_TIMEOUT must be a positive integer")
+            raise ConfigurationError("PASSKEY_CONFIG.AUTHENTICATION_TIMEOUT must be a positive integer")
 
         # Get challenge settings
-        challenge_length = self._get_with_default(PasskeyConfigKeys.CHALLENGE_LENGTH)
-        challenge_expiry = self._get_with_default(PasskeyConfigKeys.CHALLENGE_EXPIRY)
+        challenge_length = self._get_with_default(PasskeyConfigKeys.CHALLENGE_LENGTH, passkey_config)
+        challenge_expiry = self._get_with_default(PasskeyConfigKeys.CHALLENGE_EXPIRY, passkey_config)
 
         if not isinstance(challenge_length, int) or challenge_length < 16:
-            raise ConfigurationError("PASSKEY_CHALLENGE_LENGTH must be at least 16 bytes")
+            raise ConfigurationError("PASSKEY_CONFIG.CHALLENGE_LENGTH must be at least 16 bytes")
         if not isinstance(challenge_expiry, int) or challenge_expiry <= 0:
-            raise ConfigurationError("PASSKEY_CHALLENGE_EXPIRY must be a positive integer")
+            raise ConfigurationError("PASSKEY_CONFIG.CHALLENGE_EXPIRY must be a positive integer")
 
         # Get and validate algorithms
-        supported_algorithms = self._get_with_default(PasskeyConfigKeys.SUPPORTED_ALGORITHMS)
+        supported_algorithms = self._get_with_default(PasskeyConfigKeys.SUPPORTED_ALGORITHMS, passkey_config)
         valid_algorithms = [a.value for a in COSEAlgorithm]
         for alg in supported_algorithms:
             if alg not in valid_algorithms:
                 raise ConfigurationError(
-                    f"Invalid algorithm {alg} in PASSKEY_SUPPORTED_ALGORITHMS. "
+                    f"Invalid algorithm {alg} in PASSKEY_CONFIG.SUPPORTED_ALGORITHMS. "
                     f"Valid values: {valid_algorithms}"
                 )
 
         # Get limits
-        max_credentials = self._get_with_default(PasskeyConfigKeys.MAX_CREDENTIALS_PER_USER)
+        max_credentials = self._get_with_default(PasskeyConfigKeys.MAX_CREDENTIALS_PER_USER, passkey_config)
         if not isinstance(max_credentials, int) or max_credentials <= 0:
-            raise ConfigurationError("PASSKEY_MAX_CREDENTIALS_PER_USER must be a positive integer")
+            raise ConfigurationError("PASSKEY_CONFIG.MAX_CREDENTIALS_PER_USER must be a positive integer")
 
         # Get storage backend
-        storage_backend = self._get_with_default(PasskeyConfigKeys.STORAGE_BACKEND)
+        storage_backend = self._get_with_default(PasskeyConfigKeys.STORAGE_BACKEND, passkey_config)
         valid_backends = ['django', 'memory']
         if storage_backend not in valid_backends:
             raise ConfigurationError(
-                f"Invalid PASSKEY_STORAGE_BACKEND '{storage_backend}'. "
+                f"Invalid PASSKEY_CONFIG.STORAGE_BACKEND '{storage_backend}'. "
                 f"Valid values: {valid_backends}"
             )
 
         # Get rate limits
-        rate_limits = self._get_with_default(PasskeyConfigKeys.RATE_LIMITS)
+        rate_limits = self._get_with_default(PasskeyConfigKeys.RATE_LIMITS, passkey_config)
 
         # Get feature flags
-        features = self._get_with_default(PasskeyConfigKeys.FEATURES)
+        features = self._get_with_default(PasskeyConfigKeys.FEATURES, passkey_config)
 
         return PasskeyConfiguration(
             rp_id=rp_id,

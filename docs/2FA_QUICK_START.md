@@ -25,15 +25,10 @@ Add to your Django `settings.py`:
 BLOCK_AUTH_SETTINGS = {
     # ... existing settings ...
     
-    "FEATURES": {
-        # ... existing features ...
-        "TWO_FACTOR_AUTH": True,  # Master switch
-        "TOTP_2FA": True,         # Authenticator apps
-        "SMS_2FA": False,         # Optional SMS (requires provider)
-        "EMAIL_2FA": False,       # Optional email codes
-        "BACKUP_CODES": True,     # Recovery codes
-        "TRUSTED_DEVICES": True,  # Device trust feature
-    },
+    # TOTP 2FA (Authenticator apps like Google Authenticator, Authy)
+    "TOTP_ENABLED": True,
+    "TOTP_ENCRYPTION_KEY": "your-fernet-key",  # Generate with: Fernet.generate_key()
+    "TOTP_ISSUER_NAME": "YourAppName",
     
     "TWO_FACTOR": {
         # Basic Configuration
@@ -273,21 +268,20 @@ BLOCK_AUTH_SETTINGS = {
 ```python
 # Recommended production settings
 BLOCK_AUTH_SETTINGS = {
-    "FEATURES": {
-        "TWO_FACTOR_AUTH": True,
-        "TOTP_2FA": True,
-        "SMS_2FA": True,  # If SMS provider configured
-        "EMAIL_2FA": True,
-        "BACKUP_CODES": True,
-        "TRUSTED_DEVICES": True,
-    },
-    
+    # TOTP 2FA - Authenticator app support
+    "TOTP_ENABLED": True,
+    "TOTP_ENCRYPTION_KEY": "your-fernet-key",  # REQUIRED - Generate with Fernet.generate_key()
+    "TOTP_ISSUER_NAME": "YourCompany",
+    "TOTP_DIGITS": 6,
+    "TOTP_TIME_STEP": 30,
+    "TOTP_ALGORITHM": "sha1",  # sha1 for maximum compatibility
+    "TOTP_SECRET_LENGTH": 32,  # 256 bits
+    "TOTP_BACKUP_CODES_COUNT": 10,
+    "TOTP_MAX_ATTEMPTS": 5,
+    "TOTP_LOCKOUT_DURATION": 300,  # 5 minutes
+
     "TWO_FACTOR": {
-        # TOTP Settings
-        "TOTP_ISSUER": "YourCompany",
-        "TOTP_DIGITS": 6,
-        "TOTP_INTERVAL": 30,
-        "TOTP_ALGORITHM": "SHA256",  # More secure than SHA1
+        # Additional 2FA Settings (future expansion)
         
         # Security
         "MAX_ATTEMPTS": 3,
@@ -316,21 +310,19 @@ BLOCK_AUTH_SETTINGS = {
 ```python
 # Development-friendly settings
 BLOCK_AUTH_SETTINGS = {
-    "FEATURES": {
-        "TWO_FACTOR_AUTH": True,
-        "TOTP_2FA": True,
-        "BACKUP_CODES": True,
-    },
-    
+    # TOTP 2FA - Development settings
+    "TOTP_ENABLED": True,
+    "TOTP_ENCRYPTION_KEY": "dev-key-generate-real-one-for-prod",
+    "TOTP_ISSUER_NAME": "DevApp",
+    "TOTP_DIGITS": 6,
+    "TOTP_TIME_STEP": 30,
+
+    # Relaxed for development
+    "TOTP_MAX_ATTEMPTS": 10,
+    "TOTP_LOCKOUT_DURATION": 60,  # 1 minute
+
     "TWO_FACTOR": {
-        "TOTP_ISSUER": "DevApp",
-        "TOTP_DIGITS": 6,
-        "TOTP_INTERVAL": 30,
-        
-        # Relaxed for development
-        "MAX_ATTEMPTS": 10,
-        "LOCKOUT_DURATION": 60,  # 1 minute
-        "REMEMBER_DEVICE_DAYS": 365,  # 1 year
+        # Additional settings (future expansion)
         
         # No enforcement in dev
         "ENFORCE_FOR_ADMIN": False,

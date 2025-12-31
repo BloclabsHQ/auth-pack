@@ -33,7 +33,7 @@
 Implement a standalone Passkey/WebAuthn authentication module for BlockAuth that enables passwordless authentication using FIDO2/WebAuthn standards. This module will be:
 
 - **Standalone**: Works independently of other BlockAuth features
-- **Optional**: Only loads when explicitly enabled via `PASSKEY_ENABLED=True`
+- **Optional**: Only loads when explicitly enabled via `FEATURES['PASSKEY_AUTH']=True`
 - **Framework-Agnostic**: Can be used with any Django project
 - **Configurable**: Supports multiple relying parties, attestation modes, and storage backends
 - **Secure**: Follows WebAuthn Level 2 specification with security best practices
@@ -193,7 +193,7 @@ WebAuthn (Web Authentication) is a W3C standard that enables strong, passwordles
 
 ### Design Principles
 
-1. **Lazy Loading**: Module only loads when `PASSKEY_ENABLED=True`
+1. **Lazy Loading**: Module only loads when `FEATURES['PASSKEY_AUTH']=True`
 2. **Pluggable Storage**: Abstract storage interface for flexibility
 3. **Provider Abstraction**: Support different WebAuthn libraries
 4. **Event Hooks**: Trigger callbacks on registration/authentication
@@ -302,8 +302,10 @@ BLOCK_AUTH_SETTINGS = {
     # PASSKEY/WEBAUTHN CONFIGURATION
     # ═══════════════════════════════════════════════════════════════════
 
-    # Master switch - must be True to use Passkey functionality
-    'PASSKEY_ENABLED': True,
+    # Enable passkey via FEATURES dict
+    'FEATURES': {
+        'PASSKEY_AUTH': True,  # Master switch for passkey functionality
+    },
 
     # Relying Party configuration
     'PASSKEY_RP_ID': 'example.com',           # Domain (no protocol, no port)
@@ -383,7 +385,7 @@ from enum import Enum, IntEnum
 
 class PasskeyConfigKeys:
     """Configuration key names"""
-    ENABLED = 'PASSKEY_ENABLED'
+    # NOTE: Passkey enable check uses FEATURES['PASSKEY_AUTH'], not a separate key
     RP_ID = 'PASSKEY_RP_ID'
     RP_NAME = 'PASSKEY_RP_NAME'
     ALLOWED_ORIGINS = 'PASSKEY_ALLOWED_ORIGINS'
@@ -1398,8 +1400,10 @@ INSTALLED_APPS = [
 
 # 3. Configure in settings.py
 BLOCK_AUTH_SETTINGS = {
-    # Enable passkey
-    'PASSKEY_ENABLED': True,
+    # Enable passkey via FEATURES dict
+    'FEATURES': {
+        'PASSKEY_AUTH': True,
+    },
     'PASSKEY_RP_ID': 'yourdomain.com',
     'PASSKEY_RP_NAME': 'Your Application',
     'PASSKEY_ALLOWED_ORIGINS': ['https://yourdomain.com'],
@@ -1612,7 +1616,7 @@ services/auth-pack/
 
 | Code | Message | Description |
 |------|---------|-------------|
-| `PASSKEY_001` | Passkey module not enabled | Set `PASSKEY_ENABLED=True` |
+| `PASSKEY_001` | Passkey module not enabled | Set `FEATURES['PASSKEY_AUTH']=True` |
 | `PASSKEY_002` | Challenge expired | Generate new challenge |
 | `PASSKEY_003` | Challenge already used | Generate new challenge |
 | `PASSKEY_004` | Invalid origin | Origin doesn't match allowed origins |

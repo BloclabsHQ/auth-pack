@@ -3,35 +3,69 @@ TOTP 2FA Constants and Configuration Keys.
 
 This module defines all constants, configuration keys, error codes,
 and default values for the TOTP 2FA functionality.
+
+Configuration Pattern:
+    BLOCK_AUTH_SETTINGS = {
+        "FEATURES": {
+            "TOTP_2FA": True,  # Enable TOTP via FEATURES dict
+        },
+        "TOTP_CONFIG": {
+            "ENCRYPTION_KEY": "your-fernet-key",  # REQUIRED
+            "ISSUER_NAME": "YourApp",
+            "DIGITS": 6,
+            # ... other TOTP settings
+        },
+    }
 """
 from enum import Enum
 
 
+# Feature flag name (in FEATURES dict)
+TOTP_FEATURE_FLAG = "TOTP_2FA"
+
+# Config object name
+TOTP_CONFIG_KEY = "TOTP_CONFIG"
+
+
 class TOTPConfigKeys:
-    """Configuration keys for TOTP 2FA settings."""
+    """
+    Configuration keys for TOTP 2FA settings.
+
+    These keys are used within the TOTP_CONFIG object, NOT at root level.
+
+    Example:
+        BLOCK_AUTH_SETTINGS = {
+            "FEATURES": {"TOTP_2FA": True},
+            "TOTP_CONFIG": {
+                TOTPConfigKeys.ENCRYPTION_KEY: "your-key",
+                TOTPConfigKeys.ISSUER_NAME: "MyApp",
+            }
+        }
+    """
+
+    # Security (REQUIRED)
+    ENCRYPTION_KEY = "ENCRYPTION_KEY"  # Required for secret encryption
 
     # Core TOTP settings
-    ENABLED = "TOTP_ENABLED"
-    ISSUER_NAME = "TOTP_ISSUER_NAME"
-    DIGITS = "TOTP_DIGITS"
-    TIME_STEP = "TOTP_TIME_STEP"
-    ALGORITHM = "TOTP_ALGORITHM"
-    WINDOW = "TOTP_WINDOW"
+    ISSUER_NAME = "ISSUER_NAME"
+    DIGITS = "DIGITS"
+    TIME_STEP = "TIME_STEP"
+    ALGORITHM = "ALGORITHM"
+    WINDOW = "WINDOW"
 
     # Secret settings
-    SECRET_LENGTH = "TOTP_SECRET_LENGTH"
+    SECRET_LENGTH = "SECRET_LENGTH"
 
     # Backup codes settings
-    BACKUP_CODES_COUNT = "TOTP_BACKUP_CODES_COUNT"
-    BACKUP_CODE_LENGTH = "TOTP_BACKUP_CODE_LENGTH"
+    BACKUP_CODES_COUNT = "BACKUP_CODES_COUNT"
+    BACKUP_CODE_LENGTH = "BACKUP_CODE_LENGTH"
 
     # Rate limiting
-    MAX_ATTEMPTS = "TOTP_MAX_ATTEMPTS"
-    LOCKOUT_DURATION = "TOTP_LOCKOUT_DURATION"
+    MAX_ATTEMPTS = "MAX_ATTEMPTS"
+    LOCKOUT_DURATION = "LOCKOUT_DURATION"
 
-    # Security
-    REQUIRE_CONFIRMATION = "TOTP_REQUIRE_CONFIRMATION"
-    ENCRYPTION_KEY = "TOTP_ENCRYPTION_KEY"  # Required for secret encryption
+    # Confirmation
+    REQUIRE_CONFIRMATION = "REQUIRE_CONFIRMATION"
 
 
 class TOTPErrorCodes:
@@ -82,10 +116,9 @@ class TOTPAlgorithm(str, Enum):
     SHA512 = "sha512"  # Most secure, least compatible
 
 
-# Default configuration values
+# Default configuration values for TOTP_CONFIG
 # Security: Aligned with SECURITY_STANDARDS.md requirements
 DEFAULTS = {
-    TOTPConfigKeys.ENABLED: False,
     TOTPConfigKeys.ISSUER_NAME: "BlockAuth",
     TOTPConfigKeys.DIGITS: 6,
     TOTPConfigKeys.TIME_STEP: 30,  # 30 seconds (RFC 6238 standard)

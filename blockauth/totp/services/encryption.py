@@ -5,6 +5,14 @@ Provides Fernet-based encryption for TOTP secrets.
 Secrets are encrypted at rest to comply with security standards.
 
 Security: Uses AES-256 encryption via cryptography library's Fernet.
+
+Configuration:
+    BLOCK_AUTH_SETTINGS = {
+        "FEATURES": {"TOTP_2FA": True},
+        "TOTP_CONFIG": {
+            "ENCRYPTION_KEY": "your-fernet-key",  # REQUIRED
+        }
+    }
 """
 import base64
 import logging
@@ -160,7 +168,7 @@ class TOTPEncryptionNotConfiguredError(Exception):
 
     def __init__(self, message: str = None):
         default_message = (
-            "TOTP_ENCRYPTION_KEY is not configured in BLOCK_AUTH_SETTINGS. "
+            "ENCRYPTION_KEY is not configured in TOTP_CONFIG. "
             "TOTP 2FA requires encryption for secure secret storage. "
             "Generate a key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         )
@@ -171,7 +179,7 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
     """
     Get the TOTP encryption service from Django settings.
 
-    Reads the encryption key from BLOCK_AUTH_SETTINGS['TOTP_ENCRYPTION_KEY'].
+    Reads the encryption key from BLOCK_AUTH_SETTINGS['TOTP_CONFIG']['ENCRYPTION_KEY'].
 
     Args:
         raise_if_missing: If True (default), raises exception when key not configured.
@@ -185,14 +193,16 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
         ValueError: If key is configured but invalid
     """
     from blockauth.settings import blockauth_settings
-    from ..constants import TOTPConfigKeys
+    from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
 
-    encryption_key = blockauth_settings.get(TOTPConfigKeys.ENCRYPTION_KEY)
+    # Get TOTP_CONFIG object
+    totp_config = blockauth_settings.get(TOTP_CONFIG_KEY, {})
+    encryption_key = totp_config.get(TOTPConfigKeys.ENCRYPTION_KEY)
 
     if not encryption_key:
         if raise_if_missing:
             blockauth_logger.error(
-                "SECURITY: TOTP_ENCRYPTION_KEY not configured - TOTP cannot be used safely"
+                "SECURITY: TOTP_CONFIG.ENCRYPTION_KEY not configured - TOTP cannot be used safely"
             )
             raise TOTPEncryptionNotConfiguredError()
         return None
@@ -220,22 +230,22 @@ def validate_totp_encryption_config() -> bool:
                 from blockauth.totp.services.encryption import validate_totp_encryption_config
                 validate_totp_encryption_config()
     """
+    from blockauth.totp import is_enabled
     from blockauth.settings import blockauth_settings
-    from ..constants import TOTPConfigKeys
+    from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
 
-    # Check if TOTP is enabled
-    totp_enabled = blockauth_settings.get(TOTPConfigKeys.ENABLED, False)
-
-    if not totp_enabled:
+    # Check if TOTP is enabled (via FEATURES["TOTP_2FA"])
+    if not is_enabled():
         # TOTP disabled, no need to validate encryption
         return True
 
     # TOTP is enabled, encryption MUST be configured
-    encryption_key = blockauth_settings.get(TOTPConfigKeys.ENCRYPTION_KEY)
+    totp_config = blockauth_settings.get(TOTP_CONFIG_KEY, {})
+    encryption_key = totp_config.get(TOTPConfigKeys.ENCRYPTION_KEY)
 
     if not encryption_key:
         raise TOTPEncryptionNotConfiguredError(
-            "TOTP is enabled (TOTP_ENABLED=True) but TOTP_ENCRYPTION_KEY is not configured. "
+            "TOTP is enabled (FEATURES['TOTP_2FA']=True) but TOTP_CONFIG.ENCRYPTION_KEY is not configured. "
             "Either disable TOTP or configure an encryption key. "
             "Generate a key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         )
@@ -250,7 +260,7 @@ def validate_totp_encryption_config() -> bool:
             raise ValueError("Encryption roundtrip failed")
     except Exception as e:
         raise ValueError(
-            f"TOTP_ENCRYPTION_KEY is invalid: {e}. "
+            f"TOTP_CONFIG.ENCRYPTION_KEY is invalid: {e}. "
             "Generate a new key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         )
 

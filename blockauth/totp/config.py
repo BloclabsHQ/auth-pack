@@ -3,6 +3,8 @@ TOTP 2FA Configuration Management.
 
 Provides centralized configuration for TOTP 2FA functionality
 with Django settings integration.
+
+Configuration is read from BLOCK_AUTH_SETTINGS["TOTP_CONFIG"].
 """
 from dataclasses import dataclass, field
 from typing import Optional
@@ -10,6 +12,7 @@ from typing import Optional
 from ..settings import blockauth_settings
 from .constants import (
     DEFAULTS,
+    TOTP_CONFIG_KEY,
     TOTPAlgorithm,
     TOTPConfigKeys,
 )
@@ -20,11 +23,17 @@ class TOTPConfiguration:
     """
     TOTP 2FA configuration container.
 
-    All settings can be overridden via Django settings under BLOCK_AUTH_SETTINGS.
+    All settings can be overridden via Django settings:
+        BLOCK_AUTH_SETTINGS = {
+            "TOTP_CONFIG": {
+                "ISSUER_NAME": "MyApp",
+                "DIGITS": 6,
+                ...
+            }
+        }
     """
 
     # Core settings
-    enabled: bool = field(default_factory=lambda: DEFAULTS[TOTPConfigKeys.ENABLED])
     issuer_name: str = field(default_factory=lambda: DEFAULTS[TOTPConfigKeys.ISSUER_NAME])
     digits: int = field(default_factory=lambda: DEFAULTS[TOTPConfigKeys.DIGITS])
     time_step: int = field(default_factory=lambda: DEFAULTS[TOTPConfigKeys.TIME_STEP])
@@ -72,11 +81,21 @@ class TOTPConfiguration:
 _config_instance: Optional[TOTPConfiguration] = None
 
 
+def _get_totp_config_dict() -> dict:
+    """
+    Get the TOTP_CONFIG dict from settings.
+
+    Returns:
+        Dict with TOTP configuration, empty dict if not configured
+    """
+    return blockauth_settings.get(TOTP_CONFIG_KEY, {})
+
+
 def get_totp_config() -> TOTPConfiguration:
     """
     Get the TOTP configuration instance.
 
-    Loads configuration from Django settings on first call
+    Loads configuration from Django settings TOTP_CONFIG on first call
     and caches the result.
 
     Returns:
@@ -91,26 +110,27 @@ def get_totp_config() -> TOTPConfiguration:
 
 
 def _load_config_from_settings() -> TOTPConfiguration:
-    """Load configuration from Django settings."""
+    """Load configuration from Django settings TOTP_CONFIG object."""
+    totp_config = _get_totp_config_dict()
+
     config = TOTPConfiguration(
-        enabled=blockauth_settings.get(TOTPConfigKeys.ENABLED, DEFAULTS[TOTPConfigKeys.ENABLED]),
-        issuer_name=blockauth_settings.get(TOTPConfigKeys.ISSUER_NAME, DEFAULTS[TOTPConfigKeys.ISSUER_NAME]),
-        digits=blockauth_settings.get(TOTPConfigKeys.DIGITS, DEFAULTS[TOTPConfigKeys.DIGITS]),
-        time_step=blockauth_settings.get(TOTPConfigKeys.TIME_STEP, DEFAULTS[TOTPConfigKeys.TIME_STEP]),
-        algorithm=blockauth_settings.get(TOTPConfigKeys.ALGORITHM, DEFAULTS[TOTPConfigKeys.ALGORITHM]),
-        window=blockauth_settings.get(TOTPConfigKeys.WINDOW, DEFAULTS[TOTPConfigKeys.WINDOW]),
-        secret_length=blockauth_settings.get(TOTPConfigKeys.SECRET_LENGTH, DEFAULTS[TOTPConfigKeys.SECRET_LENGTH]),
-        backup_codes_count=blockauth_settings.get(
+        issuer_name=totp_config.get(TOTPConfigKeys.ISSUER_NAME, DEFAULTS[TOTPConfigKeys.ISSUER_NAME]),
+        digits=totp_config.get(TOTPConfigKeys.DIGITS, DEFAULTS[TOTPConfigKeys.DIGITS]),
+        time_step=totp_config.get(TOTPConfigKeys.TIME_STEP, DEFAULTS[TOTPConfigKeys.TIME_STEP]),
+        algorithm=totp_config.get(TOTPConfigKeys.ALGORITHM, DEFAULTS[TOTPConfigKeys.ALGORITHM]),
+        window=totp_config.get(TOTPConfigKeys.WINDOW, DEFAULTS[TOTPConfigKeys.WINDOW]),
+        secret_length=totp_config.get(TOTPConfigKeys.SECRET_LENGTH, DEFAULTS[TOTPConfigKeys.SECRET_LENGTH]),
+        backup_codes_count=totp_config.get(
             TOTPConfigKeys.BACKUP_CODES_COUNT, DEFAULTS[TOTPConfigKeys.BACKUP_CODES_COUNT]
         ),
-        backup_code_length=blockauth_settings.get(
+        backup_code_length=totp_config.get(
             TOTPConfigKeys.BACKUP_CODE_LENGTH, DEFAULTS[TOTPConfigKeys.BACKUP_CODE_LENGTH]
         ),
-        max_attempts=blockauth_settings.get(TOTPConfigKeys.MAX_ATTEMPTS, DEFAULTS[TOTPConfigKeys.MAX_ATTEMPTS]),
-        lockout_duration=blockauth_settings.get(
+        max_attempts=totp_config.get(TOTPConfigKeys.MAX_ATTEMPTS, DEFAULTS[TOTPConfigKeys.MAX_ATTEMPTS]),
+        lockout_duration=totp_config.get(
             TOTPConfigKeys.LOCKOUT_DURATION, DEFAULTS[TOTPConfigKeys.LOCKOUT_DURATION]
         ),
-        require_confirmation=blockauth_settings.get(
+        require_confirmation=totp_config.get(
             TOTPConfigKeys.REQUIRE_CONFIRMATION, DEFAULTS[TOTPConfigKeys.REQUIRE_CONFIRMATION]
         ),
     )

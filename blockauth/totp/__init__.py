@@ -34,17 +34,23 @@ Usage:
 
 Configuration (in Django settings BLOCK_AUTH_SETTINGS):
     BLOCK_AUTH_SETTINGS = {
-        'TOTP_ENABLED': True,
-        'TOTP_ENCRYPTION_KEY': 'your-fernet-key-here',  # REQUIRED - generate with Fernet.generate_key()
-        'TOTP_ISSUER_NAME': 'YourAppName',
-        'TOTP_DIGITS': 6,
-        'TOTP_TIME_STEP': 30,
-        'TOTP_ALGORITHM': 'sha1',
-        'TOTP_WINDOW': 1,
-        'TOTP_SECRET_LENGTH': 32,  # 256 bits recommended
-        'TOTP_BACKUP_CODES_COUNT': 10,
-        'TOTP_MAX_ATTEMPTS': 5,
-        'TOTP_LOCKOUT_DURATION': 300,
+        # Enable TOTP via FEATURES dict
+        "FEATURES": {
+            "TOTP_2FA": True,
+        },
+        # TOTP configuration in dedicated object
+        "TOTP_CONFIG": {
+            "ENCRYPTION_KEY": "your-fernet-key",  # REQUIRED
+            "ISSUER_NAME": "YourAppName",
+            "DIGITS": 6,
+            "TIME_STEP": 30,
+            "ALGORITHM": "sha1",
+            "WINDOW": 1,
+            "SECRET_LENGTH": 32,
+            "BACKUP_CODES_COUNT": 10,
+            "MAX_ATTEMPTS": 5,
+            "LOCKOUT_DURATION": 300,
+        },
     }
 
 Generate encryption key:
@@ -57,13 +63,13 @@ Startup Validation (recommended in Django AppConfig):
 """
 from typing import Optional
 
-from ..settings import blockauth_settings
-from .config import get_totp_config, TOTPConfiguration
 from .constants import (
     DEFAULTS,
+    TOTP_CONFIG_KEY,
+    TOTP_FEATURE_FLAG,
+    TOTPAlgorithm,
     TOTPConfigKeys,
     TOTPStatus,
-    TOTPAlgorithm,
 )
 
 
@@ -71,21 +77,39 @@ def is_enabled() -> bool:
     """
     Check if TOTP 2FA is enabled in configuration.
 
+    Checks FEATURES["TOTP_2FA"] in BLOCK_AUTH_SETTINGS.
+
     Returns:
         True if TOTP module is enabled, False otherwise
     """
-    return blockauth_settings.get(
-        TOTPConfigKeys.ENABLED,
-        DEFAULTS[TOTPConfigKeys.ENABLED]
-    )
+    try:
+        from blockauth.utils.config import get_config
+        from blockauth.constants import ConfigKeys
+
+        features = get_config(ConfigKeys.FEATURES)
+        return features.get(TOTP_FEATURE_FLAG, False)
+    except (ImportError, AttributeError):
+        # Not in Django context or config not available
+        return False
+
+
+def get_totp_config():
+    """
+    Get TOTP configuration from TOTP_CONFIG object.
+
+    Returns:
+        TOTPConfiguration: Configuration object with all settings
+    """
+    from .config import get_totp_config as _get_config
+    return _get_config()
 
 
 def get_totp_service(encryption_service=None) -> 'TOTPService':
     """
     Get a configured TOTP service instance.
 
-    The encryption service is automatically loaded from Django settings
-    (TOTP_ENCRYPTION_KEY) if not provided explicitly.
+    The encryption service is automatically loaded from TOTP_CONFIG
+    if not provided explicitly.
 
     Args:
         encryption_service: Optional encryption service for secrets.
@@ -95,7 +119,7 @@ def get_totp_service(encryption_service=None) -> 'TOTPService':
         Configured TOTPService instance
 
     Raises:
-        TOTPEncryptionNotConfiguredError: If TOTP_ENCRYPTION_KEY is not configured
+        TOTPEncryptionNotConfiguredError: If ENCRYPTION_KEY is not configured
         ImportError: If required dependencies are not available
     """
     from .services import TOTPService, get_encryption_service
@@ -122,8 +146,9 @@ __all__ = [
     'get_totp_config',
 
     # Configuration
-    'TOTPConfiguration',
     'TOTPConfigKeys',
+    'TOTP_CONFIG_KEY',
+    'TOTP_FEATURE_FLAG',
     'DEFAULTS',
 
     # Constants

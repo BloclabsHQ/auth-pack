@@ -73,8 +73,8 @@ class Features:
     # Passkey/WebAuthn authentication
     PASSKEY_AUTH = 'PASSKEY_AUTH'        # WebAuthn/Passkey authentication (Face ID, Touch ID, Windows Hello)
 
-    # TOTP 2FA
-    TOTP_2FA = 'TOTP_2FA'                # TOTP-based two-factor authentication
+    # TOTP 2FA authentication
+    TOTP_2FA = 'TOTP_2FA'                # TOTP 2FA for web/desktop users
 
     @classmethod
     def all_features(cls):
@@ -158,7 +158,11 @@ class ConfigKeys:
     """
     # Feature configuration
     FEATURES = 'FEATURES'                    # Feature flags dictionary
-    
+
+    # Module configuration objects
+    TOTP_CONFIG = 'TOTP_CONFIG'              # TOTP 2FA configuration object
+    PASSKEY_CONFIG = 'PASSKEY_CONFIG'        # Passkey/WebAuthn configuration object
+
     # Authentication providers
     AUTH_PROVIDERS = 'AUTH_PROVIDERS'        # Social auth provider configuration
     

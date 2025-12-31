@@ -6,7 +6,7 @@ It enables users to authenticate using biometrics (Face ID, Touch ID, Windows He
 or hardware security keys (YubiKey, Titan Key).
 
 IMPORTANT: This is an OPTIONAL module that must be explicitly enabled.
-It will not be loaded unless FEATURES.PASSKEY_AUTH=True is set in BLOCK_AUTH_SETTINGS.
+It will not be loaded unless FEATURES['PASSKEY_AUTH']=True is set in BLOCK_AUTH_SETTINGS.
 
 Key Features:
 - Passwordless authentication using WebAuthn/FIDO2
@@ -17,18 +17,28 @@ Key Features:
 - Signature counter validation for clone detection
 - Framework-agnostic design
 
-Usage:
-    # In your project's settings.py
+Configuration (in Django settings BLOCK_AUTH_SETTINGS):
     BLOCK_AUTH_SETTINGS = {
-        'FEATURES': {
-            'PASSKEY_AUTH': True,  # Enable passkey authentication
+        # Enable passkey via FEATURES dict
+        "FEATURES": {
+            "PASSKEY_AUTH": True,
         },
-        'PASSKEY_RP_ID': 'example.com',
-        'PASSKEY_RP_NAME': 'My Application',
-        'PASSKEY_ALLOWED_ORIGINS': ['https://example.com'],
+        # Passkey configuration in dedicated object
+        "PASSKEY_CONFIG": {
+            "RP_ID": "example.com",
+            "RP_NAME": "My Application",
+            "ALLOWED_ORIGINS": ["https://example.com"],
+            "USER_VERIFICATION": "required",
+            "ATTESTATION": "none",
+            # Optional feature flags
+            "FEATURES": {
+                "DISCOVERABLE_CREDENTIALS": True,
+                "COUNTER_VALIDATION": True,
+            },
+        },
     }
 
-    # In your code
+Usage:
     from blockauth.passkey import is_enabled, get_passkey_service
 
     if is_enabled():
@@ -59,6 +69,8 @@ Usage:
 """
 
 from .constants import (
+    PASSKEY_CONFIG_KEY,
+    PASSKEY_FEATURE_FLAG,
     PasskeyConfigKeys,
     AttestationConveyance,
     AuthenticatorAttachment,
@@ -95,8 +107,12 @@ __all__ = [
     'get_passkey_config',
     'get_credential_store',
 
-    # Constants
+    # Configuration keys
+    'PASSKEY_CONFIG_KEY',
+    'PASSKEY_FEATURE_FLAG',
     'PasskeyConfigKeys',
+
+    # Constants
     'AttestationConveyance',
     'AuthenticatorAttachment',
     'ResidentKeyRequirement',
@@ -129,14 +145,16 @@ def is_enabled() -> bool:
     """
     Check if Passkey module is enabled in the current project.
 
+    Checks FEATURES["PASSKEY_AUTH"] in BLOCK_AUTH_SETTINGS.
+
     Returns:
-        bool: True if Features.PASSKEY_AUTH is enabled in settings
+        bool: True if PASSKEY_AUTH is enabled in settings
     """
     try:
         from blockauth.utils.config import get_config
         from blockauth.constants import ConfigKeys
         features = get_config(ConfigKeys.FEATURES)
-        return features.get('PASSKEY_AUTH', False)
+        return features.get(PASSKEY_FEATURE_FLAG, False)
     except (ImportError, AttributeError):
         # Not in Django context or config not available
         return False
@@ -144,7 +162,7 @@ def is_enabled() -> bool:
 
 def get_passkey_config():
     """
-    Get passkey configuration.
+    Get passkey configuration from PASSKEY_CONFIG object.
 
     Returns:
         PasskeyConfiguration: Configuration object with all settings
