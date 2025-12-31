@@ -61,6 +61,9 @@ class TOTPErrorCodes:
     STORAGE_ERROR = "totp_storage_error"
     CONFIGURATION_ERROR = "totp_configuration_error"
 
+    # Security errors
+    ENCRYPTION_REQUIRED = "totp_encryption_required"
+
 
 class TOTPStatus(str, Enum):
     """Status of TOTP 2FA for a user."""
@@ -112,4 +115,5 @@ ERROR_MESSAGES = {
     TOTPErrorCodes.ACCOUNT_LOCKED: "Account is temporarily locked due to failed attempts.",
     TOTPErrorCodes.STORAGE_ERROR: "Failed to store TOTP data.",
     TOTPErrorCodes.CONFIGURATION_ERROR: "TOTP configuration error.",
+    TOTPErrorCodes.ENCRYPTION_REQUIRED: "TOTP encryption service not configured. Secrets must be encrypted.",
 }

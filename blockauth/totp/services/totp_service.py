@@ -21,6 +21,7 @@ from ..exceptions import (
     TOTPAccountLockedError,
     TOTPAlreadyEnabledError,
     TOTPCodeReusedError,
+    TOTPEncryptionRequiredError,
     TOTPInvalidCodeError,
     TOTPInvalidSecretError,
     TOTPNotEnabledError,
@@ -354,18 +355,60 @@ class TOTPService:
     # =========================================================================
 
     def _encrypt_secret(self, secret: str) -> str:
-        """Encrypt a TOTP secret for storage."""
-        if self.encryption:
-            return self.encryption.encrypt(secret)
-        # If no encryption service, store as-is (not recommended for production)
-        logger.warning("TOTP secret stored without encryption - configure encryption service!")
-        return secret
+        """
+        Encrypt a TOTP secret for storage.
+
+        SECURITY: This method MUST encrypt secrets before storage.
+        Plaintext storage is a critical security violation.
+
+        Args:
+            secret: Base32-encoded TOTP secret
+
+        Returns:
+            Encrypted secret string
+
+        Raises:
+            TOTPEncryptionRequiredError: If encryption service is not configured
+        """
+        if not self.encryption:
+            logger.error(
+                "SECURITY VIOLATION: Attempted to store TOTP secret without encryption. "
+                "Configure an ISecretEncryption implementation."
+            )
+            raise TOTPEncryptionRequiredError(
+                "TOTP encryption service not configured. "
+                "Secrets MUST be encrypted before storage. "
+                "Configure encryption_service in TOTPService initialization."
+            )
+        return self.encryption.encrypt(secret)
 
     def _decrypt_secret(self, encrypted_secret: str) -> str:
-        """Decrypt a TOTP secret from storage."""
-        if self.encryption:
-            return self.encryption.decrypt(encrypted_secret)
-        return encrypted_secret
+        """
+        Decrypt a TOTP secret from storage.
+
+        SECURITY: This method requires encryption service to be configured.
+        If you have existing plaintext secrets, they must be migrated.
+
+        Args:
+            encrypted_secret: Encrypted TOTP secret
+
+        Returns:
+            Decrypted Base32-encoded TOTP secret
+
+        Raises:
+            TOTPEncryptionRequiredError: If encryption service is not configured
+        """
+        if not self.encryption:
+            logger.error(
+                "SECURITY VIOLATION: Attempted to decrypt TOTP secret without encryption service. "
+                "Configure an ISecretEncryption implementation."
+            )
+            raise TOTPEncryptionRequiredError(
+                "TOTP encryption service not configured. "
+                "Cannot decrypt secrets without encryption service. "
+                "Configure encryption_service in TOTPService initialization."
+            )
+        return self.encryption.decrypt(encrypted_secret)
 
     # =========================================================================
     # Setup Flow

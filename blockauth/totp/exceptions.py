@@ -160,3 +160,16 @@ class TOTPConfigurationError(TOTPError):
 
     error_code = TOTPErrorCodes.CONFIGURATION_ERROR
     default_message = ERROR_MESSAGES[TOTPErrorCodes.CONFIGURATION_ERROR]
+
+
+class TOTPEncryptionRequiredError(TOTPError):
+    """
+    Raised when encryption service is not configured.
+
+    SECURITY: TOTP secrets MUST be encrypted before storage.
+    Storing plaintext secrets is a critical security violation.
+    Configure an ISecretEncryption implementation before using TOTP.
+    """
+
+    error_code = TOTPErrorCodes.ENCRYPTION_REQUIRED
+    default_message = ERROR_MESSAGES[TOTPErrorCodes.ENCRYPTION_REQUIRED]
