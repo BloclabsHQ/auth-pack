@@ -6,6 +6,8 @@ Database models for storing TOTP secrets, backup codes, and verification state.
 import logging
 import secrets
 import uuid
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -212,7 +214,7 @@ class TOTP2FA(models.Model):
         self.last_failed_at = timezone.now()
 
         if self.failed_attempts >= max_attempts:
-            self.locked_until = timezone.now() + timezone.timedelta(seconds=lockout_duration)
+            self.locked_until = timezone.now() + timedelta(seconds=lockout_duration)
             logger.warning(
                 "TOTP account locked for user %s until %s (failed attempts: %d)",
                 self.user_id, self.locked_until, self.failed_attempts
@@ -395,7 +397,7 @@ class TOTPVerificationLog(models.Model):
         Returns:
             Number of logs deleted
         """
-        cutoff = timezone.now() - timezone.timedelta(days=days)
+        cutoff = timezone.now() - timedelta(days=days)
         deleted, _ = cls.objects.filter(created_at__lt=cutoff).delete()
         if deleted > 0:
             logger.info("TOTP verification log cleanup: deleted %d old entries", deleted)
