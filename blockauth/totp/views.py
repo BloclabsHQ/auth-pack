@@ -6,9 +6,11 @@ DRF views for TOTP 2FA operations.
 Security: All endpoints implement rate limiting per SECURITY_STANDARDS.md
 """
 import logging
+from typing import Any, Optional
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -84,8 +86,16 @@ class TOTPThrottles:
     STATUS = EnhancedThrottle(rate=(30, 60))
 
 
-def get_totp_service(encryption_service=None) -> TOTPService:
-    """Get configured TOTP service instance."""
+def get_totp_service(encryption_service: Optional[Any] = None) -> TOTPService:
+    """
+    Get configured TOTP service instance.
+
+    Args:
+        encryption_service: Optional encryption service implementing ISecretEncryption
+
+    Returns:
+        Configured TOTPService instance
+    """
     store = DjangoTOTP2FAStore()
     config = get_totp_config()
     return TOTPService(store=store, config=config, encryption_service=encryption_service)
@@ -109,7 +119,8 @@ class TOTPSetupView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
+        """Handle TOTP setup request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
         throttle = TOTPThrottles.SETUP
         if not throttle.allow_request(request, TOTPSubject.SETUP):
@@ -185,7 +196,8 @@ class TOTPConfirmView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
+        """Handle TOTP confirmation request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
         throttle = TOTPThrottles.CONFIRM
         if not throttle.allow_request(request, TOTPSubject.CONFIRM):
@@ -257,7 +269,8 @@ class TOTPVerifyView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
+        """Handle TOTP verification request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance - CRITICAL)
         throttle = TOTPThrottles.VERIFY
         if not throttle.allow_request(request, TOTPSubject.VERIFY):
@@ -346,7 +359,8 @@ class TOTPStatusView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
+        """Handle TOTP status request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
         throttle = TOTPThrottles.STATUS
         if not throttle.allow_request(request, TOTPSubject.STATUS):
@@ -391,7 +405,8 @@ class TOTPDisableView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
+        """Handle TOTP disable request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
         throttle = TOTPThrottles.DISABLE
         if not throttle.allow_request(request, TOTPSubject.DISABLE):
@@ -469,7 +484,8 @@ class TOTPRegenerateBackupCodesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
+        """Handle TOTP backup codes regeneration request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
         throttle = TOTPThrottles.REGENERATE_BACKUP
         if not throttle.allow_request(request, TOTPSubject.REGENERATE_BACKUP):
