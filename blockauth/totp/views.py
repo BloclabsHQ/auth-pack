@@ -4,10 +4,14 @@ TOTP 2FA API Views
 DRF views for TOTP 2FA operations.
 
 Security: All endpoints implement rate limiting per SECURITY_STANDARDS.md
+- Django @ratelimit decorators for primary rate limiting
+- EnhancedThrottle for additional controls (daily limits, failure tracking, cooldowns)
 """
 import logging
 from typing import Any, Optional
 
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -127,6 +131,7 @@ def get_totp_service(encryption_service: Optional[Any] = None) -> TOTPService:
     return TOTPService(store=store, config=config, encryption_service=encryption_service)
 
 
+@method_decorator(ratelimit(key='user', rate='3/h', method='POST', block=True), name='post')
 class TOTPSetupView(APIView):
     """
     Set up TOTP 2FA for the current user.
@@ -140,7 +145,7 @@ class TOTPSetupView(APIView):
 
     User must confirm setup with a valid TOTP code.
 
-    Rate Limit: 3/hour (sensitive operation)
+    Rate Limit: 3/hour (sensitive operation - per SECURITY_STANDARDS.md mfa_setup)
     """
 
     permission_classes = [IsAuthenticated]
@@ -208,6 +213,7 @@ class TOTPSetupView(APIView):
             )
 
 
+@method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True), name='post')
 class TOTPConfirmView(APIView):
     """
     Confirm TOTP setup with a valid code.
@@ -218,7 +224,7 @@ class TOTPConfirmView(APIView):
 
     Verifies the code and enables TOTP if valid.
 
-    Rate Limit: 5/minute (verification attempts)
+    Rate Limit: 5/minute (verification attempts - per SECURITY_STANDARDS.md)
     """
 
     permission_classes = [IsAuthenticated]
@@ -281,6 +287,7 @@ class TOTPConfirmView(APIView):
             )
 
 
+@method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True), name='post')
 class TOTPVerifyView(APIView):
     """
     Verify a TOTP code or backup code.
@@ -292,7 +299,7 @@ class TOTPVerifyView(APIView):
     Used during login to complete 2FA verification.
     Accepts both 6-digit TOTP codes and backup codes.
 
-    Rate Limit: 5/minute (CRITICAL - login security)
+    Rate Limit: 5/minute (CRITICAL - login security - per SECURITY_STANDARDS.md)
     """
 
     permission_classes = [IsAuthenticated]
@@ -372,6 +379,7 @@ class TOTPVerifyView(APIView):
             )
 
 
+@method_decorator(ratelimit(key='user', rate='30/m', method='GET', block=True), name='get')
 class TOTPStatusView(APIView):
     """
     Get TOTP status for the current user.
@@ -383,7 +391,7 @@ class TOTPStatusView(APIView):
     - Status (disabled, pending_confirmation, enabled)
     - Number of backup codes remaining
 
-    Rate Limit: 30/minute (read-only)
+    Rate Limit: 30/minute (read-only - per SECURITY_STANDARDS.md api_read)
     """
 
     permission_classes = [IsAuthenticated]
@@ -420,6 +428,7 @@ class TOTPStatusView(APIView):
         }).data)
 
 
+@method_decorator(ratelimit(key='user', rate='3/h', method='POST', block=True), name='post')
 class TOTPDisableView(APIView):
     """
     Disable TOTP 2FA for the current user.
@@ -430,7 +439,7 @@ class TOTPDisableView(APIView):
 
     Requires verification before disabling for security.
 
-    Rate Limit: 3/hour (sensitive security operation)
+    Rate Limit: 3/hour (sensitive security operation - per SECURITY_STANDARDS.md)
     """
 
     permission_classes = [IsAuthenticated]
@@ -499,6 +508,7 @@ class TOTPDisableView(APIView):
         return Response({'message': 'TOTP 2FA disabled successfully'})
 
 
+@method_decorator(ratelimit(key='user', rate='3/h', method='POST', block=True), name='post')
 class TOTPRegenerateBackupCodesView(APIView):
     """
     Regenerate backup codes.
@@ -510,7 +520,7 @@ class TOTPRegenerateBackupCodesView(APIView):
     Requires TOTP verification before regenerating codes.
     Old backup codes are invalidated.
 
-    Rate Limit: 3/hour (sensitive operation)
+    Rate Limit: 3/hour (sensitive operation - per SECURITY_STANDARDS.md mfa_setup)
     """
 
     permission_classes = [IsAuthenticated]
