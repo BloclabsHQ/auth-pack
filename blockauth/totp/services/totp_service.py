@@ -3,6 +3,8 @@ TOTP Service - RFC 6238 Implementation
 
 Implements Time-based One-Time Password (TOTP) algorithm per RFC 6238,
 with backup codes, rate limiting, and replay attack prevention.
+
+Security: All sensitive operations are audit logged per SECURITY_STANDARDS.md
 """
 import base64
 import hashlib
@@ -14,6 +16,8 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+
+from blockauth.utils.audit import audit_trail
 
 from ..config import get_totp_config, TOTPConfiguration
 from ..constants import TOTPAlgorithm, TOTPStatus
@@ -425,6 +429,7 @@ class TOTPService:
     # Setup Flow
     # =========================================================================
 
+    @audit_trail(event_type="mfa.totp.setup", severity="INFO")
     def setup_totp(
         self,
         user_id: str,
@@ -501,6 +506,7 @@ class TOTPService:
             logger.error("TOTP setup failed for user %s: %s", user_id, e)
             raise TOTPSetupError(f"Failed to set up TOTP: {e}")
 
+    @audit_trail(event_type="mfa.totp.enabled", severity="INFO")
     def confirm_setup(self, user_id: str, code: str) -> bool:
         """
         Confirm TOTP setup with a valid code.
@@ -555,6 +561,7 @@ class TOTPService:
         logger.info("TOTP enabled for user %s", user_id)
         return True
 
+    @audit_trail(event_type="mfa.totp.disabled", severity="WARNING")
     def disable(self, user_id: str) -> bool:
         """
         Disable TOTP 2FA for a user.
@@ -574,6 +581,7 @@ class TOTPService:
     # Verification
     # =========================================================================
 
+    @audit_trail(event_type="mfa.totp.verify", severity="INFO")
     def verify(
         self,
         user_id: str,
@@ -799,6 +807,7 @@ class TOTPService:
         totp_data = self.store.get_by_user_id(user_id)
         return totp_data.backup_codes_remaining if totp_data else 0
 
+    @audit_trail(event_type="mfa.backup_codes.regenerated", severity="WARNING")
     def regenerate_backup_codes(self, user_id: str) -> List[str]:
         """
         Regenerate backup codes for a user.
