@@ -13,8 +13,19 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from blockauth.utils.rate_limiter import EnhancedThrottle, get_client_ip
+
+# Import documentation from separate docs module
+from .docs import (
+    totp_setup_docs,
+    totp_confirm_docs,
+    totp_verify_docs,
+    totp_status_docs,
+    totp_disable_docs,
+    totp_regenerate_backup_codes_docs,
+)
 
 from .config import get_totp_config
 from .constants import TOTPStatus
@@ -119,6 +130,7 @@ class TOTPSetupView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_setup_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP setup request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
@@ -196,6 +208,7 @@ class TOTPConfirmView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_confirm_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP confirmation request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
@@ -269,6 +282,7 @@ class TOTPVerifyView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_verify_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP verification request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance - CRITICAL)
@@ -359,6 +373,7 @@ class TOTPStatusView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_status_docs)
     def get(self, request: Request) -> Response:
         """Handle TOTP status request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
@@ -405,6 +420,7 @@ class TOTPDisableView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_disable_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP disable request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
@@ -484,6 +500,7 @@ class TOTPRegenerateBackupCodesView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(**totp_regenerate_backup_codes_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP backup codes regeneration request."""
         # Rate limiting check (SECURITY_STANDARDS.md compliance)
