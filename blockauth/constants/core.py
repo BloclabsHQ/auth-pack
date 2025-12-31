@@ -73,6 +73,9 @@ class Features:
     # Passkey/WebAuthn authentication
     PASSKEY_AUTH = 'PASSKEY_AUTH'        # WebAuthn/Passkey authentication (Face ID, Touch ID, Windows Hello)
 
+    # TOTP 2FA
+    TOTP_2FA = 'TOTP_2FA'                # TOTP-based two-factor authentication
+
     @classmethod
     def all_features(cls):
         """
@@ -98,6 +101,7 @@ class Features:
             cls.WALLET_EMAIL_ADD,
             cls.SOCIAL_AUTH,
             cls.PASSKEY_AUTH,
+            cls.TOTP_2FA,
         ]
 
 
@@ -237,3 +241,11 @@ class URLNames:
     PASSKEY_AUTH_VERIFY = 'passkey-auth-verify'
     PASSKEY_CREDENTIALS = 'passkey-credentials'
     PASSKEY_CREDENTIAL_DETAIL = 'passkey-credential-detail'
+
+    # TOTP 2FA
+    TOTP_SETUP = 'totp-setup'
+    TOTP_CONFIRM = 'totp-confirm'
+    TOTP_VERIFY = 'totp-verify'
+    TOTP_STATUS = 'totp-status'
+    TOTP_DISABLE = 'totp-disable'
+    TOTP_REGENERATE_BACKUP_CODES = 'totp-regenerate-backup-codes'
