@@ -31,6 +31,7 @@ class TOTPConfigKeys:
 
     # Security
     REQUIRE_CONFIRMATION = "TOTP_REQUIRE_CONFIRMATION"
+    ENCRYPTION_KEY = "TOTP_ENCRYPTION_KEY"  # Required for secret encryption
 
 
 class TOTPErrorCodes:

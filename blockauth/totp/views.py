@@ -101,14 +101,29 @@ def get_totp_service(encryption_service: Optional[Any] = None) -> TOTPService:
     """
     Get configured TOTP service instance.
 
+    The encryption service is automatically loaded from Django settings
+    (TOTP_ENCRYPTION_KEY) if not provided explicitly.
+
     Args:
-        encryption_service: Optional encryption service implementing ISecretEncryption
+        encryption_service: Optional encryption service implementing ISecretEncryption.
+                           If None, uses the configured encryption from settings.
 
     Returns:
         Configured TOTPService instance
+
+    Note:
+        TOTP_ENCRYPTION_KEY must be configured in BLOCK_AUTH_SETTINGS for
+        TOTP to work. Without encryption, secrets cannot be stored securely.
     """
+    from .services.encryption import get_encryption_service
+
     store = DjangoTOTP2FAStore()
     config = get_totp_config()
+
+    # Use provided encryption service or load from settings
+    if encryption_service is None:
+        encryption_service = get_encryption_service()
+
     return TOTPService(store=store, config=config, encryption_service=encryption_service)
 
 

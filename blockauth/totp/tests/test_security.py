@@ -298,5 +298,136 @@ class TestSecretLengthSecurity(unittest.TestCase):
         self.assertIn("20 bytes", str(context.exception))
 
 
+# =============================================================================
+# Fernet Encryption Service Tests
+# =============================================================================
+
+class TestFernetSecretEncryption(unittest.TestCase):
+    """Test Fernet-based encryption service."""
+
+    def test_encryption_requires_master_key(self):
+        """Encryption service should require a master key."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        with self.assertRaises(ValueError):
+            FernetSecretEncryption(master_key="")
+
+        with self.assertRaises(ValueError):
+            FernetSecretEncryption(master_key=None)
+
+    def test_encrypt_decrypt_roundtrip(self):
+        """Encrypted data should decrypt back to original."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption = FernetSecretEncryption(master_key="test-master-key-12345")
+        original = "JBSWY3DPEHPK3PXP"
+
+        encrypted = encryption.encrypt(original)
+        decrypted = encryption.decrypt(encrypted)
+
+        self.assertEqual(decrypted, original)
+        self.assertNotEqual(encrypted, original)
+
+    def test_encrypted_data_is_different_each_time(self):
+        """Encryption should use random IV, producing different ciphertext."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption = FernetSecretEncryption(master_key="test-master-key-12345")
+        original = "JBSWY3DPEHPK3PXP"
+
+        encrypted1 = encryption.encrypt(original)
+        encrypted2 = encryption.encrypt(original)
+
+        # Same plaintext should produce different ciphertext (random IV)
+        self.assertNotEqual(encrypted1, encrypted2)
+
+        # Both should decrypt to the same original
+        self.assertEqual(encryption.decrypt(encrypted1), original)
+        self.assertEqual(encryption.decrypt(encrypted2), original)
+
+    def test_wrong_key_fails_decryption(self):
+        """Decryption with wrong key should fail."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption1 = FernetSecretEncryption(master_key="key-one-12345")
+        encryption2 = FernetSecretEncryption(master_key="key-two-12345")
+
+        encrypted = encryption1.encrypt("secret-data")
+
+        with self.assertRaises(ValueError) as context:
+            encryption2.decrypt(encrypted)
+
+        self.assertIn("invalid token", str(context.exception))
+
+    def test_encrypt_empty_string_fails(self):
+        """Encrypting empty string should fail."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption = FernetSecretEncryption(master_key="test-master-key-12345")
+
+        with self.assertRaises(ValueError):
+            encryption.encrypt("")
+
+    def test_decrypt_empty_string_fails(self):
+        """Decrypting empty string should fail."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption = FernetSecretEncryption(master_key="test-master-key-12345")
+
+        with self.assertRaises(ValueError):
+            encryption.decrypt("")
+
+    def test_decrypt_corrupted_data_fails(self):
+        """Decrypting corrupted data should fail."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+
+        encryption = FernetSecretEncryption(master_key="test-master-key-12345")
+
+        with self.assertRaises(ValueError):
+            encryption.decrypt("not-valid-encrypted-data")
+
+    def test_valid_fernet_key_works(self):
+        """Pre-generated valid Fernet key should work directly."""
+        from blockauth.totp.services.encryption import FernetSecretEncryption
+        from cryptography.fernet import Fernet
+
+        # Generate a valid Fernet key
+        valid_key = Fernet.generate_key().decode()
+
+        encryption = FernetSecretEncryption(master_key=valid_key)
+        original = "test-secret"
+
+        encrypted = encryption.encrypt(original)
+        decrypted = encryption.decrypt(encrypted)
+
+        self.assertEqual(decrypted, original)
+
+
+class TestGetEncryptionService(unittest.TestCase):
+    """Test encryption service factory function."""
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_returns_none_when_key_not_configured(self, mock_settings):
+        """Should return None when encryption key is not configured."""
+        from blockauth.totp.services.encryption import get_encryption_service
+
+        mock_settings.get.return_value = None
+
+        result = get_encryption_service()
+
+        self.assertIsNone(result)
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_returns_service_when_key_configured(self, mock_settings):
+        """Should return encryption service when key is configured."""
+        from blockauth.totp.services.encryption import get_encryption_service, FernetSecretEncryption
+
+        mock_settings.get.return_value = "test-encryption-key-12345"
+
+        result = get_encryption_service()
+
+        self.assertIsInstance(result, FernetSecretEncryption)
+
+
 if __name__ == '__main__':
     unittest.main()
