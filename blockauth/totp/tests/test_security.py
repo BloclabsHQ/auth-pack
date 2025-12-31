@@ -407,13 +407,28 @@ class TestGetEncryptionService(unittest.TestCase):
     """Test encryption service factory function."""
 
     @patch('blockauth.totp.services.encryption.blockauth_settings')
-    def test_returns_none_when_key_not_configured(self, mock_settings):
-        """Should return None when encryption key is not configured."""
+    def test_raises_error_when_key_not_configured(self, mock_settings):
+        """Should raise error when encryption key is not configured."""
+        from blockauth.totp.services.encryption import (
+            get_encryption_service,
+            TOTPEncryptionNotConfiguredError
+        )
+
+        mock_settings.get.return_value = None
+
+        with self.assertRaises(TOTPEncryptionNotConfiguredError) as context:
+            get_encryption_service()
+
+        self.assertIn("TOTP_ENCRYPTION_KEY", str(context.exception))
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_returns_none_when_key_not_configured_and_not_raising(self, mock_settings):
+        """Should return None when key not configured and raise_if_missing=False."""
         from blockauth.totp.services.encryption import get_encryption_service
 
         mock_settings.get.return_value = None
 
-        result = get_encryption_service()
+        result = get_encryption_service(raise_if_missing=False)
 
         self.assertIsNone(result)
 
@@ -427,6 +442,54 @@ class TestGetEncryptionService(unittest.TestCase):
         result = get_encryption_service()
 
         self.assertIsInstance(result, FernetSecretEncryption)
+
+
+class TestValidateTOTPEncryptionConfig(unittest.TestCase):
+    """Test TOTP encryption configuration validation."""
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_passes_when_totp_disabled(self, mock_settings):
+        """Should pass validation when TOTP is disabled."""
+        from blockauth.totp.services.encryption import validate_totp_encryption_config
+        from blockauth.totp.constants import TOTPConfigKeys
+
+        mock_settings.get.side_effect = lambda key, default=None: {
+            TOTPConfigKeys.ENABLED: False,
+        }.get(key, default)
+
+        result = validate_totp_encryption_config()
+        self.assertTrue(result)
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_fails_when_totp_enabled_without_key(self, mock_settings):
+        """Should fail when TOTP enabled but no encryption key."""
+        from blockauth.totp.services.encryption import (
+            validate_totp_encryption_config,
+            TOTPEncryptionNotConfiguredError
+        )
+        from blockauth.totp.constants import TOTPConfigKeys
+
+        mock_settings.get.side_effect = lambda key, default=None: {
+            TOTPConfigKeys.ENABLED: True,
+            TOTPConfigKeys.ENCRYPTION_KEY: None,
+        }.get(key, default)
+
+        with self.assertRaises(TOTPEncryptionNotConfiguredError):
+            validate_totp_encryption_config()
+
+    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    def test_passes_when_totp_enabled_with_valid_key(self, mock_settings):
+        """Should pass when TOTP enabled with valid encryption key."""
+        from blockauth.totp.services.encryption import validate_totp_encryption_config
+        from blockauth.totp.constants import TOTPConfigKeys
+
+        mock_settings.get.side_effect = lambda key, default=None: {
+            TOTPConfigKeys.ENABLED: True,
+            TOTPConfigKeys.ENCRYPTION_KEY: "valid-test-encryption-key-12345",
+        }.get(key, default)
+
+        result = validate_totp_encryption_config()
+        self.assertTrue(result)
 
 
 if __name__ == '__main__':
