@@ -2,6 +2,8 @@
 TOTP 2FA API Views
 
 DRF views for TOTP 2FA operations.
+
+Security: All endpoints implement rate limiting per SECURITY_STANDARDS.md
 """
 import logging
 from typing import Optional
@@ -10,6 +12,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from blockauth.utils.rate_limiter import EnhancedThrottle
 
 from .config import get_totp_config
 from .constants import TOTPStatus
@@ -41,6 +45,46 @@ from .storage import DjangoTOTP2FAStore
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# TOTP Rate Limiting Configuration (per SECURITY_STANDARDS.md)
+# =============================================================================
+
+class TOTPSubject:
+    """Rate limiting subjects for TOTP operations."""
+    SETUP = "totp_setup"
+    CONFIRM = "totp_confirm"
+    VERIFY = "totp_verify"
+    DISABLE = "totp_disable"
+    REGENERATE_BACKUP = "totp_regenerate_backup"
+    STATUS = "totp_status"
+
+
+class TOTPThrottles:
+    """
+    Centralized TOTP throttle configurations.
+
+    Security Standards Compliance:
+    - Setup: 3/hour (sensitive operation, creates secrets)
+    - Confirm: 5/minute (verification during setup)
+    - Verify: 5/minute (login verification - critical security)
+    - Disable: 3/hour (sensitive security operation)
+    - Regenerate backup: 3/hour (sensitive operation)
+    - Status: 30/minute (read-only, less restrictive)
+    """
+    # Setup: 3/hour, max 5 failures triggers 30-min cooldown
+    SETUP = EnhancedThrottle(rate=(3, 3600), daily_limit=10, max_failures=5, cooldown_minutes=30)
+    # Confirm: 5/minute during setup flow
+    CONFIRM = EnhancedThrottle(rate=(5, 60), max_failures=5, cooldown_minutes=15)
+    # Verify: 5/minute - CRITICAL for login security
+    VERIFY = EnhancedThrottle(rate=(5, 60), max_failures=5, cooldown_minutes=15)
+    # Disable: 3/hour (sensitive operation)
+    DISABLE = EnhancedThrottle(rate=(3, 3600), max_failures=3, cooldown_minutes=30)
+    # Regenerate backup codes: 3/hour
+    REGENERATE_BACKUP = EnhancedThrottle(rate=(3, 3600), daily_limit=5, max_failures=3, cooldown_minutes=30)
+    # Status: 30/minute (read-only)
+    STATUS = EnhancedThrottle(rate=(30, 60))
+
+
 def get_client_ip(request) -> Optional[str]:
     """Extract client IP from request."""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -68,11 +112,26 @@ class TOTPSetupView(APIView):
     - Backup codes for recovery
 
     User must confirm setup with a valid TOTP code.
+
+    Rate Limit: 3/hour (sensitive operation)
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        throttle = TOTPThrottles.SETUP
+        if not throttle.allow_request(request, TOTPSubject.SETUP):
+            logger.warning(
+                "TOTP setup rate limit exceeded for user %s",
+                request.user.id,
+                extra={'user_id': str(request.user.id)}
+            )
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many setup attempts. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = TOTPSetupRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -95,6 +154,9 @@ class TOTPSetupView(APIView):
             })
             response_serializer.is_valid(raise_exception=True)
 
+            # Record success
+            throttle.record_success(request, TOTPSubject.SETUP)
+
             logger.info(
                 "TOTP setup initiated for user %s",
                 request.user.id,
@@ -109,6 +171,7 @@ class TOTPSetupView(APIView):
                 status=status.HTTP_409_CONFLICT
             )
         except TOTPError as e:
+            throttle.record_failure(request, TOTPSubject.SETUP)
             logger.error("TOTP setup error: %s", e)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
@@ -125,11 +188,26 @@ class TOTPConfirmView(APIView):
     Body: { "code": "123456" }
 
     Verifies the code and enables TOTP if valid.
+
+    Rate Limit: 5/minute (verification attempts)
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        throttle = TOTPThrottles.CONFIRM
+        if not throttle.allow_request(request, TOTPSubject.CONFIRM):
+            logger.warning(
+                "TOTP confirm rate limit exceeded for user %s",
+                request.user.id,
+                extra={'user_id': str(request.user.id)}
+            )
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many confirmation attempts. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = TOTPConfirmRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -140,6 +218,9 @@ class TOTPConfirmView(APIView):
                 user_id=str(request.user.id),
                 code=serializer.validated_data['code']
             )
+
+            # Record success
+            throttle.record_success(request, TOTPSubject.CONFIRM)
 
             logger.info(
                 "TOTP enabled for user %s",
@@ -155,11 +236,13 @@ class TOTPConfirmView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except TOTPInvalidCodeError as e:
+            throttle.record_failure(request, TOTPSubject.CONFIRM)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
                 status=status.HTTP_400_BAD_REQUEST
             )
         except TOTPError as e:
+            throttle.record_failure(request, TOTPSubject.CONFIRM)
             logger.error("TOTP confirm error: %s", e)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
@@ -177,11 +260,27 @@ class TOTPVerifyView(APIView):
 
     Used during login to complete 2FA verification.
     Accepts both 6-digit TOTP codes and backup codes.
+
+    Rate Limit: 5/minute (CRITICAL - login security)
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance - CRITICAL)
+        throttle = TOTPThrottles.VERIFY
+        if not throttle.allow_request(request, TOTPSubject.VERIFY):
+            logger.warning(
+                "TOTP verify rate limit exceeded for user %s from IP %s",
+                request.user.id,
+                get_client_ip(request),
+                extra={'user_id': str(request.user.id), 'ip': get_client_ip(request)}
+            )
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many verification attempts. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = TOTPVerifyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -202,20 +301,26 @@ class TOTPVerifyView(APIView):
             })
             response_serializer.is_valid(raise_exception=True)
 
+            # Record success
+            throttle.record_success(request, TOTPSubject.VERIFY)
+
             return Response(response_serializer.data)
 
         except TOTPAccountLockedError as e:
+            throttle.record_failure(request, TOTPSubject.VERIFY)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
                 status=status.HTTP_423_LOCKED
             )
         except TOTPTooManyAttemptsError as e:
+            throttle.record_failure(request, TOTPSubject.VERIFY)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
                 status=status.HTTP_429_TOO_MANY_REQUESTS
             )
         except (TOTPCodeReusedError, TOTPVerificationError, TOTPInvalidCodeError,
                 TOTPInvalidBackupCodeError) as e:
+            throttle.record_failure(request, TOTPSubject.VERIFY)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
                 status=status.HTTP_401_UNAUTHORIZED
@@ -226,6 +331,7 @@ class TOTPVerifyView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except TOTPError as e:
+            throttle.record_failure(request, TOTPSubject.VERIFY)
             logger.error("TOTP verify error: %s", e)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
@@ -243,11 +349,21 @@ class TOTPStatusView(APIView):
     - Whether TOTP is enabled
     - Status (disabled, pending_confirmation, enabled)
     - Number of backup codes remaining
+
+    Rate Limit: 30/minute (read-only)
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        throttle = TOTPThrottles.STATUS
+        if not throttle.allow_request(request, TOTPSubject.STATUS):
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many requests. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         service = get_totp_service()
         store = DjangoTOTP2FAStore()
 
@@ -278,11 +394,26 @@ class TOTPDisableView(APIView):
     Body: { "code": "123456" } or { "password": "user-password" }
 
     Requires verification before disabling for security.
+
+    Rate Limit: 3/hour (sensitive security operation)
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        throttle = TOTPThrottles.DISABLE
+        if not throttle.allow_request(request, TOTPSubject.DISABLE):
+            logger.warning(
+                "TOTP disable rate limit exceeded for user %s",
+                request.user.id,
+                extra={'user_id': str(request.user.id)}
+            )
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many disable attempts. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = TOTPDisableRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -302,6 +433,7 @@ class TOTPDisableView(APIView):
                     user_agent=request.META.get('HTTP_USER_AGENT', '')
                 )
             except TOTPError as e:
+                throttle.record_failure(request, TOTPSubject.DISABLE)
                 return Response(
                     TOTPErrorSerializer(e.to_dict()).data,
                     status=status.HTTP_401_UNAUTHORIZED
@@ -309,6 +441,7 @@ class TOTPDisableView(APIView):
         elif password:
             # Verify password
             if not request.user.check_password(password):
+                throttle.record_failure(request, TOTPSubject.DISABLE)
                 return Response(
                     {'error': 'invalid_password', 'message': 'Invalid password'},
                     status=status.HTTP_401_UNAUTHORIZED
@@ -316,6 +449,9 @@ class TOTPDisableView(APIView):
 
         # Disable TOTP
         service.disable(str(request.user.id))
+
+        # Record success
+        throttle.record_success(request, TOTPSubject.DISABLE)
 
         logger.info(
             "TOTP disabled for user %s",
@@ -336,11 +472,26 @@ class TOTPRegenerateBackupCodesView(APIView):
 
     Requires TOTP verification before regenerating codes.
     Old backup codes are invalidated.
+
+    Rate Limit: 3/hour (sensitive operation)
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        throttle = TOTPThrottles.REGENERATE_BACKUP
+        if not throttle.allow_request(request, TOTPSubject.REGENERATE_BACKUP):
+            logger.warning(
+                "TOTP backup codes regenerate rate limit exceeded for user %s",
+                request.user.id,
+                extra={'user_id': str(request.user.id)}
+            )
+            return Response(
+                {"error": "rate_limit_exceeded", "message": "Too many regeneration attempts. Please try again later."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         serializer = TOTPVerifyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -364,6 +515,9 @@ class TOTPRegenerateBackupCodesView(APIView):
             })
             response_serializer.is_valid(raise_exception=True)
 
+            # Record success
+            throttle.record_success(request, TOTPSubject.REGENERATE_BACKUP)
+
             logger.info(
                 "Backup codes regenerated for user %s",
                 request.user.id,
@@ -373,6 +527,7 @@ class TOTPRegenerateBackupCodesView(APIView):
             return Response(response_serializer.data)
 
         except TOTPError as e:
+            throttle.record_failure(request, TOTPSubject.REGENERATE_BACKUP)
             return Response(
                 TOTPErrorSerializer(e.to_dict()).data,
                 status=status.HTTP_400_BAD_REQUEST
