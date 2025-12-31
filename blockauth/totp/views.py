@@ -6,14 +6,13 @@ DRF views for TOTP 2FA operations.
 Security: All endpoints implement rate limiting per SECURITY_STANDARDS.md
 """
 import logging
-from typing import Optional
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from blockauth.utils.rate_limiter import EnhancedThrottle
+from blockauth.utils.rate_limiter import EnhancedThrottle, get_client_ip
 
 from .config import get_totp_config
 from .constants import TOTPStatus
@@ -83,14 +82,6 @@ class TOTPThrottles:
     REGENERATE_BACKUP = EnhancedThrottle(rate=(3, 3600), daily_limit=5, max_failures=3, cooldown_minutes=30)
     # Status: 30/minute (read-only)
     STATUS = EnhancedThrottle(rate=(30, 60))
-
-
-def get_client_ip(request) -> Optional[str]:
-    """Extract client IP from request."""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        return x_forwarded_for.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR')
 
 
 def get_totp_service(encryption_service=None) -> TOTPService:
