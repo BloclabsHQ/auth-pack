@@ -1,19 +1,12 @@
 import uuid
 import json
-from enum import Enum
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import models
 from django.core.serializers.json import DjangoJSONEncoder
 
-
-class AuthenticationType(models.TextChoices):
-    EMAIL = 'EMAIL', 'Email'
-    WALLET = 'WALLET', 'Wallet'
-    GOOGLE = 'GOOGLE', 'Google'
-    FACEBOOK = 'FACEBOOK', 'Facebook'
-    LINKEDIN = 'LINKEDIN', 'LinkedIn'
-    PASSWORDLESS = 'PASSWORDLESS', 'Passwordless'
+# Import from enums module (Django-independent) for backwards compatibility
+from blockauth.enums import AuthenticationType
 
 
 class BlockUser(AbstractBaseUser):

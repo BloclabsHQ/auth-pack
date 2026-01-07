@@ -4,7 +4,9 @@ from datetime import datetime, date
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 from django.contrib.auth.password_validation import get_default_password_validators
-from blockauth.models.user import AuthenticationType
+
+# Import from enums module (Django-independent, no AppRegistryNotReady errors)
+from blockauth.enums import AuthenticationType
 
 
 def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[str, Any]:
@@ -62,16 +64,16 @@ def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any
 def get_authentication_types_display(authentication_types: List[str]) -> List[str]:
     """
     Get human-readable display names for authentication types.
-    
+
     Args:
         authentication_types: List of authentication type codes
-        
+
     Returns:
         List of human-readable authentication type names
     """
     if not authentication_types:
         return []
-    
+
     display_names = []
     for auth_type in authentication_types:
         try:
@@ -80,17 +82,17 @@ def get_authentication_types_display(authentication_types: List[str]) -> List[st
         except ValueError:
             # If not a valid choice, use the original value
             display_names.append(auth_type)
-    
+
     return display_names
 
 
 def validate_authentication_type(auth_type: str) -> bool:
     """
     Validate if an authentication type is supported.
-    
+
     Args:
         auth_type: Authentication type to validate
-        
+
     Returns:
         True if valid, False otherwise
     """
@@ -104,12 +106,12 @@ def validate_authentication_type(auth_type: str) -> bool:
 def get_available_authentication_types() -> List[Dict[str, str]]:
     """
     Get all available authentication types with their codes and labels.
-    
+
     Returns:
         List of dictionaries with 'code' and 'label' keys
     """
     return [
-        {'code': choice[0], 'label': choice[1]} 
+        {'code': choice[0], 'label': choice[1]}
         for choice in AuthenticationType.choices
     ]
 

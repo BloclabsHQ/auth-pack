@@ -28,11 +28,19 @@ Static utilities (no storage needed):
 default_app_config = 'blockauth.apps.BlockAuthConfig'
 
 # =============================================================================
+# Direct imports (Django-independent, no AppRegistryNotReady errors)
+# =============================================================================
+from blockauth.enums import AuthenticationType
+
+# =============================================================================
 # Lazy imports to avoid AppRegistryNotReady errors
 # =============================================================================
 # Django models can't be imported until apps are ready, so we use lazy loading
 
 __all__ = [
+    # Enums (Django-independent)
+    'AuthenticationType',
+
     # TOTP
     'TOTPService',
     'ISecretEncryption',

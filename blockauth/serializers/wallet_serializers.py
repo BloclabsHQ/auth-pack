@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.core.validators import EmailValidator
-from blockauth.models.user import AuthenticationType
+from blockauth.enums import AuthenticationType
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.web3.wallet import WalletAuthenticator
 from blockauth.utils.generics import model_to_json
