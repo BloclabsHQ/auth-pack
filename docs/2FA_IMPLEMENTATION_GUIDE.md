@@ -108,15 +108,10 @@ class TwoFactorProvider(ABC):
 ```python
 # Extends existing feature flag system
 BLOCK_AUTH_SETTINGS = {
-    "FEATURES": {
-        # Existing features...
-        "TWO_FACTOR_AUTH": True,  # Master switch for 2FA
-        "TOTP_2FA": True,         # TOTP authenticator apps
-        "SMS_2FA": True,          # SMS-based 2FA
-        "EMAIL_2FA": True,        # Email-based 2FA
-        "BACKUP_CODES": True,     # Backup recovery codes
-        "TRUSTED_DEVICES": True,  # Remember device feature
-    },
+    # TOTP 2FA Configuration
+    "TOTP_ENABLED": True,
+    "TOTP_ENCRYPTION_KEY": "your-fernet-key",  # Generate with: Fernet.generate_key()
+    "TOTP_ISSUER_NAME": "BlockAuth",
     
     "TWO_FACTOR": {
         "ENFORCE_FOR_ADMIN": False,  # Require 2FA for admin users
@@ -760,23 +755,19 @@ def enhanced_login_view(original_login_func):
 
 BLOCK_AUTH_SETTINGS = {
     # Existing settings...
-    
-    "FEATURES": {
-        # Existing features...
-        "TWO_FACTOR_AUTH": True,      # Enable 2FA system
-        "TOTP_2FA": True,             # Enable TOTP
-        "SMS_2FA": False,             # Disable SMS (uses existing OTP)
-        "EMAIL_2FA": False,           # Disable Email (uses existing OTP)
-        "BACKUP_CODES": True,         # Enable backup codes
-        "TRUSTED_DEVICES": True,      # Enable device trust
-    },
-    
+
+    # TOTP 2FA Configuration
+    "TOTP_ENABLED": True,
+    "TOTP_ENCRYPTION_KEY": "your-fernet-key",  # REQUIRED - Generate with Fernet.generate_key()
+    "TOTP_ISSUER_NAME": "YourAppName",     # Shows in authenticator apps
+    "TOTP_DIGITS": 6,                 # Code length (6 or 8)
+    "TOTP_TIME_STEP": 30,             # Seconds per code
+    "TOTP_ALGORITHM": "sha1",         # sha1, sha256, sha512
+    "TOTP_SECRET_LENGTH": 32,         # 256 bits recommended
+    "TOTP_BACKUP_CODES_COUNT": 10,    # Backup recovery codes
+
     "TWO_FACTOR": {
-        # TOTP Configuration
-        "TOTP_ISSUER": "YourAppName",     # Shows in authenticator apps
-        "TOTP_DIGITS": 6,                 # Code length (6 or 8)
-        "TOTP_INTERVAL": 30,              # Seconds per code
-        "TOTP_ALGORITHM": "SHA1",         # SHA1, SHA256, SHA512
+        # Additional 2FA Settings (future expansion)
         
         # Backup Codes
         "BACKUP_CODES_COUNT": 10,         # Number of codes to generate

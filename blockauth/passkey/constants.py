@@ -3,56 +3,86 @@ Passkey/WebAuthn Constants for BlockAuth
 
 This module defines all constants, enums, and configuration keys
 for the Passkey authentication module.
+
+Configuration Pattern:
+    BLOCK_AUTH_SETTINGS = {
+        "FEATURES": {
+            "PASSKEY_AUTH": True,  # Enable passkey via FEATURES dict
+        },
+        "PASSKEY_CONFIG": {
+            "RP_ID": "example.com",
+            "RP_NAME": "My Application",
+            "ALLOWED_ORIGINS": ["https://example.com"],
+            # ... other passkey settings
+        },
+    }
 """
 
 from enum import Enum, IntEnum
 
 
-class PasskeyConfigKeys:
-    """Configuration key names for BLOCK_AUTH_SETTINGS"""
+# Feature flag name (in FEATURES dict)
+PASSKEY_FEATURE_FLAG = "PASSKEY_AUTH"
 
-    # Master switch
-    ENABLED = 'PASSKEY_ENABLED'
+# Config object name
+PASSKEY_CONFIG_KEY = "PASSKEY_CONFIG"
+
+
+class PasskeyConfigKeys:
+    """
+    Configuration key names for PASSKEY_CONFIG object.
+
+    These keys are used within the PASSKEY_CONFIG object, NOT at root level.
+
+    Example:
+        BLOCK_AUTH_SETTINGS = {
+            "FEATURES": {"PASSKEY_AUTH": True},
+            "PASSKEY_CONFIG": {
+                PasskeyConfigKeys.RP_ID: "example.com",
+                PasskeyConfigKeys.RP_NAME: "My App",
+            }
+        }
+    """
 
     # Relying Party configuration
-    RP_ID = 'PASSKEY_RP_ID'
-    RP_NAME = 'PASSKEY_RP_NAME'
-    ALLOWED_ORIGINS = 'PASSKEY_ALLOWED_ORIGINS'
+    RP_ID = 'RP_ID'
+    RP_NAME = 'RP_NAME'
+    ALLOWED_ORIGINS = 'ALLOWED_ORIGINS'
 
     # Attestation
-    ATTESTATION = 'PASSKEY_ATTESTATION'
+    ATTESTATION = 'ATTESTATION'
 
     # Authenticator preferences
-    AUTHENTICATOR_ATTACHMENT = 'PASSKEY_AUTHENTICATOR_ATTACHMENT'
-    RESIDENT_KEY = 'PASSKEY_RESIDENT_KEY'
-    USER_VERIFICATION = 'PASSKEY_USER_VERIFICATION'
+    AUTHENTICATOR_ATTACHMENT = 'AUTHENTICATOR_ATTACHMENT'
+    RESIDENT_KEY = 'RESIDENT_KEY'
+    USER_VERIFICATION = 'USER_VERIFICATION'
 
     # Timeouts
-    REGISTRATION_TIMEOUT = 'PASSKEY_REGISTRATION_TIMEOUT'
-    AUTHENTICATION_TIMEOUT = 'PASSKEY_AUTHENTICATION_TIMEOUT'
+    REGISTRATION_TIMEOUT = 'REGISTRATION_TIMEOUT'
+    AUTHENTICATION_TIMEOUT = 'AUTHENTICATION_TIMEOUT'
 
     # Challenge configuration
-    CHALLENGE_LENGTH = 'PASSKEY_CHALLENGE_LENGTH'
-    CHALLENGE_EXPIRY = 'PASSKEY_CHALLENGE_EXPIRY'
+    CHALLENGE_LENGTH = 'CHALLENGE_LENGTH'
+    CHALLENGE_EXPIRY = 'CHALLENGE_EXPIRY'
 
     # Algorithms
-    SUPPORTED_ALGORITHMS = 'PASSKEY_SUPPORTED_ALGORITHMS'
+    SUPPORTED_ALGORITHMS = 'SUPPORTED_ALGORITHMS'
 
     # Limits
-    MAX_CREDENTIALS_PER_USER = 'PASSKEY_MAX_CREDENTIALS_PER_USER'
+    MAX_CREDENTIALS_PER_USER = 'MAX_CREDENTIALS_PER_USER'
 
     # Storage
-    STORAGE_BACKEND = 'PASSKEY_STORAGE_BACKEND'
+    STORAGE_BACKEND = 'STORAGE_BACKEND'
 
     # Rate limiting
-    RATE_LIMITS = 'PASSKEY_RATE_LIMITS'
+    RATE_LIMITS = 'RATE_LIMITS'
 
     # Hooks/Triggers
-    POST_REGISTRATION_TRIGGER = 'PASSKEY_POST_REGISTRATION_TRIGGER'
-    POST_AUTHENTICATION_TRIGGER = 'PASSKEY_POST_AUTHENTICATION_TRIGGER'
+    POST_REGISTRATION_TRIGGER = 'POST_REGISTRATION_TRIGGER'
+    POST_AUTHENTICATION_TRIGGER = 'POST_AUTHENTICATION_TRIGGER'
 
-    # Feature flags
-    FEATURES = 'PASSKEY_FEATURES'
+    # Feature flags (nested within PASSKEY_CONFIG)
+    FEATURES = 'FEATURES'
 
 
 class AttestationConveyance(str, Enum):
@@ -150,7 +180,7 @@ class ChallengeType(str, Enum):
 
 
 class PasskeyFeatureFlags:
-    """Feature flag keys within PASSKEY_FEATURES"""
+    """Feature flag keys within PASSKEY_CONFIG.FEATURES"""
     DISCOVERABLE_CREDENTIALS = 'DISCOVERABLE_CREDENTIALS'
     CROSS_ORIGIN = 'CROSS_ORIGIN'
     ATTESTATION_VERIFICATION = 'ATTESTATION_VERIFICATION'
@@ -176,9 +206,9 @@ class PasskeyErrorCodes:
     CREDENTIAL_ALREADY_EXISTS = 'PASSKEY_015'
 
 
-# Default configuration values
+# Default configuration values for PASSKEY_CONFIG
+# NOTE: Passkey enabled state is controlled via FEATURES['PASSKEY_AUTH']
 PASSKEY_DEFAULTS = {
-    PasskeyConfigKeys.ENABLED: False,
     PasskeyConfigKeys.RP_ID: None,  # Must be set by user
     PasskeyConfigKeys.RP_NAME: 'BlockAuth Application',
     PasskeyConfigKeys.ALLOWED_ORIGINS: [],

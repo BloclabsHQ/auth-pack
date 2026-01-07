@@ -1,4 +1,6 @@
+import ipaddress
 import time
+from typing import Optional
 
 from django.core.cache import cache as default_cache
 from rest_framework.throttling import BaseThrottle
@@ -8,12 +10,103 @@ from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.generics import sanitize_log_context
 
 
+# Maximum length for IP-related header values (security limit)
+MAX_IP_HEADER_LENGTH = 500
+
+
+def validate_ip_address(ip_string: str) -> Optional[str]:
+    """
+    Validate and normalize an IP address string.
+
+    Security: Prevents malformed header exploitation by validating
+    that the extracted value is a legitimate IPv4 or IPv6 address.
+
+    Args:
+        ip_string: Raw IP address string to validate
+
+    Returns:
+        Normalized IP address string if valid, None otherwise
+    """
+    if not ip_string or not isinstance(ip_string, str):
+        return None
+
+    # Strip whitespace and check length limit
+    ip_string = ip_string.strip()
+    if len(ip_string) > 45:  # Max IPv6 length with zone ID
+        return None
+
+    # Reject obvious injection attempts
+    if any(char in ip_string for char in [';', '|', '&', '$', '`', '\n', '\r', '\x00']):
+        blockauth_logger.warning(
+            "Suspicious characters in IP address",
+            sanitize_log_context({"raw_ip": ip_string[:50]})
+        )
+        return None
+
+    try:
+        # Parse and validate using Python's ipaddress module
+        ip_obj = ipaddress.ip_address(ip_string)
+
+        # Reject unspecified addresses (0.0.0.0 or ::)
+        if ip_obj.is_unspecified:
+            return None
+
+        # Return the normalized string representation
+        return str(ip_obj)
+
+    except ValueError:
+        # Invalid IP address format
+        return None
+
+
 def get_client_ip(request) -> str:
-    """Extract client IP from request, handling proxies."""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    """
+    Extract and validate client IP from request, handling proxies.
+
+    Security: Validates IP address format to prevent header injection attacks.
+    Falls back to REMOTE_ADDR if X-Forwarded-For is invalid or missing.
+
+    Args:
+        request: Django/DRF request object
+
+    Returns:
+        Validated IP address string, or empty string if none found
+    """
+    # Try X-Forwarded-For first (for proxied requests)
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '')
+
     if x_forwarded_for:
-        return x_forwarded_for.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR', '')
+        # Security: Limit header length to prevent DoS
+        if len(x_forwarded_for) > MAX_IP_HEADER_LENGTH:
+            blockauth_logger.warning(
+                "X-Forwarded-For header exceeds maximum length",
+                sanitize_log_context({"length": len(x_forwarded_for)})
+            )
+            x_forwarded_for = x_forwarded_for[:MAX_IP_HEADER_LENGTH]
+
+        # X-Forwarded-For format: "client, proxy1, proxy2, ..."
+        # The first IP is the original client
+        first_ip = x_forwarded_for.split(',')[0].strip()
+        validated_ip = validate_ip_address(first_ip)
+
+        if validated_ip:
+            return validated_ip
+
+        # Log invalid X-Forwarded-For for security monitoring
+        blockauth_logger.warning(
+            "Invalid IP in X-Forwarded-For header",
+            sanitize_log_context({"raw_value": first_ip[:50]})
+        )
+
+    # Fall back to REMOTE_ADDR
+    remote_addr = request.META.get('REMOTE_ADDR', '')
+    validated_remote = validate_ip_address(remote_addr)
+
+    if validated_remote:
+        return validated_remote
+
+    # No valid IP found - return empty string for safety
+    return ''
 
 
 class RequestThrottle(BaseThrottle):
