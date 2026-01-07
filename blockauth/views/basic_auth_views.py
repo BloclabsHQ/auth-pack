@@ -21,8 +21,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTP, OTPSubject
-from blockauth.models.user import AuthenticationType
 from blockauth.notification import send_otp, NotificationEvent
 
 from blockauth.serializers.user_account_serializers import PasswordChangeSerializer, \

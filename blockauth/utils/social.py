@@ -2,17 +2,18 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 
-from blockauth.models.user import AuthenticationType
+from blockauth.enums import AuthenticationType
 from blockauth.utils.config import get_config, get_block_auth_user_model
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
 
 _User = get_block_auth_user_model()
 
+
 def social_login(email: str, name: str, provider_data: dict) -> Response:
     user, created = _User.objects.get_or_create(email=email, defaults={'first_name': name, 'email': email, 'is_verified': True})
     user.last_login = timezone.now()
-    
+
     # Add authentication type based on provider
     provider = provider_data.get('provider', '').upper()
     if provider in [AuthenticationType.GOOGLE, AuthenticationType.FACEBOOK, AuthenticationType.LINKEDIN]:
