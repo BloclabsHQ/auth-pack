@@ -28,43 +28,9 @@ Static utilities (no storage needed):
 default_app_config = 'blockauth.apps.BlockAuthConfig'
 
 # =============================================================================
-# TOTP Components
+# Lazy imports to avoid AppRegistryNotReady errors
 # =============================================================================
-
-# Service with static utility methods
-from .totp.services.totp_service import (
-    TOTPService,
-    ISecretEncryption,
-    SetupResult as TOTPSetupResult,
-    VerifyResult as TOTPVerifyResult,
-)
-
-# Storage interface - implement this for custom storage
-from .totp.storage.base import ITOTP2FAStore, TOTP2FAData
-
-# =============================================================================
-# Passkey Components
-# =============================================================================
-
-# Service
-from .passkey.services.passkey_service import (
-    PasskeyService,
-    RegistrationResult as PasskeyRegistrationResult,
-    AuthenticationResult as PasskeyAuthenticationResult,
-)
-
-# Storage interface - implement this for custom storage
-from .passkey.storage.base import ICredentialStore, CredentialData
-
-# Challenge service
-from .passkey.services.challenge_service import ChallengeService
-
-# =============================================================================
-# KDF (Optional)
-# =============================================================================
-# KDF is optional and must be explicitly enabled
-# Use blockauth.kdf.is_enabled() to check if KDF is available
-# Use blockauth.kdf.get_kdf_service() to get the service when needed
+# Django models can't be imported until apps are ready, so we use lazy loading
 
 __all__ = [
     # TOTP
@@ -83,3 +49,52 @@ __all__ = [
     'PasskeyAuthenticationResult',
     'ChallengeService',
 ]
+
+
+def __getattr__(name):
+    """
+    Lazy import to avoid Django AppRegistryNotReady errors.
+
+    This allows 'from blockauth import TOTPService' to work after Django apps are loaded.
+    """
+    # TOTP components
+    if name == 'TOTPService':
+        from .totp.services.totp_service import TOTPService
+        return TOTPService
+    if name == 'ISecretEncryption':
+        from .totp.services.totp_service import ISecretEncryption
+        return ISecretEncryption
+    if name == 'TOTPSetupResult':
+        from .totp.services.totp_service import SetupResult
+        return SetupResult
+    if name == 'TOTPVerifyResult':
+        from .totp.services.totp_service import VerifyResult
+        return VerifyResult
+    if name == 'ITOTP2FAStore':
+        from .totp.storage.base import ITOTP2FAStore
+        return ITOTP2FAStore
+    if name == 'TOTP2FAData':
+        from .totp.storage.base import TOTP2FAData
+        return TOTP2FAData
+
+    # Passkey components
+    if name == 'PasskeyService':
+        from .passkey.services.passkey_service import PasskeyService
+        return PasskeyService
+    if name == 'PasskeyRegistrationResult':
+        from .passkey.services.passkey_service import RegistrationResult
+        return RegistrationResult
+    if name == 'PasskeyAuthenticationResult':
+        from .passkey.services.passkey_service import AuthenticationResult
+        return AuthenticationResult
+    if name == 'ICredentialStore':
+        from .passkey.storage.base import ICredentialStore
+        return ICredentialStore
+    if name == 'CredentialData':
+        from .passkey.storage.base import CredentialData
+        return CredentialData
+    if name == 'ChallengeService':
+        from .passkey.services.challenge_service import ChallengeService
+        return ChallengeService
+
+    raise AttributeError(f"module 'blockauth' has no attribute '{name}'")
