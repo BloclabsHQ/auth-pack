@@ -294,18 +294,57 @@ class PasskeyService:
             public_key_b64 = bytes_to_base64url(verification.credential_public_key)
             aaguid_str = format_aaguid(verification.aaguid) if verification.aaguid else ''
 
-            # Determine authenticator attachment from transports
+            # =========================================================================
+            # Authenticator Attachment Detection (per WebAuthn Level 3 spec)
+            # https://www.w3.org/TR/webauthn-3/#authenticator-attachment-modality
+            # =========================================================================
+            # Priority order:
+            # 1. Direct from credential response (most reliable - browser provides this)
+            # 2. Infer from transports array
+            # 3. Empty = unknown (valid per spec, don't assume)
             authenticator_attachment = ''
-            if 'internal' in transports:
-                authenticator_attachment = AuthenticatorAttachment.PLATFORM.value
-            elif any(t in transports for t in ['usb', 'nfc', 'ble']):
-                authenticator_attachment = AuthenticatorAttachment.CROSS_PLATFORM.value
 
-            # Determine backup state from verification
+            # Check direct authenticatorAttachment from credential (browser-provided)
+            cred_attachment = credential_data.get('authenticatorAttachment')
+            if cred_attachment in ('platform', 'cross-platform'):
+                authenticator_attachment = cred_attachment
+            elif transports:
+                # Infer from transports per WebAuthn spec:
+                # - 'internal': Platform authenticator (TouchID, FaceID, Windows Hello)
+                # - 'hybrid': Cross-device (phone as authenticator via QR/BLE)
+                # - 'usb', 'nfc', 'ble': Cross-platform security keys
+                # Note: Empty transports = all supported (per spec), treat as unknown
+                if 'internal' in transports:
+                    authenticator_attachment = AuthenticatorAttachment.PLATFORM.value
+                elif any(t in transports for t in ['hybrid', 'usb', 'nfc', 'ble']):
+                    authenticator_attachment = AuthenticatorAttachment.CROSS_PLATFORM.value
+
+            # =========================================================================
+            # Backup Eligibility & State (BE/BS flags per WebAuthn Level 3)
+            # https://w3c.github.io/webauthn/#sctn-credential-backup
+            # =========================================================================
+            # BE (Backup Eligible) = credential_device_type:
+            #   - MULTI_DEVICE: Can be synced (iCloud Keychain, Google Password Manager, 1Password)
+            #   - SINGLE_DEVICE: Device-bound, cannot be synced (hardware security keys)
+            #
+            # BS (Backup State) = credential_backed_up:
+            #   - True: Credential IS currently synced to cloud
+            #   - False: Not yet synced OR device-bound
             is_backup_eligible = False
             is_backup_state = False
+
+            # Check credential_device_type for backup eligibility
+            if hasattr(verification, 'credential_device_type'):
+                device_type = verification.credential_device_type
+                # Compare against enum value - MULTI_DEVICE means cloud-syncable
+                is_backup_eligible = (
+                    str(device_type) == 'multi_device' or
+                    getattr(device_type, 'value', None) == 'multi_device'
+                )
+
+            # Check credential_backed_up for current backup state
             if hasattr(verification, 'credential_backed_up'):
-                is_backup_state = verification.credential_backed_up
+                is_backup_state = bool(verification.credential_backed_up)
 
             # Create credential data
             credential = CredentialData(
