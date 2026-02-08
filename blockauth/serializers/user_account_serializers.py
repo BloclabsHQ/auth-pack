@@ -2,22 +2,24 @@ from django.core.validators import EmailValidator
 from django.utils.text import format_lazy
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from django.contrib.auth.password_validation import validate_password
 from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 import logging
 from blockauth.utils.config import get_block_auth_user_model
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import get_password_help_text
-from blockauth.utils.validators import is_valid_phone_number
+from blockauth.utils.validators import is_valid_phone_number, FabricBlocPasswordValidator
 
 _User = get_block_auth_user_model()
 logger = logging.getLogger(__name__)
+
+# Single instance of password validator to avoid duplicate error messages
+_password_validator = FabricBlocPasswordValidator()
 
 """account basic auth related serializers"""
 
 class SignUpRequestSerializer(OTPRequestSerializer):
     password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password],
+        write_only=True, required=True, validators=[_password_validator.validate],
         help_text=format_lazy(get_password_help_text()),
     )
 
@@ -68,7 +70,7 @@ class SignUpConfirmationSerializer(OTPVerifySerializer):
 class BasicLoginSerializer(serializers.Serializer):
     identifier = serializers.CharField(max_length=100, help_text="Email or Phone number")
     password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password],
+        write_only=True, required=True,
         help_text=format_lazy(get_password_help_text()),
     )
 
@@ -137,10 +139,10 @@ class PasswordResetRequestSerializer(OTPRequestSerializer):
 
 class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
     new_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, validators=[_password_validator.validate], help_text=format_lazy(get_password_help_text())
     )
     confirm_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, help_text=format_lazy(get_password_help_text())
     )
 
     def validate(self, data):
@@ -151,13 +153,13 @@ class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
 
 class PasswordChangeSerializer(serializers.Serializer):
     old_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, help_text=format_lazy(get_password_help_text())
     )
     new_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, validators=[_password_validator.validate], help_text=format_lazy(get_password_help_text())
     )
     confirm_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, help_text=format_lazy(get_password_help_text())
     )
 
     def validate(self, data):
@@ -174,7 +176,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 class EmailChangeRequestSerializer(serializers.Serializer):
     new_email = serializers.EmailField(help_text='New email to replace the current email')
     current_password = serializers.CharField(
-        write_only=True, validators=[validate_password], help_text=format_lazy(get_password_help_text())
+        write_only=True, help_text=format_lazy(get_password_help_text())
     )
     verification_type = serializers.ChoiceField(choices=["otp", "link"], help_text="OTP or Link", default='otp')
 
