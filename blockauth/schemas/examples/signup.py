@@ -6,8 +6,8 @@ sign_up_identifier_already_in_use = OpenApiExample(
     name='sign_up_identifier_already_in_use',
     summary='Identifier already in use',
     value={
-        "detail": [
-            "request can not be processed."
+        "identifier": [
+            "Unable to complete registration with the provided information."
         ]
     }
 )

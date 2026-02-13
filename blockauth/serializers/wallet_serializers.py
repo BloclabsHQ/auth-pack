@@ -29,7 +29,7 @@ class WalletLoginSerializer(serializers.Serializer):
     def validate_wallet_address(self, value):
         """Validate Ethereum wallet address format"""
         if not value.startswith('0x') or len(value) != 42:
-            raise ValidationError("Invalid wallet address format. Must be a valid Ethereum address.")
+            raise ValidationError(detail={'wallet_address': "Invalid wallet address format. Must be a 42-character hex string starting with 0x."})
         return value.lower()
 
     def validate(self, data):
@@ -115,7 +115,7 @@ class WalletLoginSerializer(serializers.Serializer):
         Returns the authentication result.
         """
         if not hasattr(self, 'validated_data'):
-            raise ValidationError("Serializer must be validated first")
+            raise ValidationError(detail={'non_field_errors': "Serializer must be validated before calling authenticate_user()."})
         
         user = self.validated_data['user']
         created = self.validated_data['created']
@@ -158,7 +158,7 @@ class WalletEmailAddSerializer(serializers.Serializer):
         try:
             EmailValidator()(value)
         except Exception:
-            raise ValidationError("Enter a valid email address.")
+            raise ValidationError(detail={'email': "Invalid email address format. Please provide a valid email address."})
         return value
 
     def validate(self, data):
@@ -169,10 +169,10 @@ class WalletEmailAddSerializer(serializers.Serializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             if _User.objects.filter(email=data['email']).exclude(wallet_address=request.user.wallet_address).exists():
-                raise ValidationError("This email is already in use by another account.")
+                raise ValidationError(detail={'email': "Unable to use this email address."})
             
             # Check if user already has a verified email
             if request.user.email and request.user.is_verified:
-                raise ValidationError("User already has a verified email address.")
+                raise ValidationError(detail={'email': "This account already has a verified email address."})
         
         return data 
