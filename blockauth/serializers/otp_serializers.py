@@ -22,10 +22,10 @@ class OTPRequestSerializer(serializers.Serializer):
                 EmailValidator()(identifier)
                 data['email'] = identifier
             except Exception:
-                raise ValidationError(detail={'identifier': "enter a valid email address."}, code=4001)
+                raise ValidationError(detail={'identifier': "Invalid email address format. Please provide a valid email (e.g., user@example.com)."}, code=4001)
         elif method == "sms":
             if not is_valid_phone_number(identifier):
-                raise ValidationError(detail={'identifier': "enter a valid phone number."}, code=4001)
+                raise ValidationError(detail={'identifier': "Invalid phone number format. Please provide a valid phone number with country code (e.g., +1234567890)."}, code=4001)
             data['phone_number'] = identifier
 
         if verification_type == 'link':
@@ -45,6 +45,6 @@ class OTPVerifySerializer(serializers.Serializer):
             data['email'] = identifier
         except Exception:
             if not is_valid_phone_number(identifier):
-                raise ValidationError(detail={'identifier': "invalid email or phone number."}, code=4001)
+                raise ValidationError(detail={'identifier': "Invalid identifier format. Please provide a valid email address or phone number."}, code=4001)
             data['phone_number'] = identifier
         return data

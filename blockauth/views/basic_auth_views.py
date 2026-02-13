@@ -106,35 +106,35 @@ class SignUpResendOTPView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
-            
-            # Determine if this is a wallet email verification or regular signup
-            # by checking if a user with the given email exists and has a wallet address
-            identifier = data.get('identifier')
-            user = _User.objects.filter(email=identifier).first()
-            is_wallet_verification = user and user.wallet_address
-            
-            if is_wallet_verification:
-                # Check rate limit for wallet email verification
-                if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
-                    error_message = self.rate_limit_handler.get_error_message()
-                    blockauth_logger.warning(
-                        "Wallet email OTP resend rate limit hit", 
-                        sanitize_log_context(request.data, {"error_message": error_message})
-                    )
-                    return Response(
-                        data={"detail": error_message},
-                        status=status.HTTP_429_TOO_MANY_REQUESTS
-                    )
-                
-                # Send verification for wallet email verification
-                send_otp(data, OTPSubject.WALLET_EMAIL_VERIFICATION)
-                blockauth_logger.success(f"Wallet email verification {data['verification_type']} sent", sanitize_log_context(request.data))
-            else:
-                # Send verification for regular signup
-                send_otp(data, OTPSubject.SIGNUP)
-                blockauth_logger.success(f"Signup {data['verification_type']} sent", sanitize_log_context(request.data))
-                
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+
+            # Serializer stores _should_send and _user — only send OTP when appropriate,
+            # but always return the same response to prevent user enumeration (OWASP).
+            if data.get('_should_send'):
+                user = data['_user']
+                is_wallet_verification = user.wallet_address is not None
+
+                if is_wallet_verification:
+                    if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
+                        error_message = self.rate_limit_handler.get_error_message()
+                        blockauth_logger.warning(
+                            "Wallet email OTP resend rate limit hit",
+                            sanitize_log_context(request.data, {"error_message": error_message})
+                        )
+                        return Response(
+                            data={"detail": error_message},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS
+                        )
+                    send_otp(data, OTPSubject.WALLET_EMAIL_VERIFICATION)
+                    blockauth_logger.success(f"Wallet email verification {data['verification_type']} sent", sanitize_log_context(request.data))
+                else:
+                    send_otp(data, OTPSubject.SIGNUP)
+                    blockauth_logger.success(f"Signup {data['verification_type']} sent", sanitize_log_context(request.data))
+
+            # Always return identical response regardless of account state
+            return Response(
+                {'message': f'If your account requires verification, a {data["verification_type"]} will be sent via {data["method"]}.'},
+                status=status.HTTP_200_OK,
+            )
         except ValidationError as e:
             blockauth_logger.warning("Verification send validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)
@@ -227,7 +227,7 @@ class SignUpConfirmView(APIView):
                 return Response(data={'message': 'Sign up success'}, status=status.HTTP_200_OK)
             else:
                 # No valid OTP found for either subject
-                raise ValidationError(detail={"code": "invalid otp"}, code=4010)
+                raise ValidationError(detail={"code": "Invalid or expired verification code. Please request a new one."}, code=4010)
                 
         except ValidationError as e:
             blockauth_logger.warning("Verification confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
@@ -464,9 +464,17 @@ class PasswordResetView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
-            send_otp(data, OTPSubject.PASSWORD_RESET)
-            blockauth_logger.success(f"Password reset {data['verification_type']} sent", sanitize_log_context(request.data))
-            return Response({'message': f'{data['verification_type']} sent via {data['method']}.'}, status=status.HTTP_200_OK)
+            # Serializer stores _should_send — only send OTP when user exists,
+            # but always return the same response to prevent user enumeration (OWASP).
+            if data.get('_should_send'):
+                send_otp(data, OTPSubject.PASSWORD_RESET)
+                blockauth_logger.success(f"Password reset {data['verification_type']} sent", sanitize_log_context(request.data))
+
+            # Always return identical response regardless of account existence
+            return Response(
+                {'message': f'If an account exists, a {data["verification_type"]} will be sent via {data["method"]}.'},
+                status=status.HTTP_200_OK,
+            )
         except ValidationError as e:
             blockauth_logger.warning("Password reset validation failed", sanitize_log_context(request.data, {"errors": e.detail}))
             raise ValidationErrorWithCode(detail=e.detail)

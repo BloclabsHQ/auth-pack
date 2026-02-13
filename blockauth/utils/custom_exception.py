@@ -12,7 +12,7 @@ class ValidationErrorWithCode(APIException):
         if code is None:
             code =  self.default_code if error_code == "required" else error_code
         if detail is None:
-            detail = "A validation error occurred."
+            detail = {"non_field_errors": "A validation error occurred. Please check your input and try again."}
 
         transformed_detail = self.transform_errors(detail)
         super().__init__({"error_code": code, "detail": transformed_detail})

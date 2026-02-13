@@ -28,34 +28,43 @@ class SignUpRequestSerializer(OTPRequestSerializer):
 
         identifier = data.get('identifier')
         if data.get('email') and _User.objects.filter(email=identifier).exists():
-            logger.info(f"Email: {identifier} already registered.")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4002)
+            logger.info("Signup attempted with existing email.")
+            raise ValidationError(
+                detail={'identifier': 'Unable to complete registration with the provided information.'},
+                code=4002,
+            )
 
         if data.get('phone_number') and _User.objects.filter(phone_number=identifier).exists():
-            logger.info(f"Phone number: {identifier} already registered.")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4002)
+            logger.info("Signup attempted with existing phone number.")
+            raise ValidationError(
+                detail={'identifier': 'Unable to complete registration with the provided information.'},
+                code=4002,
+            )
         return data
 
 class SignUpResendOTPSerializer(OTPRequestSerializer):
+    """Validates format and checks account state.
+    Results stored internally — view returns identical response
+    regardless of outcome to prevent user enumeration (OWASP)."""
+
     def validate(self, data):
         super().validate(data)
 
-        # Regular signup OTP resend validation
         identifier = data.get('identifier')
         query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
         user = _User.objects.filter(**query_params).first()
 
-        if data.get('email') and not user:
-            logger.info(f"Email: {identifier} does not exists")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4003)
+        # Store validation results for the view — never expose to the client
+        data['_user'] = user
+        data['_should_send'] = False
 
-        if data.get('phone_number') and not user:
-            logger.info(f"Phone number: {identifier} does not exists")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4003)
+        if not user:
+            logger.info("OTP resend requested for non-existent account.")
+        elif user.is_verified:
+            logger.info("OTP resend requested for already verified account.")
+        else:
+            data['_should_send'] = True
 
-        if user and user.is_verified:
-            logger.info(f"User with identifier {identifier} is already verified")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4004)
         return data
 
 class SignUpConfirmationSerializer(OTPVerifySerializer):
@@ -84,22 +93,23 @@ class BasicLoginSerializer(serializers.Serializer):
             data['email'] = identifier
         except Exception:
             if not is_valid_phone_number(identifier):
-                raise ValidationError(detail={'identifier': 'invalid email or phone number.'}, code=4001)
+                raise ValidationError(detail={'identifier': 'Invalid email or phone number format. Please provide a valid email or phone number.'}, code=4001)
             data['phone_number'] = identifier
 
-        # validate user or password existence
+        # validate credentials — use same message for all failures to prevent enumeration
         query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
         user = _User.objects.filter(**query_params).first()
-        if not user:
-            raise ValidationError(detail={'identifier': 'incorrect identifier.'}, code=4005)
 
-        if not user.check_password(data['password']):
-            raise ValidationError(detail={'password': 'incorrect password.'}, code=4005)
+        if not user or not user.check_password(data['password']):
+            raise ValidationError(
+                detail={'non_field_errors': 'Invalid credentials. Please check your email/phone and password.'},
+                code=4005,
+            )
 
         if not user.is_verified:
             raise ValidationError(
-                detail={"non_field_error": "account is not verified. Complete signup process or login via passwordless method"},
-                code=4006
+                detail={'non_field_errors': 'Account is not verified. Complete the signup process or log in via passwordless method.'},
+                code=4006,
             )
 
         data['user'] = user
@@ -120,6 +130,10 @@ class PasswordlessLoginConfirmationSerializer(OTPVerifySerializer):
 """account password related serializers"""
 
 class PasswordResetRequestSerializer(OTPRequestSerializer):
+    """Validates format and checks account existence.
+    Results stored internally — view returns identical response
+    regardless of outcome to prevent user enumeration (OWASP)."""
+
     def validate(self, data):
         super().validate(data)
 
@@ -127,13 +141,13 @@ class PasswordResetRequestSerializer(OTPRequestSerializer):
         query_params = {'email': identifier} if data.get('email') else {'phone_number': identifier}
         user = _User.objects.filter(**query_params).first()
 
-        if data.get('email') and not user:
-            logger.info(f"Email: {identifier} does not exists")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4003)
+        # Store validation result for the view — never expose to the client
+        data['_user'] = user
+        data['_should_send'] = user is not None
 
-        if data.get('phone_number') and not user:
-            logger.info(f"Phone number: {identifier} does not exists")
-            raise ValidationError(detail={'non_field_error': 'request can not be processed.'}, code=4003)
+        if not user:
+            logger.info("Password reset requested for non-existent account.")
+
         return data
 
 
@@ -148,7 +162,7 @@ class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
     def validate(self, data):
         super().validate(data)
         if data['new_password'] != data['confirm_password']:
-            raise ValidationError(detail={'new_password': 'passwords do not match.'}, code=4007)
+            raise ValidationError(detail={'new_password': 'Passwords do not match. Please make sure both passwords are identical.'}, code=4007)
         return data
 
 class PasswordChangeSerializer(serializers.Serializer):
@@ -164,10 +178,10 @@ class PasswordChangeSerializer(serializers.Serializer):
 
     def validate(self, data):
         if data['new_password'] != data['confirm_password']:
-            raise ValidationError(detail={'new_password': 'passwords do not match.'}, code=4007)
+            raise ValidationError(detail={'new_password': 'Passwords do not match. Please make sure both passwords are identical.'}, code=4007)
 
         if self.context['request'].user.password and not self.context['request'].user.check_password(data['old_password']):
-            raise ValidationError(detail={'old_password': 'old password is incorrect.'}, code=4005)
+            raise ValidationError(detail={'old_password': 'Current password is incorrect. Please try again.'}, code=4005)
         return data
 
 
@@ -185,16 +199,19 @@ class EmailChangeRequestSerializer(serializers.Serializer):
 
         if not self.context['request'].user.password:
             raise ValidationError(
-                detail={'non_field_error': 'passwordless account. please change or reset password.'},
-                code=4008
+                detail={'current_password': 'This is a passwordless account. Please set a password first via password reset.'},
+                code=4008,
             )
 
         if not self.context['request'].user.check_password(current_password):
-            raise ValidationError(detail={'current_password': 'incorrect password.'}, code=4005)
+            raise ValidationError(detail={'current_password': 'Incorrect password. Please try again.'}, code=4005)
 
         if _User.objects.filter(email=data['new_email']).exists():
-            logger.info(f"Email {data['new_email']} already in use")
-            raise ValidationError(detail={'current_password': 'request can not be processed.'}, code=4002)
+            logger.info("Email change attempted with an unavailable email address.")
+            raise ValidationError(
+                detail={'new_email': 'Unable to change to this email address.'},
+                code=4002,
+            )
 
 
         if data['verification_type'] == 'link':
@@ -211,7 +228,7 @@ class EmailChangeConfirmationSerializer(serializers.Serializer):
         try:
             EmailValidator()(identifier)
         except Exception:
-            raise ValidationError(detail={'identifier': 'enter a valid email address.'}, code=4001)
+            raise ValidationError(detail={'identifier': 'Invalid email address format. Please provide a valid email address.'}, code=4001)
         return data
 
 class RefreshTokenSerializer(serializers.Serializer):
