@@ -78,7 +78,7 @@ class SignUpView(APIView):
         except Exception as e:
             blockauth_logger.error("User signup failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
-            raise APIException()
+            raise APIException(detail=f"Signup failed: {type(e).__name__}: {e}")
 
 
 class SignUpResendOTPView(APIView):
