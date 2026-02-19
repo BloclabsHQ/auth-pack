@@ -94,16 +94,16 @@ class SignUpResendOTPView(APIView):
 
     @extend_schema(**signup_resend_otp_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
-            error_message = self.rate_limit_handler.get_error_message()
-            blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
-            return Response(
-                data={"detail": error_message},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
-        serializer = self.serializer_class(data=request.data, context={'request': request})
         try:
+            if not self.rate_limit_handler.allow_request(request, OTPSubject.SIGNUP):
+                error_message = self.rate_limit_handler.get_error_message()
+                blockauth_logger.warning("Signup OTP resend rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
+                return Response(
+                    data={"detail": error_message},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+
+            serializer = self.serializer_class(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
@@ -304,16 +304,16 @@ class PasswordlessLoginView(APIView):
 
     @extend_schema(**passwordless_login_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
-            error_message = self.rate_limit_handler.get_error_message()
-            blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
-            return Response(
-                data={"detail": error_message},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
-        serializer = self.serializer_class(data=request.data)
         try:
+            if not self.rate_limit_handler.allow_request(request, OTPSubject.LOGIN):
+                error_message = self.rate_limit_handler.get_error_message()
+                blockauth_logger.warning("Passwordless login rate limit hit", sanitize_log_context(request.data, {"error_message": error_message}))
+                return Response(
+                    data={"detail": error_message},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+
+            serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
             send_otp(data, OTPSubject.LOGIN)
@@ -450,17 +450,16 @@ class PasswordResetView(APIView):
 
     @extend_schema(**password_reset_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.PASSWORD_RESET):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Password reset rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
-        serializer = self.serializer_class(data=request.data)
-
         try:
+            if not self.rate_limit_handler.allow_request(request, OTPSubject.PASSWORD_RESET):
+                wait_time = int(self.rate_limit_handler.wait())
+                blockauth_logger.warning("Password reset rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+                return Response(
+                    data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+
+            serializer = self.serializer_class(data=request.data)
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
@@ -564,17 +563,16 @@ class PasswordChangeView(APIView):
 
     @extend_schema(**password_change_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, 'password_change'):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Password change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
-        serializer = self.serializer_class(data=request.data, context={'request': request})
-
         try:
+            if not self.rate_limit_handler.allow_request(request, 'password_change'):
+                wait_time = int(self.rate_limit_handler.wait())
+                blockauth_logger.warning("Password change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+                return Response(
+                    data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+
+            serializer = self.serializer_class(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
             user = request.user
@@ -638,17 +636,16 @@ class EmailChangeView(APIView):
 
     @extend_schema(**email_change_docs)
     def post(self, request):
-        if not self.rate_limit_handler.allow_request(request, OTPSubject.EMAIL_CHANGE):
-            wait_time = int(self.rate_limit_handler.wait())
-            blockauth_logger.warning("Email change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
-            return Response(
-                data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-
-        serializer = self.serializer_class(data=request.data, context={'request': request})
-
         try:
+            if not self.rate_limit_handler.allow_request(request, OTPSubject.EMAIL_CHANGE):
+                wait_time = int(self.rate_limit_handler.wait())
+                blockauth_logger.warning("Email change rate limit hit", sanitize_log_context(request.data, {"wait_time": wait_time}))
+                return Response(
+                    data={"detail": f"Request limit exceeded. Please try again after {wait_time} seconds."},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS
+                )
+
+            serializer = self.serializer_class(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
