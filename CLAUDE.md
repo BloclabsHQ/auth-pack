@@ -20,6 +20,7 @@ Before writing ANY code, review the security standards. NO EXCEPTIONS.
 - **Passwordless**: OTP-based authentication
 - **Rate Limiting**: DDoS protection, configurable throttling
 - **MFA Support**: TOTP, SMS, email verification
+- **Step-Up Authentication**: RFC 9470 receipt-based step-up auth (`blockauth.stepup`). Django-independent.
 
 ## Package Architecture
 
@@ -48,6 +49,9 @@ blockauth/
 │   └── claims.py      # Claims provider base
 ├── middleware/         # Django middleware
 ├── permissions/        # Permission classes
+├── stepup/            # Step-up authentication receipts (RFC 9470)
+│   ├── __init__.py   # Exports: ReceiptIssuer, ReceiptValidator, ReceiptClaims, ReceiptValidationError
+│   └── receipt.py    # Django-independent HS256 JWT receipt issue/validate
 └── tests/             # Comprehensive test suite
 ```
 

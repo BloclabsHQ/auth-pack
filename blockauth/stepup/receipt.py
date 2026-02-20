@@ -146,8 +146,8 @@ class ReceiptValidator:
         expected_audience: str = "fabric-wallet",
         expected_scope: str = "mpc",
     ):
-        if not secret:
-            raise ValueError("Receipt secret is required")
+        if not secret or len(secret) < 32:
+            raise ValueError("Receipt secret must be at least 32 characters")
         self._secret = secret
         self._expected_audience = expected_audience
         self._expected_scope = expected_scope

@@ -37,6 +37,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
   - [Example: Custom Logger Class](#example-custom-logger-class)
   - [Django Settings Configuration](#django-settings-configuration)
 - [Rate Limiting](#rate-limiting)
+- [Step-Up Authentication (TOTP Receipt)](#step-up-authentication-totp-receipt)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -59,6 +60,125 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 - **📱 Passwordless Authentication** - Email-only blockchain wallet generation
 - **🔄 Password Management Triggers** - Automatic wallet re-encryption
 - **🎯 Custom JWT Claims** - Extensible claims provider system for adding custom data to tokens
+- **🛡️ Step-Up Authentication** - RFC 9470 receipt-based step-up auth for sensitive operations
+
+---
+
+## Step-Up Authentication (TOTP Receipt)
+
+### Overview
+
+The **Step-Up Authentication** module (`blockauth.stepup`) implements the industry-standard step-up authentication pattern (RFC 9470, PSD2/SCA, Auth0 Step-Up, Fireblocks TAP, AWS IAM MFA session tokens).
+
+After a user completes an additional authentication factor (e.g., TOTP verification), the issuing service creates a short-lived signed **receipt** (HS256 JWT). The consuming service validates this receipt before allowing sensitive operations. This moves enforcement from the client (SDK) to the backend.
+
+### Key Properties
+
+- **Short-lived**: 120-second TTL by default (configurable)
+- **Scoped**: `aud` claim prevents cross-service replay, `scope` restricts to operation classes
+- **Anti-IDOR**: `sub` must match the authenticated user
+- **Django-independent**: Pure Python + PyJWT, usable in any service
+- **Generic**: Not tied to TOTP specifically -- works with any step-up factor
+
+### Quick Start
+
+#### Issuing Service (e.g., auth service)
+
+```python
+from blockauth.stepup import ReceiptIssuer
+
+issuer = ReceiptIssuer(
+    secret="your-shared-secret-min-32-chars",
+    issuer="fabric-auth",
+    default_audience="fabric-wallet",
+    default_scope="mpc",
+    default_ttl_seconds=120,
+)
+
+# After user passes TOTP verification:
+receipt_token = issuer.issue(subject=str(user.id))
+# Return receipt_token in the API response
+```
+
+#### Consuming Service (e.g., wallet service)
+
+```python
+from blockauth.stepup import ReceiptValidator, ReceiptValidationError
+
+validator = ReceiptValidator(
+    secret="your-shared-secret-min-32-chars",
+    expected_audience="fabric-wallet",
+    expected_scope="mpc",
+)
+
+try:
+    claims = validator.validate(
+        token=receipt_from_header,
+        expected_subject=authenticated_user_id,  # anti-IDOR check
+    )
+    # claims.subject, claims.scope, claims.jti, etc.
+except ReceiptValidationError as e:
+    # e.reason — human-readable message
+    # e.code — machine-readable code (e.g., "receipt_expired", "receipt_subject_mismatch")
+    return 403, {"error": e.reason}
+```
+
+### Receipt JWT Claims
+
+```json
+{
+  "sub": "user-uuid",
+  "type": "stepup_receipt",
+  "aud": "fabric-wallet",
+  "scope": "mpc",
+  "iat": 1740000000,
+  "exp": 1740000120,
+  "jti": "random-hex-16-bytes",
+  "iss": "fabric-auth"
+}
+```
+
+### Middleware Pattern (Header-Based)
+
+The receipt is typically passed as an HTTP header (`X-TOTP-Receipt`). The consuming service applies middleware to protected endpoints:
+
+- **Header present**: Must be valid or request is rejected (403)
+- **Header absent**: Pass through (users who didn't do TOTP, e.g., passkey/EOA users)
+- **Enforce mode**: Reject ALL requests without a valid receipt (opt-in, for strict environments)
+
+### Validation Checks
+
+| Check | Error Code |
+|---|---|
+| HS256 signature valid | `receipt_signature_invalid` |
+| Not expired (`exp > now`) | `receipt_expired` |
+| `type == "stepup_receipt"` | `receipt_wrong_type` |
+| `aud` matches expected | `receipt_audience_mismatch` |
+| `scope` matches expected | `receipt_scope_mismatch` |
+| `sub` matches authenticated user | `receipt_subject_mismatch` |
+
+### API Reference
+
+#### `ReceiptIssuer(secret, *, issuer, default_audience, default_scope, default_ttl_seconds)`
+
+Create an issuer. `secret` must be >= 32 characters.
+
+- `issue(subject, *, audience=None, scope=None, ttl_seconds=None)` -> `str` (JWT)
+
+#### `ReceiptValidator(secret, *, expected_audience, expected_scope)`
+
+Create a validator.
+
+- `validate(token, *, expected_subject=None)` -> `ReceiptClaims`
+
+#### `ReceiptClaims` (frozen dataclass)
+
+- `subject`, `audience`, `scope`, `issued_at`, `expires_at`, `jti`, `issuer`
+
+#### `ReceiptValidationError`
+
+- `reason` (str) — human-readable
+- `code` (str) — machine-readable
 
 ---
 
