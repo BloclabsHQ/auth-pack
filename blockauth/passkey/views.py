@@ -94,9 +94,26 @@ class PasskeyRegistrationOptionsView(APIView):
             service = get_passkey_service()
             display_name = request.data.get('display_name')
 
+            # Build human-readable username (user.name in WebAuthn spec)
+            # Priority: email > wallet address (truncated) > user ID prefix
+            user = request.user
+            username = (
+                user.email
+                or (f"{user.wallet_address[:10]}..." if getattr(user, 'wallet_address', None) else None)
+                or f"User {str(user.id)[:8]}"
+            )
+
+            # Auto-resolve display_name from profile if client didn't provide one
+            if not display_name:
+                full_name = ' '.join(filter(None, [
+                    getattr(user, 'first_name', None),
+                    getattr(user, 'last_name', None),
+                ]))
+                display_name = full_name or None
+
             options = service.generate_registration_options(
-                user_id=request.user.id,
-                username=request.user.email or request.user.username,
+                user_id=user.id,
+                username=username,
                 display_name=display_name,
             )
 
