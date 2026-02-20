@@ -56,6 +56,12 @@ __all__ = [
     'PasskeyRegistrationResult',
     'PasskeyAuthenticationResult',
     'ChallengeService',
+
+    # Step-Up Authentication (RFC 9470)
+    'ReceiptIssuer',
+    'ReceiptValidator',
+    'ReceiptClaims',
+    'ReceiptValidationError',
 ]
 
 
@@ -104,5 +110,19 @@ def __getattr__(name):
     if name == 'ChallengeService':
         from .passkey.services.challenge_service import ChallengeService
         return ChallengeService
+
+    # Step-Up Authentication components (Django-independent — no lazy loading needed)
+    if name == 'ReceiptIssuer':
+        from .stepup.receipt import ReceiptIssuer
+        return ReceiptIssuer
+    if name == 'ReceiptValidator':
+        from .stepup.receipt import ReceiptValidator
+        return ReceiptValidator
+    if name == 'ReceiptClaims':
+        from .stepup.receipt import ReceiptClaims
+        return ReceiptClaims
+    if name == 'ReceiptValidationError':
+        from .stepup.receipt import ReceiptValidationError
+        return ReceiptValidationError
 
     raise AttributeError(f"module 'blockauth' has no attribute '{name}'")
