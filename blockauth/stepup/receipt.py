@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 # Receipt type constant — prevents confusion with access/refresh JWTs
 RECEIPT_TYPE = "stepup_receipt"
 
+# JTI entropy: 16 bytes → 32-char hex → 128 bits of uniqueness per receipt
+JTI_BYTES = 16
+
 
 class ReceiptValidationError(Exception):
     """Raised when a step-up receipt fails validation."""
@@ -107,7 +110,7 @@ class ReceiptIssuer:
         """
         now = int(time.time())
         ttl = ttl_seconds if ttl_seconds is not None else self._default_ttl
-        jti = secrets.token_hex(16)
+        jti = secrets.token_hex(JTI_BYTES)
 
         claims = {
             "sub": str(subject),
