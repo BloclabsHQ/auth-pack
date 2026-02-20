@@ -180,44 +180,47 @@ class ReceiptValidator:
                 audience=self._expected_audience,
             )
         except jwt.ExpiredSignatureError:
-            raise ReceiptValidationError("Receipt has expired", code="receipt_expired")
+            logger.debug("Receipt expired", extra={"aud": self._expected_audience})
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_expired")
         except jwt.InvalidAudienceError:
-            raise ReceiptValidationError(
-                f"Receipt audience mismatch (expected {self._expected_audience})",
-                code="receipt_audience_mismatch",
+            logger.warning(
+                "Receipt audience mismatch",
+                extra={"expected_aud": self._expected_audience},
             )
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_audience_mismatch")
         except jwt.InvalidSignatureError:
-            raise ReceiptValidationError("Receipt signature invalid", code="receipt_signature_invalid")
+            logger.warning("Receipt signature invalid")
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_signature_invalid")
         except jwt.DecodeError:
-            raise ReceiptValidationError("Receipt is malformed", code="receipt_malformed")
-        except jwt.InvalidTokenError as e:
-            raise ReceiptValidationError(f"Receipt invalid: {e}", code="receipt_invalid")
+            logger.warning("Receipt malformed — could not decode JWT")
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_malformed")
+        except jwt.InvalidTokenError:
+            logger.warning("Receipt invalid — generic JWT error")
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_invalid")
 
         # Validate type claim
         receipt_type = payload.get("type")
         if receipt_type != RECEIPT_TYPE:
-            raise ReceiptValidationError(
-                f"Wrong receipt type: {receipt_type}",
-                code="receipt_wrong_type",
-            )
+            logger.warning("Wrong receipt type", extra={"got": receipt_type, "expected": RECEIPT_TYPE})
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_wrong_type")
 
         # Validate scope claim
         receipt_scope = payload.get("scope")
         if receipt_scope != self._expected_scope:
-            raise ReceiptValidationError(
-                f"Receipt scope mismatch (expected {self._expected_scope}, got {receipt_scope})",
-                code="receipt_scope_mismatch",
+            logger.warning(
+                "Receipt scope mismatch",
+                extra={"expected": self._expected_scope, "got": receipt_scope},
             )
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_scope_mismatch")
 
         # Validate subject (anti-IDOR)
         receipt_sub = payload.get("sub")
         if not receipt_sub:
-            raise ReceiptValidationError("Receipt missing subject", code="receipt_no_subject")
+            logger.warning("Receipt missing subject claim")
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_no_subject")
         if expected_subject and receipt_sub != str(expected_subject):
-            raise ReceiptValidationError(
-                "Receipt subject mismatch",
-                code="receipt_subject_mismatch",
-            )
+            logger.warning("Receipt subject mismatch (possible IDOR attempt)")
+            raise ReceiptValidationError("Receipt validation failed", code="receipt_subject_mismatch")
 
         claims = ReceiptClaims(
             subject=receipt_sub,
