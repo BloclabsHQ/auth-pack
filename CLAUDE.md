@@ -299,6 +299,22 @@ mypy blockauth/
 
 ## ⚠️ Common Issues
 
+### fabric-auth Not Picking Up auth-pack Changes
+
+**Symptom**: `ModuleNotFoundError` in fabric-auth CI for modules that exist in auth-pack.
+
+**Cause**: `fabric-auth/poetry.lock` pins blockauth to a specific git commit. Pushing
+to auth-pack does NOT auto-update the lock file.
+
+**Fix**: After pushing auth-pack changes, update fabric-auth:
+```bash
+cd services/fabric-auth
+poetry update blockauth
+git add poetry.lock && git commit -m "chore: update blockauth to latest dev"
+```
+
+See `fabric-auth/CLAUDE.md` → "Updating blockauth" section for full details.
+
 ### JWT Claims Not Appearing
 - Ensure claims provider is registered in Django app's `ready()` method
 - Method must be named `get_custom_claims` (not `get_claims`)
