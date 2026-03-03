@@ -179,7 +179,7 @@ def generate_secure_token(length: int = 32) -> str:
 
 # Bad: Predictable, insecure
 def generate_token():
-    return str(uuid.uuid4())  # Predictable on some systems
+    return str(uuid7())  # Non-sortable, use secrets.token_urlsafe for tokens
 ```
 
 ### **Error Handling**

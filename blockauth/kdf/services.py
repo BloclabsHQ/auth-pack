@@ -21,7 +21,7 @@ import hashlib
 import json
 import logging
 import time
-import uuid
+from uuid6 import uuid7
 from typing import Dict, List, Optional, Tuple, Union
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
@@ -1181,7 +1181,7 @@ class MultipleWalletService:
             Dict containing collection info and wallet list
         """
         try:
-            collection_id = str(uuid.uuid4())
+            collection_id = str(uuid7())
             wallets = []
             
             for config in wallet_configs:

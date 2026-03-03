@@ -20,6 +20,7 @@ eth-account = "^0.11.0"
 cryptography = "^43.0.0"
 argon2-cffi = "^23.0.0"
 webauthn = "^2.0.0"
+uuid6 = "^2024.7.10"
 
 [build-system]
 requires = ["poetry-core"]

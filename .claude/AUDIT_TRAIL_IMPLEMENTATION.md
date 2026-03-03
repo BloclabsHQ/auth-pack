@@ -90,13 +90,13 @@ MANDATORY_AUDIT_EVENTS = {
 # MANDATORY: Audit trail database model
 from django.db import models
 from django.contrib.postgres.fields import JSONField
-import uuid
+from uuid6 import uuid7
 
 class AuditLog(models.Model):
     """SOC2 compliant audit log model."""
 
     # Immutable fields (never update after creation)
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     # Event identification
@@ -289,7 +289,7 @@ class AuditLogger:
             'session_id': getattr(request.session, 'session_key', None),
             'ip_address': self.get_client_ip(request),
             'user_agent': request.META.get('HTTP_USER_AGENT', ''),
-            'request_id': request.META.get('HTTP_X_REQUEST_ID', str(uuid.uuid4())),
+            'request_id': request.META.get('HTTP_X_REQUEST_ID', str(uuid7())),
             'method': request.method,
             'path': request.path,
         }
@@ -482,7 +482,7 @@ class AuditMiddleware:
 
     def __call__(self, request):
         # Pre-request audit
-        request_id = str(uuid.uuid4())
+        request_id = str(uuid7())
         request.META['HTTP_X_REQUEST_ID'] = request_id
 
         start_time = datetime.utcnow()

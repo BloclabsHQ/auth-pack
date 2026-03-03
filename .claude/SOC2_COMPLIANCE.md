@@ -533,7 +533,7 @@ class AuditTrail:
     def record(cls, action: str, **kwargs):
         """Record audit entry with all required fields."""
         entry = AuditEntry(
-            id=uuid.uuid4(),
+            id=uuid7(),
             timestamp=datetime.utcnow(),
             action=action,
             **kwargs
