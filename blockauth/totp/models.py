@@ -5,7 +5,7 @@ Database models for storing TOTP secrets, backup codes, and verification state.
 """
 import logging
 import secrets
-import uuid
+from uuid6 import uuid7
 from datetime import timedelta
 
 from django.conf import settings
@@ -33,7 +33,7 @@ class TOTP2FA(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 
@@ -284,7 +284,7 @@ class TOTPVerificationLog(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 

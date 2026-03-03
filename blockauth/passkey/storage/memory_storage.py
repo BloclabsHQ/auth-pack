@@ -8,7 +8,7 @@ WARNING: This storage is NOT persistent. All data is lost when the
 application restarts. Use only for testing purposes.
 """
 
-import uuid
+from uuid6 import uuid7
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 from threading import Lock
@@ -63,7 +63,7 @@ class MemoryCredentialStore(ICredentialStore):
 
             # Generate ID if not set
             if not credential.id:
-                credential.id = str(uuid.uuid4())
+                credential.id = str(uuid7())
 
             # Set timestamps if not set
             if not credential.created_at:

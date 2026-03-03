@@ -6,7 +6,7 @@ Database models for storing WebAuthn credentials and challenges.
 
 import hmac
 import logging
-import uuid
+from uuid6 import uuid7
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.conf import settings
@@ -42,7 +42,7 @@ class PasskeyCredential(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 
@@ -272,7 +272,7 @@ class PasskeyChallenge(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 

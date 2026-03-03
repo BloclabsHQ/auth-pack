@@ -463,7 +463,7 @@ class PasskeyFeatureFlags:
 ```python
 # blockauth/passkey/models.py
 
-import uuid
+from uuid6 import uuid7
 from django.db import models
 from django.conf import settings
 
@@ -478,7 +478,7 @@ class PasskeyCredential(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 
@@ -619,7 +619,7 @@ class PasskeyChallenge(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid7,
         editable=False
     )
 
@@ -672,7 +672,7 @@ class PasskeyChallenge(models.Model):
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
-import uuid
+from uuid6 import uuid7
 
 
 class Migration(migrations.Migration):
@@ -687,7 +687,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='PasskeyCredential',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid7, editable=False, primary_key=True, serialize=False)),
                 ('credential_id', models.TextField(db_index=True, help_text='Base64URL-encoded credential ID from authenticator', unique=True)),
                 ('public_key', models.TextField(help_text='Base64URL-encoded COSE public key')),
                 ('algorithm', models.IntegerField(default=-7, help_text='COSE algorithm identifier (e.g., -7 for ES256)')),
@@ -717,7 +717,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='PasskeyChallenge',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid7, editable=False, primary_key=True, serialize=False)),
                 ('challenge', models.CharField(db_index=True, max_length=255, unique=True)),
                 ('challenge_type', models.CharField(choices=[('registration', 'Registration'), ('authentication', 'Authentication')], max_length=20)),
                 ('expires_at', models.DateTimeField()),

@@ -1,5 +1,6 @@
-import uuid
 import json
+
+from uuid6 import uuid7
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import models
@@ -18,7 +19,7 @@ class BlockUser(AbstractBaseUser):
     Inherit this model in your project's User model to become compitable
     with this app functionalities.
     """
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     email = models.EmailField(unique=True, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
     wallet_address = models.CharField(max_length=42, blank=True, null=True, unique=True, help_text="Ethereum wallet address")
