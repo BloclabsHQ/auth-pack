@@ -14,6 +14,9 @@ DEFAULTS = {
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
     "SECRET_KEY": settings.SECRET_KEY,
+    # Asymmetric JWT (RS256/ES256): set these instead of JWT_SECRET_KEY
+    "JWT_PRIVATE_KEY": None,  # PEM-encoded private key for signing
+    "JWT_PUBLIC_KEY": None,   # PEM-encoded public key for verification
 
     "OTP_VALIDITY": timedelta(minutes=1),
     "OTP_LENGTH": 6,

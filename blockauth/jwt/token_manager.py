@@ -20,17 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 class JWTTokenManager:
-    """Enhanced JWT manager with custom claims support"""
+    """Enhanced JWT manager with custom claims support.
+
+    Supports both symmetric (HS256) and asymmetric (RS256/ES256) algorithms.
+    Key resolution is automatic based on the configured ALGORITHM.
+    """
 
     def __init__(self):
-        # Use JWT_SECRET_KEY if provided, otherwise fall back to SECRET_KEY
-        try:
-            self.secret_key = get_config('JWT_SECRET_KEY')
-        except AttributeError:
-            # Fall back to SECRET_KEY if JWT_SECRET_KEY is not configured
-            self.secret_key = get_config('SECRET_KEY')
-        
+        from blockauth.utils.token import _resolve_keys
+
         self.algorithm = get_config('ALGORITHM')
+        self.signing_key, self.verification_key = _resolve_keys(self.algorithm)
+        # Backward compatibility
+        self.secret_key = self.signing_key
         self.expiry_hours = get_config('ACCESS_TOKEN_LIFETIME')
         self._claims_providers: List[CustomClaimsProvider] = []
 
@@ -103,14 +105,14 @@ class JWTTokenManager:
         logger.info(f"✅ Final claims for token: {list(all_claims.keys())}")
 
         # Generate token
-        token = jwt.encode(all_claims, self.secret_key, algorithm=self.algorithm)
+        token = jwt.encode(all_claims, self.signing_key, algorithm=self.algorithm)
         logger.info(f"✅ Generated JWT token with {len(all_claims)} claims")
         return token
 
     def decode_token(self, token: str) -> Dict[str, Any]:
         """Decode and validate JWT token"""
         try:
-            claims = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            claims = jwt.decode(token, self.verification_key, algorithms=[self.algorithm])
 
             # Validate custom claims with providers
             for provider in self._claims_providers:

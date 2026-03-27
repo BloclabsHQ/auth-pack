@@ -43,7 +43,7 @@ _Disclaimer: This package is currently at initiative state so you can expect fre
 
 ## Features
 
-- JWT Authentication
+- JWT Authentication (HS256, RS256, ES256 — symmetric and asymmetric)
 - Token refresh functionality
 - SignUp with email and password
 - Login with email and password (Basic Auth)
@@ -332,13 +332,15 @@ own class and add the class path in the settings. Details disccussed in the [Uti
 BLOCK_AUTH_SETTINGS = {
     "BLOCK_AUTH_USER_MODEL": "{{app_name.model_class_name}}",  # replace it with your custom user model class name for Blockauth users
     "CLIENT_APP_URL": "http://localhost:3000", # this is the URL of the client app which will communicate with the backend API
-    
+
     "ACCESS_TOKEN_LIFETIME": timedelta(seconds=3600),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "ALGORITHM": "HS256",
+    "ALGORITHM": "HS256",           # Supports: HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384, ES512
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",   # Field name in the user model which will be used as user id in the JWT token
-    "JWT_SECRET_KEY": "your-jwt-secret-key-here",  # Separate secret key for JWT tokens (optional, falls back to Django SECRET_KEY)
+    "JWT_SECRET_KEY": "your-jwt-secret-key-here",  # For HS256: shared secret (optional, falls back to Django SECRET_KEY)
+    # "JWT_PRIVATE_KEY": "-----BEGIN RSA PRIVATE KEY-----\n...",  # For RS256/ES256: PEM private key (signing)
+    # "JWT_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----\n...",        # For RS256/ES256: PEM public key (verification)
     
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
