@@ -11,22 +11,24 @@ Key Features:
 - Token validation with proper error handling
 - Support for both access and refresh tokens
 - Configurable token lifetimes
+- Supports both symmetric (HS256) and asymmetric (RS256/ES256) algorithms
 
 Configuration:
-- JWT_SECRET_KEY: Secret key for token signing (optional, falls back to Django SECRET_KEY)
-- ALGORITHM: JWT signing algorithm (defaults to 'HS256')
+- ALGORITHM: JWT signing algorithm ('HS256', 'RS256', 'ES256', etc.)
+- Symmetric (HS256): set JWT_SECRET_KEY (or falls back to SECRET_KEY)
+- Asymmetric (RS256/ES256): set JWT_PRIVATE_KEY (signing) and JWT_PUBLIC_KEY (verification)
 - ACCESS_TOKEN_LIFETIME: Lifetime for access tokens (defaults to 1 hour)
 - REFRESH_TOKEN_LIFETIME: Lifetime for refresh tokens (defaults to 1 day)
 
 Usage:
     from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
-    
+
     # Generate tokens for a user
     access_token, refresh_token = generate_auth_token(
-        token_class=AUTH_TOKEN_CLASS(), 
+        token_class=AUTH_TOKEN_CLASS(),
         user_id=str(user.id)
     )
-    
+
     # Decode a token
     token_instance = AUTH_TOKEN_CLASS()
     payload = token_instance.decode_token(token_string)
@@ -43,6 +45,40 @@ from rest_framework.exceptions import AuthenticationFailed
 from blockauth.utils.config import get_config
 
 logger = logging.getLogger(__name__)
+
+# Algorithms that use asymmetric keys (private key for signing, public key for verification)
+_ASYMMETRIC_ALGORITHMS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512"}
+
+
+def _resolve_keys(algorithm: str, explicit_secret_key=None):
+    """
+    Resolve signing and verification keys based on algorithm type.
+
+    Symmetric (HS256): signing_key = verification_key = JWT_SECRET_KEY
+    Asymmetric (RS256/ES256): signing_key = JWT_PRIVATE_KEY, verification_key = JWT_PUBLIC_KEY
+
+    Returns:
+        tuple: (signing_key, verification_key)
+    """
+    if explicit_secret_key:
+        return explicit_secret_key, explicit_secret_key
+
+    if algorithm in _ASYMMETRIC_ALGORITHMS:
+        private_key = get_config("JWT_PRIVATE_KEY")
+        public_key = get_config("JWT_PUBLIC_KEY")
+        if not private_key or not public_key:
+            raise ValueError(
+                f"Algorithm {algorithm} requires both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY "
+                f"in BLOCK_AUTH_SETTINGS."
+            )
+        return private_key, public_key
+
+    # Symmetric algorithm — same key for both
+    try:
+        secret = get_config("JWT_SECRET_KEY")
+    except AttributeError:
+        secret = get_config("SECRET_KEY")
+    return secret, secret
 
 
 class AbstractToken:
@@ -93,126 +129,91 @@ class AbstractToken:
 class Token(AbstractToken):
     """
     JWT Token implementation for authentication.
-    
-    This class provides JWT token generation and validation functionality using
-    the PyJWT library. It supports configurable secret keys and algorithms,
-    and includes proper error handling for various token validation scenarios.
-    
+
+    Supports both symmetric (HS256) and asymmetric (RS256/ES256) algorithms.
+    Key resolution is automatic based on the configured algorithm:
+    - HS256: uses JWT_SECRET_KEY for both signing and verification
+    - RS256/ES256: uses JWT_PRIVATE_KEY for signing, JWT_PUBLIC_KEY for verification
+
     Attributes:
-        secret_key (str): The secret key used for token signing
-        algorithm (str): The JWT algorithm used for signing (e.g., 'HS256')
-    
-    Configuration:
-        JWT_SECRET_KEY: Secret key for token signing (from Django settings)
-        ALGORITHM: JWT signing algorithm (defaults to 'HS256')
+        signing_key: Key used for token signing
+        verification_key: Key used for token verification
+        algorithm (str): The JWT algorithm (e.g., 'HS256', 'RS256')
+
+    Backward compatible: existing HS256 configurations work without changes.
     """
-    
+
     def __init__(self, secret_key: str = None, algorithm: str = None):
         """
-        Initialize the Token instance with secret key and algorithm.
-        
+        Initialize the Token instance.
+
         Args:
-            secret_key (str, optional): Secret key for token signing. 
-                Defaults to JWT_SECRET_KEY from configuration, falls back to SECRET_KEY.
-            algorithm (str, optional): JWT signing algorithm. 
+            secret_key (str, optional): Explicit key for both signing and verification
+                (symmetric override). If provided, used directly regardless of algorithm.
+            algorithm (str, optional): JWT signing algorithm.
                 Defaults to ALGORITHM from configuration.
         """
-        # Use JWT_SECRET_KEY if provided, otherwise fall back to SECRET_KEY
-        if secret_key:
-            self.secret_key = secret_key
-        else:
-            try:
-                self.secret_key = get_config('JWT_SECRET_KEY')
-            except AttributeError:
-                # Fall back to SECRET_KEY if JWT_SECRET_KEY is not configured
-                self.secret_key = get_config('SECRET_KEY')
-        self.algorithm = algorithm or get_config('ALGORITHM')
+        self.algorithm = algorithm or get_config("ALGORITHM")
+        self.signing_key, self.verification_key = _resolve_keys(
+            self.algorithm, explicit_secret_key=secret_key
+        )
+        # Backward compatibility — existing code may read self.secret_key
+        self.secret_key = self.signing_key
 
     def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
         """
-        Generate a new JWT token with the specified parameters.
-        
-        Creates a JWT token containing user information, expiration time,
-        issued time, and token type. The token is signed using the configured
-        secret key and algorithm.
-        
+        Generate a new JWT token.
+
         Args:
-            user_id (str): The unique identifier of the user (typically user.id)
+            user_id (str): The unique identifier of the user
             token_type (str): Type of token ('access' or 'refresh')
             token_lifetime (timedelta): How long the token should be valid
             user_data (Dict[str, Any], optional): Additional user data to include in token
-            
+
         Returns:
             str: The generated JWT token string
-            
-        Example:
-            token = Token()
-            access_token = token.generate_token(
-                user_id="user123",
-                token_type="access",
-                token_lifetime=timedelta(hours=1)
-            )
         """
-        # Create the token payload with standard JWT claims
         payload = {
-            "user_id": user_id,                    # Custom claim: user identifier
-            "exp": timezone.now() + token_lifetime, # Standard claim: expiration time
-            "iat": timezone.now(),                 # Standard claim: issued at time
-            "type": token_type                     # Custom claim: token type
+            "user_id": user_id,
+            "exp": timezone.now() + token_lifetime,
+            "iat": timezone.now(),
+            "type": token_type,
         }
-        
-        # Add additional user data if provided
         if user_data:
             payload.update(user_data)
-        
-        # Encode the payload into a JWT token
-        return jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
+
+        return jwt.encode(payload, self.signing_key, algorithm=self.algorithm)
 
     def decode_token(self, token: str) -> Dict[str, Any]:
         """
         Decode and validate a JWT token.
-        
-        Decodes the JWT token and validates its signature, expiration, and format.
-        Handles various error conditions with appropriate logging and exceptions.
-        
+
+        Uses the verification key (public key for RS256, shared secret for HS256).
+
         Args:
             token (str): The JWT token string to decode
-            
+
         Returns:
-            Dict[str, Any]: The decoded token payload containing user_id, exp, iat, type, and any additional user data
-            
+            Dict[str, Any]: The decoded token payload
+
         Raises:
             AuthenticationFailed: If the token is invalid, expired, or has an invalid signature
-            
-        Example:
-            token = Token()
-            try:
-                payload = token.decode_token("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...")
-                user_id = payload['user_id']
-                token_type = payload['type']
-            except AuthenticationFailed as e:
-                # Handle authentication error
-                pass
         """
         try:
-            # Decode and verify the token signature
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            payload = jwt.decode(token, self.verification_key, algorithms=[self.algorithm])
             return payload
-            
+
         except jwt.ExpiredSignatureError:
-            # Token has passed its expiration time
             logger.error("Token has expired.")
             raise AuthenticationFailed("Token has expired.")
-            
-        except jwt.InvalidTokenError:
-            # Token is malformed or invalid
-            logger.error("Invalid token.")
-            raise AuthenticationFailed("Invalid token.")
-            
+
         except jwt.InvalidSignatureError:
-            # Token signature verification failed
             logger.error("Invalid signature.")
             raise AuthenticationFailed("Invalid signature.")
+
+        except jwt.InvalidTokenError:
+            logger.error("Invalid token.")
+            raise AuthenticationFailed("Invalid token.")
 
 
 def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
