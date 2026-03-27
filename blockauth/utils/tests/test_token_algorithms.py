@@ -68,7 +68,7 @@ class TestResolveKeys:
     @patch("blockauth.utils.token.get_config")
     def test_rs256_missing_keys_raises_error(self, mock_config):
         mock_config.return_value = None
-        with pytest.raises(ValueError, match="requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY"):
+        with pytest.raises(ValueError, match="requires both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY"):
             _resolve_keys("RS256")
 
     def test_asymmetric_algorithms_set(self):

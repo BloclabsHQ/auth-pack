@@ -341,7 +341,9 @@ BLOCK_AUTH_SETTINGS = {
     "JWT_SECRET_KEY": "your-jwt-secret-key-here",  # For HS256: shared secret (optional, falls back to Django SECRET_KEY)
     # "JWT_PRIVATE_KEY": "-----BEGIN RSA PRIVATE KEY-----\n...",  # For RS256/ES256: PEM private key (signing)
     # "JWT_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----\n...",        # For RS256/ES256: PEM public key (verification)
-    
+    # NOTE: For RS256/ES256, never expose private keys in logs, version control, or client-side code.
+    # Use environment variables or a secrets manager (1Password, AWS Secrets Manager) in production.
+
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
     "REQUEST_LIMIT": (3, 30),  # (number of request, duration in second) rate limits based on per (identifier, subject, and IP address)

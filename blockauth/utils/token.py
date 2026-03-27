@@ -68,9 +68,8 @@ def _resolve_keys(algorithm: str, explicit_secret_key=None):
         public_key = get_config("JWT_PUBLIC_KEY")
         if not private_key or not public_key:
             raise ValueError(
-                f"Algorithm {algorithm} requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY "
-                f"in BLOCK_AUTH_SETTINGS. Got private_key={'set' if private_key else 'None'}, "
-                f"public_key={'set' if public_key else 'None'}."
+                f"Algorithm {algorithm} requires both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY "
+                f"in BLOCK_AUTH_SETTINGS."
             )
         return private_key, public_key
 
