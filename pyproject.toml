@@ -22,6 +22,20 @@ argon2-cffi = "^23.0.0"
 webauthn = "^2.0.0"
 uuid6 = "^2024.7.10"
 
+[tool.poetry.group.dev.dependencies]
+black = "^24.0.0"
+isort = "^5.13.0"
+flake8 = "^7.0.0"
+autoflake = "^2.3.0"
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
