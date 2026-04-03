@@ -10,7 +10,7 @@ class ValidationErrorWithCode(APIException):
         error_code = errors[0].code if isinstance(errors, list) else errors.code
 
         if code is None:
-            code =  self.default_code if error_code == "required" else error_code
+            code = self.default_code if error_code == "required" else error_code
         if detail is None:
             detail = {"non_field_errors": "A validation error occurred. Please check your input and try again."}
 

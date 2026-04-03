@@ -35,8 +35,9 @@ Usage:
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Tuple, Dict, Any, Union
+import uuid
+from datetime import timedelta
+from typing import Any, Dict, Tuple
 
 import jwt
 from django.utils import timezone
@@ -68,8 +69,7 @@ def _resolve_keys(algorithm: str, explicit_secret_key=None):
         public_key = get_config("JWT_PUBLIC_KEY")
         if not private_key or not public_key:
             raise ValueError(
-                f"Algorithm {algorithm} requires both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY "
-                f"in BLOCK_AUTH_SETTINGS."
+                f"Algorithm {algorithm} requires both JWT_PRIVATE_KEY and JWT_PUBLIC_KEY " f"in BLOCK_AUTH_SETTINGS."
             )
         return private_key, public_key
 
@@ -84,27 +84,29 @@ def _resolve_keys(algorithm: str, explicit_secret_key=None):
 class AbstractToken:
     """
     Abstract base class for token operations.
-    
+
     This class defines the interface that all token implementations must follow.
     It provides a contract for token generation and decoding operations.
-    
+
     Methods:
         generate_token: Generate a new token with specified parameters
         decode_token: Decode and validate an existing token
     """
-    
-    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
+
+    def generate_token(
+        self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None
+    ) -> str:
         """
         Generate a new token with the specified parameters.
-        
+
         Args:
             user_id (str): The unique identifier of the user
             token_type (str): Type of token ('access' or 'refresh')
             token_lifetime (timedelta): How long the token should be valid
-            
+
         Returns:
             str: The generated JWT token string
-            
+
         Raises:
             NotImplementedError: Must be implemented by subclasses
         """
@@ -113,13 +115,13 @@ class AbstractToken:
     def decode_token(self, token: str) -> Dict[str, Any]:
         """
         Decode and validate an existing token.
-        
+
         Args:
             token (str): The JWT token string to decode
-            
+
         Returns:
             Dict[str, Any]: The decoded token payload
-            
+
         Raises:
             NotImplementedError: Must be implemented by subclasses
         """
@@ -154,13 +156,13 @@ class Token(AbstractToken):
                 Defaults to ALGORITHM from configuration.
         """
         self.algorithm = algorithm or get_config("ALGORITHM")
-        self.signing_key, self.verification_key = _resolve_keys(
-            self.algorithm, explicit_secret_key=secret_key
-        )
+        self.signing_key, self.verification_key = _resolve_keys(self.algorithm, explicit_secret_key=secret_key)
         # Backward compatibility — existing code may read self.secret_key
         self.secret_key = self.signing_key
 
-    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
+    def generate_token(
+        self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None
+    ) -> str:
         """
         Generate a new JWT token.
 
@@ -173,14 +175,20 @@ class Token(AbstractToken):
         Returns:
             str: The generated JWT token string
         """
-        payload = {
-            "user_id": user_id,
-            "exp": timezone.now() + token_lifetime,
-            "iat": timezone.now(),
-            "type": token_type,
-        }
+        payload = {}
         if user_data:
             payload.update(user_data)
+
+        # Base claims set AFTER user_data to prevent override of security-critical fields
+        payload.update(
+            {
+                "user_id": user_id,
+                "jti": str(uuid.uuid4()),
+                "exp": timezone.now() + token_lifetime,
+                "iat": timezone.now(),
+                "type": token_type,
+            }
+        )
 
         return jwt.encode(payload, self.signing_key, algorithm=self.algorithm)
 
@@ -219,32 +227,32 @@ class Token(AbstractToken):
 def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
     """
     Generate both access and refresh tokens for a user.
-    
+
     This function creates a pair of JWT tokens - an access token for API authentication
     and a refresh token for obtaining new access tokens. Both tokens are generated
     using the same user ID but with different lifetimes and types.
-    
+
     Args:
         token_class (AbstractToken): Token class instance to use for generation
         user_id (str): The unique identifier of the user (typically str(user.id))
         user_data (Dict[str, Any], optional): Additional user data to include in tokens
-        
+
     Returns:
         Tuple[str, str]: A tuple containing (access_token, refresh_token)
-        
+
     Configuration:
         ACCESS_TOKEN_LIFETIME: Lifetime for access tokens (from Django settings)
         REFRESH_TOKEN_LIFETIME: Lifetime for refresh tokens (from Django settings)
-        
+
     Example:
         from blockauth.utils.token import generate_auth_token, AUTH_TOKEN_CLASS
-        
+
         # Generate tokens for a user
         access_token, refresh_token = generate_auth_token(
             token_class=AUTH_TOKEN_CLASS(),
             user_id=str(user.id)
         )
-        
+
         # Use tokens in API responses
         return {
             "access": access_token,
@@ -253,55 +261,53 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
     """
     # Generate access token with shorter lifetime
     access_token = token_class.generate_token(
-        user_id=user_id,
-        token_type="access",
-        token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
-        user_data=user_data
+        user_id=user_id, token_type="access", token_lifetime=get_config("ACCESS_TOKEN_LIFETIME"), user_data=user_data
     )
 
     # Generate refresh token with longer lifetime (minimal payload)
     refresh_token = token_class.generate_token(
-        user_id=user_id,
-        token_type="refresh",
-        token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
+        user_id=user_id, token_type="refresh", token_lifetime=get_config("REFRESH_TOKEN_LIFETIME")
     )
-    
+
     return access_token, refresh_token
 
 
 # Default token class instance for the application
 AUTH_TOKEN_CLASS = Token
 
+
 # Enhanced token generation function with custom claims support
-def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
+def generate_auth_token_with_custom_claims(
+    token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None
+) -> Tuple[str, str]:
     """
     Generate both access and refresh tokens for a user with custom claims support.
-    
+
     This function creates a pair of JWT tokens - an access token for API authentication
     and a refresh token for obtaining new access tokens. Both tokens are generated
     using the same user ID but with different lifetimes and types.
-    
+
     Args:
         token_class (AbstractToken): Token class instance to use for generation
         user_id (str): The unique identifier of the user (typically str(user.id))
         user_data (Dict[str, Any], optional): Additional user data to include in tokens
-        
+
     Returns:
         Tuple[str, str]: A tuple containing (access_token, refresh_token)
-        
+
     Configuration:
         ACCESS_TOKEN_LIFETIME: Lifetime for access tokens (from Django settings)
         REFRESH_TOKEN_LIFETIME: Lifetime for refresh tokens (from Django settings)
-        
+
     Example:
         from blockauth.utils.token import generate_auth_token_with_custom_claims, AUTH_TOKEN_CLASS
-        
+
         # Generate tokens for a user with custom claims
         access_token, refresh_token = generate_auth_token_with_custom_claims(
             token_class=AUTH_TOKEN_CLASS(),
             user_id=str(user.id)
         )
-        
+
         # Use tokens in API responses
         return {
             "access": access_token,
@@ -310,16 +316,18 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
     """
     # Try to use enhanced JWT manager if available
     logger.info("🔍 Attempting to use enhanced JWT system...")
-    
+
     try:
         logger.info("🔍 Importing JWT manager...")
         from blockauth.jwt.token_manager import jwt_manager
+
         logger.info("✅ Successfully imported JWT manager")
-        
+
         logger.info("🔍 Importing user model...")
         from blockauth.utils.config import get_block_auth_user_model
+
         logger.info("✅ Successfully imported user model")
-        
+
         # Get the user object from user_id
         user_model = get_block_auth_user_model()
         try:
@@ -328,37 +336,36 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         except user_model.DoesNotExist:
             logger.warning(f"User with id {user_id} not found, using fallback implementation")
             return generate_auth_token(token_class, user_id, user_data)
-        
+
         # Check if claims providers are registered
         logger.info(f"✅ JWT manager has {len(jwt_manager._claims_providers)} claims providers registered")
         for i, provider in enumerate(jwt_manager._claims_providers):
             logger.info(f"  Provider {i}: {provider.__class__.__name__}")
-        
+
         # Generate access token with custom claims
         logger.info("✅ Generating access token with custom claims...")
         access_token = jwt_manager.generate_token(
             user_id=user_id,
             token_type="access",
-            token_lifetime=get_config('ACCESS_TOKEN_LIFETIME'),
-            user_data=user_data
+            token_lifetime=get_config("ACCESS_TOKEN_LIFETIME"),
+            user_data=user_data,
         )
 
         # Generate refresh token with longer lifetime (minimal payload, no custom claims)
         logger.info("✅ Generating refresh token...")
         refresh_token = jwt_manager.generate_token(
-            user_id=user_id,
-            token_type="refresh",
-            token_lifetime=get_config('REFRESH_TOKEN_LIFETIME')
+            user_id=user_id, token_type="refresh", token_lifetime=get_config("REFRESH_TOKEN_LIFETIME")
         )
-        
+
         logger.info("✅ Successfully generated tokens with custom claims")
         return access_token, refresh_token
-        
+
     except ImportError as e:
         # Fall back to original implementation if enhanced system is not available
         logger.error(f"❌ ImportError in enhanced JWT system: {e}")
         logger.error(f"❌ ImportError type: {type(e)}")
         import traceback
+
         traceback.print_exc()
         logger.warning("⚠️ Falling back to original implementation due to ImportError")
         return generate_auth_token(token_class, user_id, user_data)
@@ -367,6 +374,7 @@ def generate_auth_token_with_custom_claims(token_class: AbstractToken, user_id: 
         logger.error(f"❌ Exception in enhanced JWT system: {e}")
         logger.error(f"❌ Exception type: {type(e)}")
         import traceback
+
         traceback.print_exc()
         logger.warning("⚠️ Falling back to original implementation due to Exception")
         return generate_auth_token(token_class, user_id, user_data)

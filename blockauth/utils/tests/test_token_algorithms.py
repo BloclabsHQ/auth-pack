@@ -18,7 +18,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from blockauth.utils.token import Token, _resolve_keys, _ASYMMETRIC_ALGORITHMS
+from blockauth.utils.token import _ASYMMETRIC_ALGORITHMS, Token, _resolve_keys
 
 TEST_HS256_SECRET = os.environ.get("TEST_JWT_SECRET", "test-hs256-secret-key-for-unit-tests")
 
@@ -31,10 +31,14 @@ def _generate_rsa_keypair():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     return private_pem, public_pem
 
 

@@ -4,7 +4,8 @@ BlockAuth Settings Module
 Provides a dict-like wrapper around DRF APISettings for consistent
 access across all BlockAuth sub-modules.
 """
-from blockauth.conf import auth_settings, DEFAULTS
+
+from blockauth.conf import DEFAULTS, auth_settings
 
 
 class BlockAuthSettings:
@@ -36,4 +37,4 @@ class BlockAuthSettings:
 # Create the settings wrapper
 blockauth_settings = BlockAuthSettings(auth_settings, DEFAULTS)
 
-__all__ = ['blockauth_settings', 'auth_settings']
+__all__ = ["blockauth_settings", "auth_settings"]

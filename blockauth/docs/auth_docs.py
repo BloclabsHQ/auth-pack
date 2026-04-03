@@ -5,25 +5,31 @@ This module contains comprehensive Swagger/OpenAPI documentation for authenticat
 Separated from business logic for better maintainability and organization.
 """
 
-from drf_spectacular.utils import OpenApiResponse, OpenApiExample, OpenApiParameter
-from rest_framework import status
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse
 
 from blockauth.serializers.user_account_serializers import (
-    SignUpRequestSerializer, SignUpResendOTPSerializer, SignUpConfirmationSerializer,
-    BasicLoginSerializer, PasswordlessLoginSerializer, PasswordlessLoginConfirmationSerializer,
-    RefreshTokenSerializer, PasswordResetRequestSerializer, PasswordResetConfirmationEmailSerializer,
-    PasswordChangeSerializer, EmailChangeRequestSerializer, EmailChangeConfirmationSerializer
+    BasicLoginSerializer,
+    EmailChangeConfirmationSerializer,
+    EmailChangeRequestSerializer,
+    PasswordChangeSerializer,
+    PasswordlessLoginConfirmationSerializer,
+    PasswordlessLoginSerializer,
+    PasswordResetConfirmationEmailSerializer,
+    PasswordResetRequestSerializer,
+    RefreshTokenSerializer,
+    SignUpConfirmationSerializer,
+    SignUpRequestSerializer,
+    SignUpResendOTPSerializer,
 )
-
 
 # =============================================================================
 # SIGNUP DOCUMENTATION
 # =============================================================================
 
 signup_docs = {
-    'operation_id': 'user_signup',
-    'summary': 'User Registration',
-    'description': (
+    "operation_id": "user_signup",
+    "summary": "User Registration",
+    "description": (
         "Create a new user account with email/phone verification (Basic Signup).\n"
         "\n"
         "**Process:**\n"
@@ -53,20 +59,20 @@ signup_docs = {
         "- User onboarding for SaaS applications\n"
         "- Community platform member registration\n"
     ),
-    'tags': ['Signup'],
-    'deprecated': False,
-    'request': SignUpRequestSerializer,
-    'examples': [
+    "tags": ["Signup"],
+    "deprecated": False,
+    "request": SignUpRequestSerializer,
+    "examples": [
         OpenApiExample(
             "Email Registration (OTP)",
             value={
                 "identifier": "user@example.com",
                 "password": "MySecretPassword123",
                 "method": "email",
-                "verification_type": "otp"
+                "verification_type": "otp",
             },
             request_only=True,
-            description="Register with email using OTP verification"
+            description="Register with email using OTP verification",
         ),
         OpenApiExample(
             "Email Registration (Link)",
@@ -74,10 +80,10 @@ signup_docs = {
                 "identifier": "user@example.com",
                 "password": "MySecretPassword123",
                 "method": "email",
-                "verification_type": "link"
+                "verification_type": "link",
             },
             request_only=True,
-            description="Register with email using verification link"
+            description="Register with email using verification link",
         ),
         OpenApiExample(
             "Phone Registration (SMS)",
@@ -85,13 +91,13 @@ signup_docs = {
                 "identifier": "+1234567890",
                 "password": "MySecretPassword123",
                 "method": "sms",
-                "verification_type": "otp"
+                "verification_type": "otp",
             },
             request_only=True,
-            description="Register with phone number using SMS OTP"
-        )
+            description="Register with phone number using SMS OTP",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Registration initiated successfully",
             response={
@@ -100,14 +106,10 @@ signup_docs = {
                     "message": {
                         "type": "string",
                         "description": "Confirmation message with verification method",
-                        "enum": [
-                            "otp sent via email.",
-                            "link sent via email.",
-                            "otp sent via sms."
-                        ]
+                        "enum": ["otp sent via email.", "link sent via email.", "otp sent via sms."],
                     }
                 },
-                "required": ["message"]
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -119,8 +121,8 @@ signup_docs = {
                     "Link Sent",
                     value={"message": "link sent via email."},
                     status_codes=[200],
-                )
-            ]
+                ),
+            ],
         ),
         400: OpenApiResponse(
             description="Validation error - Invalid input data",
@@ -130,53 +132,39 @@ signup_docs = {
                     "detail": {
                         "type": "object",
                         "additionalProperties": {"type": "string"},
-                        "description": "Field-specific validation errors"
+                        "description": "Field-specific validation errors",
                     },
-                    "error_code": {
-                        "type": "string",
-                        "description": "Application-specific error code"
-                    }
+                    "error_code": {"type": "string", "description": "Application-specific error code"},
                 },
-                "required": ["detail"]
+                "required": ["detail"],
             },
             examples=[
                 OpenApiExample(
                     "Invalid Email",
-                    value={
-                        "detail": {"identifier": ["Enter a valid email address."]},
-                        "error_code": "4001"
-                    },
+                    value={"detail": {"identifier": ["Enter a valid email address."]}, "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Weak Password",
                     value={
                         "detail": {"password": ["This password is too short. It must contain at least 8 characters."]},
-                        "error_code": "4001"
+                        "error_code": "4001",
                     },
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "User Already Exists",
-                    value={
-                        "detail": "User with this email already exists.",
-                        "error_code": "4002"
-                    },
+                    value={"detail": "User with this email already exists.", "error_code": "4002"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
             response={
                 "type": "object",
-                "properties": {
-                    "detail": {
-                        "type": "string",
-                        "description": "Rate limit error message"
-                    }
-                },
-                "required": ["detail"]
+                "properties": {"detail": {"type": "string", "description": "Rate limit error message"}},
+                "required": ["detail"],
             },
             examples=[
                 OpenApiExample(
@@ -184,26 +172,20 @@ signup_docs = {
                     value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
                     status_codes=[429],
                 )
-            ]
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 signup_resend_otp_docs = {
-    'operation_id': 'resend_verification',
-    'summary': 'Resend Verification OTP/Link',
-    'description': (
+    "operation_id": "resend_verification",
+    "summary": "Resend Verification OTP/Link",
+    "description": (
         "Resend OTP or verification link for signup confirmation or wallet email verification.\n"
         "\n"
         "**Use Cases:**\n"
@@ -227,43 +209,32 @@ signup_resend_otp_docs = {
         "- Wallet user adding email verification\n"
         "- Account recovery for unverified users\n"
     ),
-    'tags': ['Verification'],
-    'deprecated': False,
-    'request': SignUpResendOTPSerializer,
-    'examples': [
+    "tags": ["Verification"],
+    "deprecated": False,
+    "request": SignUpResendOTPSerializer,
+    "examples": [
         OpenApiExample(
             "Signup Verification (OTP)",
-            value={
-                "identifier": "user@example.com",
-                "method": "email",
-                "verification_type": "otp"
-            },
+            value={"identifier": "user@example.com", "method": "email", "verification_type": "otp"},
             request_only=True,
-            description="Resend OTP for signup verification"
+            description="Resend OTP for signup verification",
         ),
         OpenApiExample(
             "Wallet Email Verification",
-            value={
-                "identifier": "user@example.com",
-                "method": "email",
-                "verification_type": "otp"
-            },
+            value={"identifier": "user@example.com", "method": "email", "verification_type": "otp"},
             request_only=True,
-            description="Resend OTP for wallet email verification"
-        )
+            description="Resend OTP for wallet email verification",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Verification OTP/link sent successfully",
             response={
                 "type": "object",
                 "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Confirmation message with verification method"
-                    }
+                    "message": {"type": "string", "description": "Confirmation message with verification method"}
                 },
-                "required": ["message"]
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -275,20 +246,17 @@ signup_resend_otp_docs = {
                     "Link Success",
                     value={"message": "link sent via email."},
                     status_codes=[200],
-                )
-            ]
+                ),
+            ],
         ),
         400: OpenApiResponse(
             description="Validation error",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
@@ -296,43 +264,31 @@ signup_resend_otp_docs = {
                     value={"detail": "Invalid email or phone number."},
                     status_codes=[400],
                 )
-            ]
+            ],
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            },
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
             examples=[
                 OpenApiExample(
                     "Rate limit",
                     value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
                     status_codes=[429],
                 )
-            ]
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 signup_confirm_docs = {
-    'operation_id': 'confirm_signup',
-    'summary': 'Confirm User Registration',
-    'description': (
+    "operation_id": "confirm_signup",
+    "summary": "Confirm User Registration",
+    "description": (
         "Verify OTP or click verification link to complete user registration\n"
         "\n"
         "**Process:**\n"
@@ -357,41 +313,30 @@ signup_confirm_docs = {
         "- Account activation after registration\n"
         "- Two-factor authentication setup\n"
     ),
-    'tags': ['Verification'],
-    'deprecated': False,
-    'request': SignUpConfirmationSerializer,
-    'examples': [
+    "tags": ["Verification"],
+    "deprecated": False,
+    "request": SignUpConfirmationSerializer,
+    "examples": [
         OpenApiExample(
             "Email OTP Confirmation",
-            value={
-                "identifier": "user@example.com",
-                "code": "123456"
-            },
+            value={"identifier": "user@example.com", "code": "123456"},
             request_only=True,
-            description="Confirm registration with email OTP"
+            description="Confirm registration with email OTP",
         ),
         OpenApiExample(
             "Phone OTP Confirmation",
-            value={
-                "identifier": "+1234567890",
-                "code": "123456"
-            },
+            value={"identifier": "+1234567890", "code": "123456"},
             request_only=True,
-            description="Confirm registration with phone OTP"
-        )
+            description="Confirm registration with phone OTP",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Registration confirmed successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Success confirmation message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Success confirmation message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -399,19 +344,16 @@ signup_confirm_docs = {
                     value={"message": "Email verified successfully."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid verification code",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
@@ -423,20 +365,14 @@ signup_confirm_docs = {
                     "Expired Code",
                     value={"detail": "Verification code has expired."},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
@@ -445,9 +381,9 @@ signup_confirm_docs = {
 # =============================================================================
 
 basic_login_docs = {
-    'operation_id': 'basic_login',
-    'summary': 'Basic Authentication Login',
-    'description': (
+    "operation_id": "basic_login",
+    "summary": "Basic Authentication Login",
+    "description": (
         "Authenticate user with email/phone and password to obtain access tokens\n"
         "\n"
         "**Authentication Flow:**\n"
@@ -476,30 +412,24 @@ basic_login_docs = {
         "- API access for authenticated users\n"
         "- E-commerce platform customer login\n"
     ),
-    'tags': ['Login'],
-    'deprecated': False,
-    'request': BasicLoginSerializer,
-    'examples': [
+    "tags": ["Login"],
+    "deprecated": False,
+    "request": BasicLoginSerializer,
+    "examples": [
         OpenApiExample(
             "Email Login",
-            value={
-                "identifier": "user@example.com",
-                "password": "MySecretPassword123"
-            },
+            value={"identifier": "user@example.com", "password": "MySecretPassword123"},
             request_only=True,
-            description="Login with email and password"
+            description="Login with email and password",
         ),
         OpenApiExample(
             "Phone Login",
-            value={
-                "identifier": "+1234567890",
-                "password": "MySecretPassword123"
-            },
+            value={"identifier": "+1234567890", "password": "MySecretPassword123"},
             request_only=True,
-            description="Login with phone number and password"
-        )
+            description="Login with phone number and password",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Login successful",
             response={
@@ -508,38 +438,25 @@ basic_login_docs = {
                     "access": {
                         "type": "string",
                         "description": "JWT access token for API authentication",
-                        "format": "jwt"
+                        "format": "jwt",
                     },
                     "refresh": {
                         "type": "string",
                         "description": "JWT refresh token for token renewal",
-                        "format": "jwt"
+                        "format": "jwt",
                     },
                     "user": {
                         "type": "object",
                         "properties": {
-                            "id": {
-                                "type": "integer",
-                                "description": "User ID"
-                            },
-                            "email": {
-                                "type": "string",
-                                "format": "email",
-                                "description": "User email address"
-                            },
-                            "phone_number": {
-                                "type": "string",
-                                "description": "User phone number"
-                            },
-                            "is_verified": {
-                                "type": "boolean",
-                                "description": "Email verification status"
-                            }
+                            "id": {"type": "integer", "description": "User ID"},
+                            "email": {"type": "string", "format": "email", "description": "User email address"},
+                            "phone_number": {"type": "string", "description": "User phone number"},
+                            "is_verified": {"type": "boolean", "description": "Email verification status"},
                         },
-                        "required": ["id", "is_verified"]
-                    }
+                        "required": ["id", "is_verified"],
+                    },
                 },
-                "required": ["access", "refresh"]
+                "required": ["access", "refresh"],
             },
             examples=[
                 OpenApiExample(
@@ -547,92 +464,61 @@ basic_login_docs = {
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                         "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "user": {
-                            "id": 123,
-                            "email": "user@example.com",
-                            "is_verified": True
-                        }
+                        "user": {"id": 123, "email": "user@example.com", "is_verified": True},
                     },
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid credentials",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Credentials",
-                    value={
-                        "detail": "Invalid email or password.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Invalid email or password.", "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Account Not Verified",
-                    value={
-                        "detail": "Please verify your email before logging in.",
-                        "error_code": "4003"
-                    },
+                    value={"detail": "Please verify your email before logging in.", "error_code": "4003"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         401: OpenApiResponse(
             description="Authentication failed",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
         429: OpenApiResponse(
             description="Too many login attempts",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            },
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
             examples=[
                 OpenApiExample(
                     "Rate Limit",
                     value={"detail": "Too many login attempts. Please try again later."},
                     status_codes=[429],
                 )
-            ]
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 passwordless_login_docs = {
-    'operation_id': 'passwordless_login',
-    'summary': 'Passwordless Login',
-    'description': (
+    "operation_id": "passwordless_login",
+    "summary": "Passwordless Login",
+    "description": (
         "Initiate passwordless login by sending OTP or verification link\n"
         "\n"
         "**Process:**\n"
@@ -657,43 +543,30 @@ passwordless_login_docs = {
         "- Enhanced security for sensitive applications\n"
         "- Corporate SSO integration\n"
     ),
-    'tags': ['Login'],
-    'deprecated': False,
-    'request': PasswordlessLoginSerializer,
-    'examples': [
+    "tags": ["Login"],
+    "deprecated": False,
+    "request": PasswordlessLoginSerializer,
+    "examples": [
         OpenApiExample(
             "Email OTP Login",
-            value={
-                "identifier": "user@example.com",
-                "method": "email",
-                "verification_type": "otp"
-            },
+            value={"identifier": "user@example.com", "method": "email", "verification_type": "otp"},
             request_only=True,
-            description="Login with email OTP"
+            description="Login with email OTP",
         ),
         OpenApiExample(
             "Phone SMS Login",
-            value={
-                "identifier": "+1234567890",
-                "method": "sms",
-                "verification_type": "otp"
-            },
+            value={"identifier": "+1234567890", "method": "sms", "verification_type": "otp"},
             request_only=True,
-            description="Login with SMS OTP"
-        )
+            description="Login with SMS OTP",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Login OTP/link sent successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Confirmation message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Confirmation message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -701,66 +574,48 @@ passwordless_login_docs = {
                     value={"message": "otp sent via email."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid identifier or user not found",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "User Not Found",
-                    value={
-                        "detail": "User not found with this email.",
-                        "error_code": "4004"
-                    },
+                    value={"detail": "User not found with this email.", "error_code": "4004"},
                     status_codes=[400],
                 )
-            ]
+            ],
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            },
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
             examples=[
                 OpenApiExample(
                     "Rate Limit",
                     value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
                     status_codes=[429],
                 )
-            ]
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 passwordless_confirm_docs = {
-    'operation_id': 'confirm_passwordless_login',
-    'summary': 'Confirm Passwordless Login',
-    'description': (
+    "operation_id": "confirm_passwordless_login",
+    "summary": "Confirm Passwordless Login",
+    "description": (
         "Complete passwordless login by verifying OTP or link\n"
         "\n"
         "**Process:**\n"
@@ -780,30 +635,24 @@ passwordless_confirm_docs = {
         "- Temporary access code validation\n"
         "- Guest user authentication\n"
     ),
-    'tags': ['Verification'],
-    'deprecated': False,
-    'request': PasswordlessLoginConfirmationSerializer,
-    'examples': [
+    "tags": ["Verification"],
+    "deprecated": False,
+    "request": PasswordlessLoginConfirmationSerializer,
+    "examples": [
         OpenApiExample(
             "Email OTP Confirmation",
-            value={
-                "identifier": "user@example.com",
-                "code": "123456"
-            },
+            value={"identifier": "user@example.com", "code": "123456"},
             request_only=True,
-            description="Confirm login with email OTP"
+            description="Confirm login with email OTP",
         ),
         OpenApiExample(
             "Phone OTP Confirmation",
-            value={
-                "identifier": "+1234567890",
-                "code": "123456"
-            },
+            value={"identifier": "+1234567890", "code": "123456"},
             request_only=True,
-            description="Confirm login with phone OTP"
-        )
+            description="Confirm login with phone OTP",
+        ),
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Login successful",
             response={
@@ -812,38 +661,25 @@ passwordless_confirm_docs = {
                     "access": {
                         "type": "string",
                         "description": "JWT access token for API authentication",
-                        "format": "jwt"
+                        "format": "jwt",
                     },
                     "refresh": {
                         "type": "string",
                         "description": "JWT refresh token for token renewal",
-                        "format": "jwt"
+                        "format": "jwt",
                     },
                     "user": {
                         "type": "object",
                         "properties": {
-                            "id": {
-                                "type": "integer",
-                                "description": "User ID"
-                            },
-                            "email": {
-                                "type": "string",
-                                "format": "email",
-                                "description": "User email address"
-                            },
-                            "phone_number": {
-                                "type": "string",
-                                "description": "User phone number"
-                            },
-                            "is_verified": {
-                                "type": "boolean",
-                                "description": "Email verification status"
-                            }
+                            "id": {"type": "integer", "description": "User ID"},
+                            "email": {"type": "string", "format": "email", "description": "User email address"},
+                            "phone_number": {"type": "string", "description": "User phone number"},
+                            "is_verified": {"type": "boolean", "description": "Email verification status"},
                         },
-                        "required": ["id", "is_verified"]
-                    }
+                        "required": ["id", "is_verified"],
+                    },
                 },
-                "required": ["access", "refresh"]
+                "required": ["access", "refresh"],
             },
             examples=[
                 OpenApiExample(
@@ -851,58 +687,39 @@ passwordless_confirm_docs = {
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                         "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "user": {
-                            "id": 123,
-                            "email": "user@example.com",
-                            "is_verified": True
-                        }
+                        "user": {"id": 123, "email": "user@example.com", "is_verified": True},
                     },
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid verification code",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Code",
-                    value={
-                        "detail": "Invalid verification code.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Invalid verification code.", "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Expired Code",
-                    value={
-                        "detail": "Verification code has expired.",
-                        "error_code": "4005"
-                    },
+                    value={"detail": "Verification code has expired.", "error_code": "4005"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
@@ -911,9 +728,9 @@ passwordless_confirm_docs = {
 # =============================================================================
 
 refresh_token_docs = {
-    'operation_id': 'refresh_token',
-    'summary': 'Refresh Access Token',
-    'description': (
+    "operation_id": "refresh_token",
+    "summary": "Refresh Access Token",
+    "description": (
         "Get a new access token using a valid refresh token\n"
         "\n"
         "**Process:**\n"
@@ -933,93 +750,65 @@ refresh_token_docs = {
         "- Session renewal for long-running applications\n"
         "- Mobile app background token refresh\n"
     ),
-    'tags': ['Token Management'],
-    'deprecated': False,
-    'request': RefreshTokenSerializer,
-    'examples': [
+    "tags": ["Token Management"],
+    "deprecated": False,
+    "request": RefreshTokenSerializer,
+    "examples": [
         OpenApiExample(
             "Token Refresh",
-            value={
-                "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-            },
+            value={"refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."},
             request_only=True,
-            description="Refresh access token with refresh token"
+            description="Refresh access token with refresh token",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Token refreshed successfully",
             response={
                 "type": "object",
                 "properties": {
-                    "access": {
-                        "type": "string",
-                        "description": "New JWT access token",
-                        "format": "jwt"
-                    },
-                    "refresh": {
-                        "type": "string",
-                        "description": "New JWT refresh token",
-                        "format": "jwt"
-                    }
+                    "access": {"type": "string", "description": "New JWT access token", "format": "jwt"},
+                    "refresh": {"type": "string", "description": "New JWT refresh token", "format": "jwt"},
                 },
-                "required": ["access", "refresh"]
+                "required": ["access", "refresh"],
             },
             examples=[
                 OpenApiExample(
                     "Success",
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                     },
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid refresh token",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Token",
-                    value={
-                        "detail": "Invalid refresh token.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Invalid refresh token.", "error_code": "4001"},
                     status_codes=[400],
                 )
-            ]
+            ],
         ),
         401: OpenApiResponse(
             description="Token expired or invalid",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
@@ -1028,9 +817,9 @@ refresh_token_docs = {
 # =============================================================================
 
 password_reset_docs = {
-    'operation_id': 'request_password_reset',
-    'summary': 'Request Password Reset',
-    'description': (
+    "operation_id": "request_password_reset",
+    "summary": "Request Password Reset",
+    "description": (
         "Initiate password reset process by sending OTP or reset link\n"
         "\n"
         "**Process:**\n"
@@ -1050,33 +839,24 @@ password_reset_docs = {
         "- Password expiration notification\n"
         "- Security policy enforcement\n"
     ),
-    'tags': ['Password Management'],
-    'deprecated': False,
-    'request': PasswordResetRequestSerializer,
-    'examples': [
+    "tags": ["Password Management"],
+    "deprecated": False,
+    "request": PasswordResetRequestSerializer,
+    "examples": [
         OpenApiExample(
             "Email Password Reset",
-            value={
-                "identifier": "user@example.com",
-                "method": "email",
-                "verification_type": "otp"
-            },
+            value={"identifier": "user@example.com", "method": "email", "verification_type": "otp"},
             request_only=True,
-            description="Request password reset via email OTP"
+            description="Request password reset via email OTP",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Password reset initiated successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Confirmation message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Confirmation message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -1084,56 +864,41 @@ password_reset_docs = {
                     value={"message": "Password reset OTP sent via email."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid identifier",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
-            }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
+            },
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            },
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
             examples=[
                 OpenApiExample(
                     "Rate Limit",
                     value={"detail": "Request limit exceeded. Please try again after 30 seconds."},
                     status_codes=[429],
                 )
-            ]
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 password_reset_confirm_docs = {
-    'operation_id': 'confirm_password_reset',
-    'summary': 'Confirm Password Reset',
-    'description': (
+    "operation_id": "confirm_password_reset",
+    "summary": "Confirm Password Reset",
+    "description": (
         "Complete password reset by providing verification code, new password, and confirmation.\n"
         "\n"
         "**Process:**\n"
@@ -1154,34 +919,29 @@ password_reset_confirm_docs = {
         "- Compromised account recovery\n"
         "- Password policy compliance\n"
     ),
-    'tags': ['Password Management'],
-    'deprecated': False,
-    'request': PasswordResetConfirmationEmailSerializer,
-    'examples': [
+    "tags": ["Password Management"],
+    "deprecated": False,
+    "request": PasswordResetConfirmationEmailSerializer,
+    "examples": [
         OpenApiExample(
             "Password Reset Confirmation",
             value={
                 "identifier": "user@example.com",
                 "code": "123456",
                 "new_password": "NewSecurePassword123",
-                "confirm_password": "NewSecurePassword123"
+                "confirm_password": "NewSecurePassword123",
             },
             request_only=True,
-            description="Confirm password reset with OTP, new password, and confirmation"
+            description="Confirm password reset with OTP, new password, and confirmation",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Password reset successful",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Success message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Success message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -1189,65 +949,47 @@ password_reset_confirm_docs = {
                     value={"message": "Password reset successful."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid code or weak password",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Code",
-                    value={
-                        "detail": "Invalid verification code.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Invalid verification code.", "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Weak Password",
-                    value={
-                        "detail": {"new_password": ["This password is too short."]},
-                        "error_code": "4001"
-                    },
+                    value={"detail": {"new_password": ["This password is too short."]}, "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Password Mismatch",
-                    value={
-                        "detail": {"new_password": "passwords do not match."},
-                        "error_code": "4007"
-                    },
+                    value={"detail": {"new_password": "passwords do not match."}, "error_code": "4007"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 password_change_docs = {
-    'operation_id': 'change_password',
-    'summary': 'Change Password',
-    'description': (
+    "operation_id": "change_password",
+    "summary": "Change Password",
+    "description": (
         "Change password for authenticated user.\n"
         "\n"
         "**Process:**\n"
@@ -1272,33 +1014,28 @@ password_change_docs = {
         "- Account security enhancement\n"
         "- Password policy enforcement\n"
     ),
-    'tags': ['Password Management'],
-    'deprecated': False,
-    'request': PasswordChangeSerializer,
-    'examples': [
+    "tags": ["Password Management"],
+    "deprecated": False,
+    "request": PasswordChangeSerializer,
+    "examples": [
         OpenApiExample(
             "Password Change",
             value={
                 "old_password": "OldPassword123",
                 "new_password": "NewSecurePassword123",
-                "confirm_password": "NewSecurePassword123"
+                "confirm_password": "NewSecurePassword123",
             },
             request_only=True,
-            description="Change password with old password, new password, and confirmation"
+            description="Change password with old password, new password, and confirmation",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Password changed successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Success message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Success message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -1306,78 +1043,48 @@ password_change_docs = {
                     value={"message": "Password changed successfully."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid current password or weak new password",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Old Password",
-                    value={
-                        "detail": "old password is incorrect.",
-                        "error_code": "4005"
-                    },
+                    value={"detail": "old password is incorrect.", "error_code": "4005"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Weak New Password",
-                    value={
-                        "detail": {"new_password": ["This password is too short."]},
-                        "error_code": "4001"
-                    },
+                    value={"detail": {"new_password": ["This password is too short."]}, "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Password Mismatch",
-                    value={
-                        "detail": {"new_password": "passwords do not match."},
-                        "error_code": "4007"
-                    },
+                    value={"detail": {"new_password": "passwords do not match."}, "error_code": "4007"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         401: OpenApiResponse(
             description="Authentication required",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
@@ -1386,9 +1093,9 @@ password_change_docs = {
 # =============================================================================
 
 email_change_docs = {
-    'operation_id': 'request_email_change',
-    'summary': 'Request Email Change',
-    'description': (
+    "operation_id": "request_email_change",
+    "summary": "Request Email Change",
+    "description": (
         "Initiate email change process for authenticated user.\n"
         "\n"
         "**Process:**\n"
@@ -1411,32 +1118,24 @@ email_change_docs = {
         "- Account ownership transfer\n"
         "- Email provider changes\n"
     ),
-    'tags': ['Account Management'],
-    'deprecated': False,
-    'request': EmailChangeRequestSerializer,
-    'examples': [
+    "tags": ["Account Management"],
+    "deprecated": False,
+    "request": EmailChangeRequestSerializer,
+    "examples": [
         OpenApiExample(
             "Email Change Request",
-            value={
-                "new_email": "newemail@example.com",
-                "current_password": "CurrentPassword123"
-            },
+            value={"new_email": "newemail@example.com", "current_password": "CurrentPassword123"},
             request_only=True,
-            description="Request email change with new email and current password"
+            description="Request email change with new email and current password",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Email change initiated successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Confirmation message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Confirmation message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -1444,77 +1143,50 @@ email_change_docs = {
                     value={"message": "Email change OTP sent to new email."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid current password or email",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Password",
-                    value={
-                        "detail": "Current password is incorrect.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Current password is incorrect.", "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Email Already Exists",
-                    value={
-                        "detail": "Email already exists.",
-                        "error_code": "4002"
-                    },
+                    value={"detail": "Email already exists.", "error_code": "4002"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         401: OpenApiResponse(
             description="Authentication required",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
         429: OpenApiResponse(
             description="Rate limit exceeded",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"}
-                },
-                "required": ["detail"]
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}}, "required": ["detail"]},
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
 }
 
 
 email_change_confirm_docs = {
-    'operation_id': 'confirm_email_change',
-    'summary': 'Confirm Email Change',
-    'description': (
+    "operation_id": "confirm_email_change",
+    "summary": "Confirm Email Change",
+    "description": (
         "Complete email change by providing verification code.\n"
         "\n"
         "**Process:**\n"
@@ -1537,31 +1209,24 @@ email_change_confirm_docs = {
         "- Email change confirmation\n"
         "- Account security verification\n"
     ),
-    'tags': ['Account Management'],
-    'deprecated': False,
-    'request': EmailChangeConfirmationSerializer,
-    'examples': [
+    "tags": ["Account Management"],
+    "deprecated": False,
+    "request": EmailChangeConfirmationSerializer,
+    "examples": [
         OpenApiExample(
             "Email Change Confirmation",
-            value={
-                "code": "123456"
-            },
+            value={"code": "123456"},
             request_only=True,
-            description="Confirm email change with verification code"
+            description="Confirm email change with verification code",
         )
     ],
-    'responses': {
+    "responses": {
         200: OpenApiResponse(
             description="Email changed successfully",
             response={
                 "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "description": "Success message"
-                    }
-                },
-                "required": ["message"]
+                "properties": {"message": {"type": "string", "description": "Success message"}},
+                "required": ["message"],
             },
             examples=[
                 OpenApiExample(
@@ -1569,58 +1234,37 @@ email_change_confirm_docs = {
                     value={"message": "Email changed successfully."},
                     status_codes=[200],
                 )
-            ]
+            ],
         ),
         400: OpenApiResponse(
             description="Invalid verification code",
             response={
                 "type": "object",
                 "properties": {
-                    "detail": {
-                        "type": "object",
-                        "additionalProperties": {"type": "string"}
-                    },
-                    "error_code": {"type": "string"}
-                }
+                    "detail": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "error_code": {"type": "string"},
+                },
             },
             examples=[
                 OpenApiExample(
                     "Invalid Code",
-                    value={
-                        "detail": "Invalid verification code.",
-                        "error_code": "4001"
-                    },
+                    value={"detail": "Invalid verification code.", "error_code": "4001"},
                     status_codes=[400],
                 ),
                 OpenApiExample(
                     "Expired Code",
-                    value={
-                        "detail": "Verification code has expired.",
-                        "error_code": "4005"
-                    },
+                    value={"detail": "Verification code has expired.", "error_code": "4005"},
                     status_codes=[400],
-                )
-            ]
+                ),
+            ],
         ),
         401: OpenApiResponse(
             description="Authentication required",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
         500: OpenApiResponse(
             description="Internal server error",
-            response={
-                "type": "object",
-                "properties": {
-                    "detail": {"type": "string"},
-                    "error_code": {"type": "string"}
-                }
-            }
-        )
-    }
-} 
+            response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
+        ),
+    },
+}

@@ -8,13 +8,13 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from blockauth.utils.validators import (
-    PASSWORD_MIN_LENGTH,
     PASSWORD_MAX_LENGTH,
+    PASSWORD_MIN_LENGTH,
     PASSWORD_VALIDATION_ERROR,
-    validate_password,
+    FabricBlocPasswordValidator,
     is_valid_password,
     is_valid_phone_number,
-    FabricBlocPasswordValidator,
+    validate_password,
 )
 
 
@@ -104,8 +104,38 @@ class TestValidatePassword:
 
     def test_all_valid_symbols(self):
         """All allowed symbols should be accepted."""
-        symbols = ['!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '-', '=',
-                   '[', ']', '{', '}', ';', "'", ':', '"', '\\', '|', ',', '.', '<', '>', '/', '?']
+        symbols = [
+            "!",
+            "@",
+            "#",
+            "$",
+            "%",
+            "^",
+            "&",
+            "*",
+            "(",
+            ")",
+            "_",
+            "+",
+            "-",
+            "=",
+            "[",
+            "]",
+            "{",
+            "}",
+            ";",
+            "'",
+            ":",
+            '"',
+            "\\",
+            "|",
+            ",",
+            ".",
+            "<",
+            ">",
+            "/",
+            "?",
+        ]
         for symbol in symbols:
             password = f"Password1{symbol}"
             errors = validate_password(password)

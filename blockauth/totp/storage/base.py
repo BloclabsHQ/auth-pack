@@ -4,10 +4,11 @@ TOTP 2FA Storage Interface
 Abstract base class defining the storage interface for TOTP 2FA data.
 This allows for pluggable storage backends (Django ORM, custom, etc).
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 
 @dataclass
@@ -21,7 +22,7 @@ class TOTP2FAData:
     user_id: str
     encrypted_secret: str
     status: str
-    algorithm: str = 'sha1'
+    algorithm: str = "sha1"
     digits: int = 6
     time_step: int = 30
     backup_codes_hash: List[str] = field(default_factory=list)
@@ -35,13 +36,14 @@ class TOTP2FAData:
 
     def is_enabled(self) -> bool:
         """Check if TOTP is enabled."""
-        return self.status == 'enabled'
+        return self.status == "enabled"
 
     def is_locked(self) -> bool:
         """Check if account is locked."""
         if self.locked_until is None:
             return False
         from django.utils import timezone
+
         return timezone.now() < self.locked_until
 
 
@@ -67,17 +69,16 @@ class ITOTP2FAStore(ABC):
         Returns:
             TOTP2FAData if exists, None otherwise
         """
-        pass
 
     @abstractmethod
     def create(
         self,
         user_id: str,
         encrypted_secret: str,
-        algorithm: str = 'sha1',
+        algorithm: str = "sha1",
         digits: int = 6,
         time_step: int = 30,
-        status: str = 'pending_confirmation'
+        status: str = "pending_confirmation",
     ) -> TOTP2FAData:
         """
         Create a new TOTP configuration.
@@ -96,7 +97,6 @@ class ITOTP2FAStore(ABC):
         Raises:
             TOTPAlreadyEnabledError: If TOTP already exists for user
         """
-        pass
 
     @abstractmethod
     def update_status(self, user_id: str, status: str) -> bool:
@@ -110,7 +110,6 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if updated successfully
         """
-        pass
 
     @abstractmethod
     def delete(self, user_id: str) -> bool:
@@ -123,7 +122,6 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if deleted successfully
         """
-        pass
 
     @abstractmethod
     def set_backup_codes(self, user_id: str, hashed_codes: List[str]) -> bool:
@@ -137,7 +135,6 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if set successfully
         """
-        pass
 
     @abstractmethod
     def use_backup_code(self, user_id: str, code_index: int) -> bool:
@@ -151,15 +148,9 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if marked successfully
         """
-        pass
 
     @abstractmethod
-    def record_failed_attempt(
-        self,
-        user_id: str,
-        max_attempts: int = 5,
-        lockout_duration: int = 300
-    ) -> bool:
+    def record_failed_attempt(self, user_id: str, max_attempts: int = 5, lockout_duration: int = 300) -> bool:
         """
         Record a failed verification attempt.
 
@@ -171,7 +162,6 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if account is now locked
         """
-        pass
 
     @abstractmethod
     def record_successful_verification(self, user_id: str, time_counter: int) -> bool:
@@ -185,7 +175,6 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if recorded successfully
         """
-        pass
 
     @abstractmethod
     def is_counter_used(self, user_id: str, time_counter: int) -> bool:
@@ -199,17 +188,16 @@ class ITOTP2FAStore(ABC):
         Returns:
             True if counter was already used
         """
-        pass
 
     @abstractmethod
     def log_verification(
         self,
         user_id: str,
         success: bool,
-        verification_type: str = 'totp',
+        verification_type: str = "totp",
         ip_address: Optional[str] = None,
-        user_agent: str = '',
-        failure_reason: str = ''
+        user_agent: str = "",
+        failure_reason: str = "",
     ) -> None:
         """
         Log a verification attempt.
@@ -222,7 +210,6 @@ class ITOTP2FAStore(ABC):
             user_agent: Client user agent
             failure_reason: Reason for failure if applicable
         """
-        pass
 
     def get_user(self, user_id: str) -> Optional[Any]:
         """

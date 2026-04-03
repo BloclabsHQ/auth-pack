@@ -6,6 +6,7 @@ with backup codes, rate limiting, and replay attack prevention.
 
 Security: All sensitive operations are audit logged per SECURITY_STANDARDS.md
 """
+
 import base64
 import hashlib
 import hmac
@@ -19,21 +20,20 @@ from typing import List, Optional, Tuple
 
 from blockauth.utils.audit import audit_trail
 
-from ..config import get_totp_config, TOTPConfiguration
+from ..config import TOTPConfiguration, get_totp_config
 from ..constants import TOTPAlgorithm, TOTPStatus
 from ..exceptions import (
     TOTPAccountLockedError,
     TOTPAlreadyEnabledError,
+    TOTPBackupCodeUsedError,
     TOTPCodeReusedError,
     TOTPEncryptionRequiredError,
+    TOTPInvalidBackupCodeError,
     TOTPInvalidCodeError,
     TOTPInvalidSecretError,
     TOTPNotEnabledError,
     TOTPSetupError,
-    TOTPTooManyAttemptsError,
     TOTPVerificationError,
-    TOTPInvalidBackupCodeError,
-    TOTPBackupCodeUsedError,
 )
 from ..storage.base import ITOTP2FAStore, TOTP2FAData
 
@@ -51,6 +51,7 @@ ALGORITHM_MAP = {
 @dataclass
 class SetupResult:
     """Result of TOTP setup operation."""
+
     secret: str  # Base32-encoded secret (to show to user)
     provisioning_uri: str  # otpauth:// URI for QR code
     backup_codes: List[str]  # Plain text backup codes (show once)
@@ -59,8 +60,9 @@ class SetupResult:
 @dataclass
 class VerifyResult:
     """Result of TOTP verification."""
+
     success: bool
-    verification_type: str = 'totp'  # 'totp' or 'backup'
+    verification_type: str = "totp"  # 'totp' or 'backup'
     backup_codes_remaining: Optional[int] = None
 
 
@@ -99,7 +101,7 @@ class TOTPService:
         self,
         store: ITOTP2FAStore,
         config: Optional[TOTPConfiguration] = None,
-        encryption_service: Optional['ISecretEncryption'] = None
+        encryption_service: Optional["ISecretEncryption"] = None,
     ):
         """
         Initialize TOTP service.
@@ -143,7 +145,7 @@ class TOTPService:
             )
 
         secret_bytes = secrets.token_bytes(length)
-        return base64.b32encode(secret_bytes).decode('ascii').rstrip('=')
+        return base64.b32encode(secret_bytes).decode("ascii").rstrip("=")
 
     @staticmethod
     def _decode_secret(secret: str) -> bytes:
@@ -159,9 +161,9 @@ class TOTPService:
             Secret as bytes
         """
         # Normalize: uppercase and add padding if needed
-        secret = secret.upper().replace(' ', '')
+        secret = secret.upper().replace(" ", "")
         padding = (8 - len(secret) % 8) % 8
-        secret += '=' * padding
+        secret += "=" * padding
 
         try:
             return base64.b32decode(secret)
@@ -170,12 +172,7 @@ class TOTPService:
 
     @classmethod
     def generate_totp(
-        cls,
-        secret: str,
-        time_offset: int = 0,
-        time_step: int = 30,
-        digits: int = 6,
-        algorithm: str = 'sha1'
+        cls, secret: str, time_offset: int = 0, time_step: int = 30, digits: int = 6, algorithm: str = "sha1"
     ) -> Tuple[str, int]:
         """
         Generate a TOTP code from a secret.
@@ -202,28 +199,22 @@ class TOTPService:
         time_counter = current_time // time_step
 
         # Generate HMAC
-        time_bytes = struct.pack('>Q', time_counter)
+        time_bytes = struct.pack(">Q", time_counter)
         hmac_digest = hmac.new(secret_bytes, time_bytes, hash_func).digest()
 
         # Dynamic truncation (RFC 4226)
         offset = hmac_digest[-1] & 0x0F
-        binary_code = struct.unpack('>I', hmac_digest[offset:offset + 4])[0]
+        binary_code = struct.unpack(">I", hmac_digest[offset : offset + 4])[0]
         binary_code &= 0x7FFFFFFF  # Clear top bit
 
         # Get the desired number of digits
-        otp = binary_code % (10 ** digits)
+        otp = binary_code % (10**digits)
 
         return str(otp).zfill(digits), time_counter
 
     @classmethod
     def verify_totp(
-        cls,
-        secret: str,
-        code: str,
-        window: int = 1,
-        time_step: int = 30,
-        digits: int = 6,
-        algorithm: str = 'sha1'
+        cls, secret: str, code: str, window: int = 1, time_step: int = 30, digits: int = 6, algorithm: str = "sha1"
     ) -> Tuple[bool, Optional[int]]:
         """
         Verify a TOTP code.
@@ -248,11 +239,7 @@ class TOTPService:
         # Check current time step and adjacent steps (for clock skew)
         for offset in range(-window, window + 1):
             expected_code, counter = cls.generate_totp(
-                secret,
-                time_offset=offset * time_step,
-                time_step=time_step,
-                digits=digits,
-                algorithm=algorithm
+                secret, time_offset=offset * time_step, time_step=time_step, digits=digits, algorithm=algorithm
             )
             # Use constant-time comparison
             if hmac.compare_digest(code, expected_code):
@@ -301,7 +288,7 @@ class TOTPService:
         Returns:
             SHA-256 hash of the code
         """
-        normalized = code.upper().replace('-', '').replace(' ', '')
+        normalized = code.upper().replace("-", "").replace(" ", "")
         return hashlib.sha256(normalized.encode()).hexdigest()
 
     def verify_backup_code(self, code: str, hashed_codes: List[str]) -> Optional[int]:
@@ -327,12 +314,7 @@ class TOTPService:
     # Provisioning URI
     # =========================================================================
 
-    def generate_provisioning_uri(
-        self,
-        secret: str,
-        account_name: str,
-        issuer: Optional[str] = None
-    ) -> str:
+    def generate_provisioning_uri(self, secret: str, account_name: str, issuer: Optional[str] = None) -> str:
         """
         Generate an otpauth:// URI for authenticator apps.
 
@@ -352,15 +334,15 @@ class TOTPService:
         label = f"{issuer}:{account_name}"
 
         params = {
-            'secret': secret.replace('=', ''),  # Remove padding
-            'issuer': issuer,
-            'algorithm': self.config.algorithm.upper(),
-            'digits': str(self.config.digits),
-            'period': str(self.config.time_step),
+            "secret": secret.replace("=", ""),  # Remove padding
+            "issuer": issuer,
+            "algorithm": self.config.algorithm.upper(),
+            "digits": str(self.config.digits),
+            "period": str(self.config.time_step),
         }
 
         # URL encode the label and parameters
-        encoded_label = urllib.parse.quote(label, safe='')
+        encoded_label = urllib.parse.quote(label, safe="")
         encoded_params = urllib.parse.urlencode(params)
 
         return f"otpauth://totp/{encoded_label}?{encoded_params}"
@@ -430,12 +412,7 @@ class TOTPService:
     # =========================================================================
 
     @audit_trail(event_type="mfa.totp.setup", severity="INFO")
-    def setup_totp(
-        self,
-        user_id: str,
-        account_name: str,
-        issuer: Optional[str] = None
-    ) -> SetupResult:
+    def setup_totp(self, user_id: str, account_name: str, issuer: Optional[str] = None) -> SetupResult:
         """
         Set up TOTP 2FA for a user.
 
@@ -462,8 +439,7 @@ class TOTPService:
             # Generate secret and backup codes
             secret = self.generate_secret(self.config.secret_length)
             backup_codes = self.generate_backup_codes(
-                count=self.config.backup_codes_count,
-                length=self.config.backup_code_length
+                count=self.config.backup_codes_count, length=self.config.backup_code_length
             )
 
             # Hash backup codes for storage
@@ -479,26 +455,18 @@ class TOTPService:
                 algorithm=self.config.algorithm,
                 digits=self.config.digits,
                 time_step=self.config.time_step,
-                status=TOTPStatus.PENDING_CONFIRMATION.value
+                status=TOTPStatus.PENDING_CONFIRMATION.value,
             )
 
             # Store backup codes
             self.store.set_backup_codes(user_id, hashed_codes)
 
             # Generate provisioning URI
-            provisioning_uri = self.generate_provisioning_uri(
-                secret=secret,
-                account_name=account_name,
-                issuer=issuer
-            )
+            provisioning_uri = self.generate_provisioning_uri(secret=secret, account_name=account_name, issuer=issuer)
 
             logger.info("TOTP setup initiated for user %s", user_id)
 
-            return SetupResult(
-                secret=secret,
-                provisioning_uri=provisioning_uri,
-                backup_codes=backup_codes
-            )
+            return SetupResult(secret=secret, provisioning_uri=provisioning_uri, backup_codes=backup_codes)
 
         except TOTPAlreadyEnabledError:
             raise
@@ -537,26 +505,19 @@ class TOTPService:
             window=self.config.window,
             time_step=totp_data.time_step,
             digits=totp_data.digits,
-            algorithm=totp_data.algorithm
+            algorithm=totp_data.algorithm,
         )
 
         if not is_valid:
             self.store.log_verification(
-                user_id=user_id,
-                success=False,
-                verification_type='totp',
-                failure_reason='invalid_code_during_setup'
+                user_id=user_id, success=False, verification_type="totp", failure_reason="invalid_code_during_setup"
             )
             raise TOTPInvalidCodeError()
 
         # Enable TOTP
         self.store.update_status(user_id, TOTPStatus.ENABLED.value)
         self.store.record_successful_verification(user_id, counter)
-        self.store.log_verification(
-            user_id=user_id,
-            success=True,
-            verification_type='totp'
-        )
+        self.store.log_verification(user_id=user_id, success=True, verification_type="totp")
 
         logger.info("TOTP enabled for user %s", user_id)
         return True
@@ -582,13 +543,7 @@ class TOTPService:
     # =========================================================================
 
     @audit_trail(event_type="mfa.totp.verify", severity="INFO")
-    def verify(
-        self,
-        user_id: str,
-        code: str,
-        ip_address: Optional[str] = None,
-        user_agent: str = ''
-    ) -> VerifyResult:
+    def verify(self, user_id: str, code: str, ip_address: Optional[str] = None, user_agent: str = "") -> VerifyResult:
         """
         Verify a TOTP code or backup code.
 
@@ -615,39 +570,24 @@ class TOTPService:
 
         # Check if account is locked
         if totp_data.is_locked():
-            raise TOTPAccountLockedError(
-                lockout_remaining=self._get_lockout_remaining(totp_data)
-            )
+            raise TOTPAccountLockedError(lockout_remaining=self._get_lockout_remaining(totp_data))
 
         # Normalize code
-        normalized_code = code.strip().replace('-', '').replace(' ', '')
+        normalized_code = code.strip().replace("-", "").replace(" ", "")
 
         # Try TOTP verification first
         if len(normalized_code) == totp_data.digits and normalized_code.isdigit():
             return self._verify_totp_code(
-                user_id=user_id,
-                totp_data=totp_data,
-                code=normalized_code,
-                ip_address=ip_address,
-                user_agent=user_agent
+                user_id=user_id, totp_data=totp_data, code=normalized_code, ip_address=ip_address, user_agent=user_agent
             )
 
         # Try backup code verification
         return self._verify_backup_code(
-            user_id=user_id,
-            totp_data=totp_data,
-            code=normalized_code,
-            ip_address=ip_address,
-            user_agent=user_agent
+            user_id=user_id, totp_data=totp_data, code=normalized_code, ip_address=ip_address, user_agent=user_agent
         )
 
     def _verify_totp_code(
-        self,
-        user_id: str,
-        totp_data: TOTP2FAData,
-        code: str,
-        ip_address: Optional[str] = None,
-        user_agent: str = ''
+        self, user_id: str, totp_data: TOTP2FAData, code: str, ip_address: Optional[str] = None, user_agent: str = ""
     ) -> VerifyResult:
         """Verify a TOTP code."""
         # Decrypt secret
@@ -660,16 +600,16 @@ class TOTPService:
             window=self.config.window,
             time_step=totp_data.time_step,
             digits=totp_data.digits,
-            algorithm=totp_data.algorithm
+            algorithm=totp_data.algorithm,
         )
 
         if not is_valid:
             self._handle_failed_verification(
                 user_id=user_id,
-                verification_type='totp',
-                reason='invalid_code',
+                verification_type="totp",
+                reason="invalid_code",
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
             raise TOTPVerificationError()
 
@@ -677,36 +617,25 @@ class TOTPService:
         if counter and self.store.is_counter_used(user_id, counter):
             self._handle_failed_verification(
                 user_id=user_id,
-                verification_type='totp',
-                reason='code_reused',
+                verification_type="totp",
+                reason="code_reused",
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
             raise TOTPCodeReusedError()
 
         # Record success
         self.store.record_successful_verification(user_id, counter)
         self.store.log_verification(
-            user_id=user_id,
-            success=True,
-            verification_type='totp',
-            ip_address=ip_address,
-            user_agent=user_agent
+            user_id=user_id, success=True, verification_type="totp", ip_address=ip_address, user_agent=user_agent
         )
 
         return VerifyResult(
-            success=True,
-            verification_type='totp',
-            backup_codes_remaining=totp_data.backup_codes_remaining
+            success=True, verification_type="totp", backup_codes_remaining=totp_data.backup_codes_remaining
         )
 
     def _verify_backup_code(
-        self,
-        user_id: str,
-        totp_data: TOTP2FAData,
-        code: str,
-        ip_address: Optional[str] = None,
-        user_agent: str = ''
+        self, user_id: str, totp_data: TOTP2FAData, code: str, ip_address: Optional[str] = None, user_agent: str = ""
     ) -> VerifyResult:
         """Verify a backup code."""
         code_index = self.verify_backup_code(code, totp_data.backup_codes_hash)
@@ -714,10 +643,10 @@ class TOTPService:
         if code_index is None:
             self._handle_failed_verification(
                 user_id=user_id,
-                verification_type='backup',
-                reason='invalid_backup_code',
+                verification_type="backup",
+                reason="invalid_backup_code",
                 ip_address=ip_address,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
             raise TOTPInvalidBackupCodeError()
 
@@ -730,39 +659,21 @@ class TOTPService:
 
         # Record success (no counter for backup codes)
         self.store.log_verification(
-            user_id=user_id,
-            success=True,
-            verification_type='backup',
-            ip_address=ip_address,
-            user_agent=user_agent
+            user_id=user_id, success=True, verification_type="backup", ip_address=ip_address, user_agent=user_agent
         )
 
         remaining = totp_data.backup_codes_remaining - 1
 
-        logger.info(
-            "Backup code used for user %s (remaining: %d)",
-            user_id, remaining
-        )
+        logger.info("Backup code used for user %s (remaining: %d)", user_id, remaining)
 
-        return VerifyResult(
-            success=True,
-            verification_type='backup',
-            backup_codes_remaining=remaining
-        )
+        return VerifyResult(success=True, verification_type="backup", backup_codes_remaining=remaining)
 
     def _handle_failed_verification(
-        self,
-        user_id: str,
-        verification_type: str,
-        reason: str,
-        ip_address: Optional[str] = None,
-        user_agent: str = ''
+        self, user_id: str, verification_type: str, reason: str, ip_address: Optional[str] = None, user_agent: str = ""
     ) -> None:
         """Handle a failed verification attempt."""
         is_locked = self.store.record_failed_attempt(
-            user_id=user_id,
-            max_attempts=self.config.max_attempts,
-            lockout_duration=self.config.lockout_duration
+            user_id=user_id, max_attempts=self.config.max_attempts, lockout_duration=self.config.lockout_duration
         )
 
         self.store.log_verification(
@@ -771,20 +682,18 @@ class TOTPService:
             verification_type=verification_type,
             ip_address=ip_address,
             user_agent=user_agent,
-            failure_reason=reason
+            failure_reason=reason,
         )
 
         if is_locked:
-            logger.warning(
-                "TOTP account locked for user %s due to failed attempts",
-                user_id
-            )
+            logger.warning("TOTP account locked for user %s due to failed attempts", user_id)
 
     def _get_lockout_remaining(self, totp_data: TOTP2FAData) -> int:
         """Calculate remaining lockout time in seconds."""
         if totp_data.locked_until is None:
             return 0
         from django.utils import timezone
+
         delta = totp_data.locked_until - timezone.now()
         return max(0, int(delta.total_seconds()))
 
@@ -829,8 +738,7 @@ class TOTPService:
 
         # Generate new codes
         backup_codes = self.generate_backup_codes(
-            count=self.config.backup_codes_count,
-            length=self.config.backup_code_length
+            count=self.config.backup_codes_count, length=self.config.backup_code_length
         )
         hashed_codes = [self.hash_backup_code(code) for code in backup_codes]
 

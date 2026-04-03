@@ -1,9 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
+
 from blockauth.utils.logger import blockauth_logger
-from blockauth.utils.generics import sanitize_log_context
 
 logger = logging.getLogger(__name__)
+
 
 class BaseTrigger(ABC):
     """
@@ -44,6 +45,7 @@ class DummyPostLoginTrigger(BaseTrigger):
         This trigger will be called after the user logs in.
         """
         blockauth_logger.info(f"Post login trigger called with context")
+
 
 # post password change trigger
 class DummyPostPasswordChangeTrigger(BaseTrigger):

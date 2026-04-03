@@ -3,14 +3,14 @@ TOTP 2FA Models for BlockAuth
 
 Database models for storing TOTP secrets, backup codes, and verification state.
 """
+
 import logging
-import secrets
-from uuid6 import uuid7
 from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from uuid6 import uuid7
 
 from .constants import TOTPStatus
 
@@ -31,127 +31,81 @@ class TOTP2FA(models.Model):
     - Last used timestamp prevents code reuse within time window
     """
 
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid7,
-        editable=False
-    )
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
 
     # Link to user (using AUTH_USER_MODEL for flexibility)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='totp_2fa',
-        help_text="User who owns this TOTP configuration"
+        related_name="totp_2fa",
+        help_text="User who owns this TOTP configuration",
     )
 
     # Encrypted TOTP secret (Base32-encoded before encryption)
     # Application-level encryption is applied before storage
-    encrypted_secret = models.TextField(
-        help_text="Encrypted TOTP secret (Base32-encoded internally)"
-    )
+    encrypted_secret = models.TextField(help_text="Encrypted TOTP secret (Base32-encoded internally)")
 
     # Status of TOTP 2FA
     status = models.CharField(
         max_length=30,
         choices=[
-            (TOTPStatus.DISABLED.value, 'Disabled'),
-            (TOTPStatus.PENDING_CONFIRMATION.value, 'Pending Confirmation'),
-            (TOTPStatus.ENABLED.value, 'Enabled'),
+            (TOTPStatus.DISABLED.value, "Disabled"),
+            (TOTPStatus.PENDING_CONFIRMATION.value, "Pending Confirmation"),
+            (TOTPStatus.ENABLED.value, "Enabled"),
         ],
         default=TOTPStatus.DISABLED.value,
-        help_text="Current TOTP status"
+        help_text="Current TOTP status",
     )
 
     # Algorithm and configuration (stored for verification)
-    algorithm = models.CharField(
-        max_length=10,
-        default='sha1',
-        help_text="Hash algorithm (sha1, sha256, sha512)"
-    )
-    digits = models.PositiveSmallIntegerField(
-        default=6,
-        help_text="Number of digits in TOTP code (6 or 8)"
-    )
-    time_step = models.PositiveSmallIntegerField(
-        default=30,
-        help_text="Time step in seconds"
-    )
+    algorithm = models.CharField(max_length=10, default="sha1", help_text="Hash algorithm (sha1, sha256, sha512)")
+    digits = models.PositiveSmallIntegerField(default=6, help_text="Number of digits in TOTP code (6 or 8)")
+    time_step = models.PositiveSmallIntegerField(default=30, help_text="Time step in seconds")
 
     # Hashed backup codes (stored as JSON array of hashed codes)
     # Each code is hashed before storage for security
-    backup_codes_hash = models.JSONField(
-        default=list,
-        blank=True,
-        help_text="List of hashed backup codes (SHA-256)"
-    )
+    backup_codes_hash = models.JSONField(default=list, blank=True, help_text="List of hashed backup codes (SHA-256)")
     backup_codes_remaining = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Number of unused backup codes remaining"
+        default=0, help_text="Number of unused backup codes remaining"
     )
 
     # Rate limiting / lockout tracking
     failed_attempts = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Number of consecutive failed verification attempts"
+        default=0, help_text="Number of consecutive failed verification attempts"
     )
     locked_until = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Account is locked until this time due to failed attempts"
+        null=True, blank=True, help_text="Account is locked until this time due to failed attempts"
     )
-    last_failed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Timestamp of last failed verification"
-    )
+    last_failed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp of last failed verification")
 
     # Replay attack prevention
     # Stores the time counter of the last successfully used code
     last_used_counter = models.BigIntegerField(
-        null=True,
-        blank=True,
-        help_text="Time counter of last successfully used code (prevents replay)"
+        null=True, blank=True, help_text="Time counter of last successfully used code (prevents replay)"
     )
-    last_verified_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When TOTP was last successfully verified"
-    )
+    last_verified_at = models.DateTimeField(null=True, blank=True, help_text="When TOTP was last successfully verified")
 
     # Timestamps
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When TOTP was initially set up"
-    )
-    enabled_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When TOTP was confirmed and enabled"
-    )
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="Last update timestamp"
-    )
+    created_at = models.DateTimeField(auto_now_add=True, help_text="When TOTP was initially set up")
+    enabled_at = models.DateTimeField(null=True, blank=True, help_text="When TOTP was confirmed and enabled")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Last update timestamp")
 
     # Recovery tracking
     recovery_email_sent_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When recovery instructions were last sent"
+        null=True, blank=True, help_text="When recovery instructions were last sent"
     )
 
     class Meta:
-        app_label = 'blockauth'
+        app_label = "blockauth"
         managed = True
-        db_table = 'totp_2fa'
+        db_table = "totp_2fa"
         indexes = [
-            models.Index(fields=['user'], name='totp_user_idx'),
-            models.Index(fields=['status'], name='totp_status_idx'),
-            models.Index(fields=['locked_until'], name='totp_locked_idx'),
+            models.Index(fields=["user"], name="totp_user_idx"),
+            models.Index(fields=["status"], name="totp_status_idx"),
+            models.Index(fields=["locked_until"], name="totp_locked_idx"),
         ]
-        verbose_name = 'TOTP 2FA Configuration'
-        verbose_name_plural = 'TOTP 2FA Configurations'
+        verbose_name = "TOTP 2FA Configuration"
+        verbose_name_plural = "TOTP 2FA Configurations"
 
     def __str__(self):
         return f"TOTP 2FA ({self.user}) - {self.status}"
@@ -187,13 +141,13 @@ class TOTP2FA(models.Model):
         self.enabled_at = timezone.now()
         self.failed_attempts = 0
         self.locked_until = None
-        self.save(update_fields=['status', 'enabled_at', 'failed_attempts', 'locked_until', 'updated_at'])
+        self.save(update_fields=["status", "enabled_at", "failed_attempts", "locked_until", "updated_at"])
         logger.info("TOTP enabled for user %s", self.user_id)
 
     def disable(self) -> None:
         """Disable TOTP 2FA."""
         self.status = TOTPStatus.DISABLED.value
-        self.encrypted_secret = ''
+        self.encrypted_secret = ""
         self.backup_codes_hash = []
         self.backup_codes_remaining = 0
         self.failed_attempts = 0
@@ -217,10 +171,12 @@ class TOTP2FA(models.Model):
             self.locked_until = timezone.now() + timedelta(seconds=lockout_duration)
             logger.warning(
                 "TOTP account locked for user %s until %s (failed attempts: %d)",
-                self.user_id, self.locked_until, self.failed_attempts
+                self.user_id,
+                self.locked_until,
+                self.failed_attempts,
             )
 
-        self.save(update_fields=['failed_attempts', 'last_failed_at', 'locked_until', 'updated_at'])
+        self.save(update_fields=["failed_attempts", "last_failed_at", "locked_until", "updated_at"])
 
     def record_successful_verification(self, time_counter: int) -> None:
         """
@@ -233,10 +189,9 @@ class TOTP2FA(models.Model):
         self.locked_until = None
         self.last_used_counter = time_counter
         self.last_verified_at = timezone.now()
-        self.save(update_fields=[
-            'failed_attempts', 'locked_until', 'last_used_counter',
-            'last_verified_at', 'updated_at'
-        ])
+        self.save(
+            update_fields=["failed_attempts", "locked_until", "last_used_counter", "last_verified_at", "updated_at"]
+        )
 
     def is_counter_used(self, time_counter: int) -> bool:
         """
@@ -261,13 +216,10 @@ class TOTP2FA(models.Model):
         """
         if 0 <= code_index < len(self.backup_codes_hash):
             # Replace with empty string to mark as used while preserving indices
-            self.backup_codes_hash[code_index] = ''
+            self.backup_codes_hash[code_index] = ""
             self.backup_codes_remaining = max(0, self.backup_codes_remaining - 1)
-            self.save(update_fields=['backup_codes_hash', 'backup_codes_remaining', 'updated_at'])
-            logger.info(
-                "Backup code used for user %s (remaining: %d)",
-                self.user_id, self.backup_codes_remaining
-            )
+            self.save(update_fields=["backup_codes_hash", "backup_codes_remaining", "updated_at"])
+            logger.info("Backup code used for user %s (remaining: %d)", self.user_id, self.backup_codes_remaining)
 
     def has_backup_codes(self) -> bool:
         """Check if user has unused backup codes available."""
@@ -282,75 +234,56 @@ class TOTPVerificationLog(models.Model):
     Can be cleaned up periodically to manage storage.
     """
 
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid7,
-        editable=False
-    )
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
 
     # Link to user
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='totp_verification_logs',
-        help_text="User who attempted verification"
+        related_name="totp_verification_logs",
+        help_text="User who attempted verification",
     )
 
     # Verification result
-    success = models.BooleanField(
-        help_text="Whether verification was successful"
-    )
+    success = models.BooleanField(help_text="Whether verification was successful")
     verification_type = models.CharField(
         max_length=20,
         choices=[
-            ('totp', 'TOTP Code'),
-            ('backup', 'Backup Code'),
+            ("totp", "TOTP Code"),
+            ("backup", "Backup Code"),
         ],
-        help_text="Type of code verified"
+        help_text="Type of code verified",
     )
 
     # Request context
-    ip_address = models.GenericIPAddressField(
-        null=True,
-        blank=True,
-        help_text="IP address of the request"
-    )
-    user_agent = models.TextField(
-        blank=True,
-        default='',
-        help_text="User agent of the request"
-    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True, help_text="IP address of the request")
+    user_agent = models.TextField(blank=True, default="", help_text="User agent of the request")
 
     # Failure details (for failed attempts)
     failure_reason = models.CharField(
-        max_length=50,
-        blank=True,
-        default='',
-        help_text="Reason for failure if applicable"
+        max_length=50, blank=True, default="", help_text="Reason for failure if applicable"
     )
 
     # Timestamp
     created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_index=True,
-        help_text="When the verification attempt occurred"
+        auto_now_add=True, db_index=True, help_text="When the verification attempt occurred"
     )
 
     class Meta:
-        app_label = 'blockauth'
+        app_label = "blockauth"
         managed = True
-        db_table = 'totp_verification_log'
-        ordering = ['-created_at']
+        db_table = "totp_verification_log"
+        ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=['user', 'created_at'], name='totp_log_user_time_idx'),
-            models.Index(fields=['success', 'created_at'], name='totp_log_success_idx'),
-            models.Index(fields=['ip_address', 'created_at'], name='totp_log_ip_idx'),
+            models.Index(fields=["user", "created_at"], name="totp_log_user_time_idx"),
+            models.Index(fields=["success", "created_at"], name="totp_log_success_idx"),
+            models.Index(fields=["ip_address", "created_at"], name="totp_log_ip_idx"),
         ]
-        verbose_name = 'TOTP Verification Log'
-        verbose_name_plural = 'TOTP Verification Logs'
+        verbose_name = "TOTP Verification Log"
+        verbose_name_plural = "TOTP Verification Logs"
 
     def __str__(self):
-        status = 'success' if self.success else 'failed'
+        status = "success" if self.success else "failed"
         return f"TOTP {self.verification_type} ({status}) - {self.user} at {self.created_at}"
 
     @classmethod
@@ -358,11 +291,11 @@ class TOTPVerificationLog(models.Model):
         cls,
         user,
         success: bool,
-        verification_type: str = 'totp',
+        verification_type: str = "totp",
         ip_address: str = None,
-        user_agent: str = '',
-        failure_reason: str = ''
-    ) -> 'TOTPVerificationLog':
+        user_agent: str = "",
+        failure_reason: str = "",
+    ) -> "TOTPVerificationLog":
         """
         Create a verification log entry.
 
@@ -382,8 +315,8 @@ class TOTPVerificationLog(models.Model):
             success=success,
             verification_type=verification_type,
             ip_address=ip_address,
-            user_agent=user_agent[:1024] if user_agent else '',  # Truncate long user agents
-            failure_reason=failure_reason
+            user_agent=user_agent[:1024] if user_agent else "",  # Truncate long user agents
+            failure_reason=failure_reason,
         )
 
     @classmethod

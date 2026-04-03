@@ -1,12 +1,15 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+
 from blockauth.utils.config import get_config
+
 
 class BaseLogger:
     """
     Base logger interface for Blockauth. Implement this in your project to handle logs from the package.
     """
+
     @abstractmethod
-    def log(self, message: str, context: dict, level: str = 'info', icon=None) -> None:
+    def log(self, message: str, context: dict, level: str = "info", icon=None) -> None:
         """
         Log a message with a given level and optional icon.
         :param message: The log message.
@@ -22,7 +25,8 @@ class DummyLogger(BaseLogger):
     Default logger that prints messages to the console.
     Accepts arbitrary keyword arguments to support icon and other future extensions.
     """
-    def log(self, message: str, context: dict, level: str = 'info', icon=None, **kwargs) -> None:
+
+    def log(self, message: str, context: dict, level: str = "info", icon=None, **kwargs) -> None:
         pass
 
 
@@ -42,13 +46,14 @@ LOG_LEVEL_ICONS = {
     "failure": "💔",
 }
 
+
 class BlockAuthLogger:
     """
     BlockAuthLogger provides a unified logging interface for BlocAuth package events.
-    
+
     It attempts to use a custom logger class defined in settings.py as BLOCK_AUTH_LOGGER_CLASS.
     If not configured, all logging methods become no-ops (do nothing).
-    
+
     Usage:
         from blockauth.utils.logger import blockauth_logger
         blockauth_logger.info("User signup", data)
@@ -60,14 +65,15 @@ class BlockAuthLogger:
         blockauth_logger.notice("Notice message", data)
         blockauth_logger.alert("Alert message", data)
         blockauth_logger.fatal("Fatal error", data)
-    
+
     The custom logger class must implement a .log(message, data, level, icon) method.
     Supported levels: debug, info, warning, error, critical, exception, trace, notice, alert, fatal, success, pending, failure
     The icon is a unicode symbol representing the log level, provided as the 'icon' argument.
     """
+
     def __init__(self):
         try:
-            logger_class = get_config('BLOCK_AUTH_LOGGER_CLASS')
+            logger_class = get_config("BLOCK_AUTH_LOGGER_CLASS")
             if logger_class is None:
                 raise ValueError
             self.logger = logger_class()
@@ -138,5 +144,6 @@ class BlockAuthLogger:
         """Call this to log failed operations or processes (e.g., user registration failed)."""
         if self.logger:
             self.logger.log(message, data, "failure", icon=LOG_LEVEL_ICONS["failure"])
+
 
 blockauth_logger = BlockAuthLogger()

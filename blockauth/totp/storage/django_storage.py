@@ -3,10 +3,10 @@ Django ORM Storage Implementation for TOTP 2FA
 
 Provides Django model-based storage for TOTP 2FA data.
 """
-import logging
-from typing import List, Optional, Any
 
-from django.conf import settings
+import logging
+from typing import Any, List, Optional
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
@@ -68,10 +68,10 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
         self,
         user_id: str,
         encrypted_secret: str,
-        algorithm: str = 'sha1',
+        algorithm: str = "sha1",
         digits: int = 6,
         time_step: int = 30,
-        status: str = 'pending_confirmation'
+        status: str = "pending_confirmation",
     ) -> TOTP2FAData:
         """Create a new TOTP configuration."""
         # Check if already exists
@@ -112,7 +112,7 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
             updated = TOTP2FA.objects.filter(user_id=user_id).update(
                 status=status,
                 enabled_at=timezone.now() if status == TOTPStatus.ENABLED.value else None,
-                updated_at=timezone.now()
+                updated_at=timezone.now(),
             )
             if updated:
                 logger.info("TOTP status updated for user %s: %s", user_id, status)
@@ -138,9 +138,7 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
         """Set backup codes for a user."""
         try:
             updated = TOTP2FA.objects.filter(user_id=user_id).update(
-                backup_codes_hash=hashed_codes,
-                backup_codes_remaining=len(hashed_codes),
-                updated_at=timezone.now()
+                backup_codes_hash=hashed_codes, backup_codes_remaining=len(hashed_codes), updated_at=timezone.now()
             )
             if updated:
                 logger.info("Backup codes set for user %s: %d codes", user_id, len(hashed_codes))
@@ -162,12 +160,7 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
             logger.error("Error using backup code for user %s: %s", user_id, e)
             raise TOTPStorageError(f"Failed to use backup code: {e}")
 
-    def record_failed_attempt(
-        self,
-        user_id: str,
-        max_attempts: int = 5,
-        lockout_duration: int = 300
-    ) -> bool:
+    def record_failed_attempt(self, user_id: str, max_attempts: int = 5, lockout_duration: int = 300) -> bool:
         """Record a failed verification attempt."""
         try:
             totp = self.get_model_by_user_id(user_id)
@@ -208,10 +201,10 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
         self,
         user_id: str,
         success: bool,
-        verification_type: str = 'totp',
+        verification_type: str = "totp",
         ip_address: Optional[str] = None,
-        user_agent: str = '',
-        failure_reason: str = ''
+        user_agent: str = "",
+        failure_reason: str = "",
     ) -> None:
         """Log a verification attempt."""
         try:
@@ -224,7 +217,7 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
                 verification_type=verification_type,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                failure_reason=failure_reason
+                failure_reason=failure_reason,
             )
         except Exception as e:
             # Don't raise on logging failures

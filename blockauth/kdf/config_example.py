@@ -10,58 +10,54 @@ Copy the relevant configuration to your project's settings.py file.
 
 BLOCK_AUTH_SETTINGS = {
     # Enable KDF functionality
-    'KDF_ENABLED': True,
-    
+    "KDF_ENABLED": True,
     # KDF Algorithm (choose one)
-    'KDF_ALGORITHM': 'pbkdf2_sha256',  # Options: pbkdf2_sha256, pbkdf2_sha512, argon2id
-    
+    "KDF_ALGORITHM": "pbkdf2_sha256",  # Options: pbkdf2_sha256, pbkdf2_sha512, argon2id
     # Security settings
-    'KDF_ITERATIONS': 100000,  # For PBKDF2 (higher = more secure, slower)
-    'KDF_SECURITY_LEVEL': 'MEDIUM',  # Options: LOW, MEDIUM, HIGH, CRITICAL
-    
+    "KDF_ITERATIONS": 100000,  # For PBKDF2 (higher = more secure, slower)
+    "KDF_SECURITY_LEVEL": "MEDIUM",  # Options: LOW, MEDIUM, HIGH, CRITICAL
     # Platform security (REQUIRED for production)
-    'KDF_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
-    'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-encryption-key-in-hex',
-    'PLATFORM_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
+    "KDF_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
+    "MASTER_ENCRYPTION_KEY": "0x" + "your-256-bit-encryption-key-in-hex",
+    "PLATFORM_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
 }
 
 # Example 2: High Security Configuration
 # For financial applications or high-security requirements
 
 BLOCK_AUTH_SETTINGS = {
-    'KDF_ENABLED': True,
-    'KDF_ALGORITHM': 'argon2id',  # Most secure algorithm
-    'KDF_SECURITY_LEVEL': 'CRITICAL',  # Highest security preset
-    'KDF_MASTER_SALT': 'your-very-long-platform-master-salt-64-characters',
-    'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-encryption-key-in-hex',
-    'PLATFORM_MASTER_SALT': 'your-very-long-platform-master-salt-64-characters',
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "argon2id",  # Most secure algorithm
+    "KDF_SECURITY_LEVEL": "CRITICAL",  # Highest security preset
+    "KDF_MASTER_SALT": "your-very-long-platform-master-salt-64-characters",
+    "MASTER_ENCRYPTION_KEY": "0x" + "your-256-bit-encryption-key-in-hex",
+    "PLATFORM_MASTER_SALT": "your-very-long-platform-master-salt-64-characters",
 }
 
 # Example 3: Development Configuration
 # For development/testing environments
 
 BLOCK_AUTH_SETTINGS = {
-    'KDF_ENABLED': True,
-    'KDF_ALGORITHM': 'pbkdf2_sha256',
-    'KDF_SECURITY_LEVEL': 'LOW',  # Faster for development
-    'KDF_ITERATIONS': 10000,  # Lower iterations for speed
-    'KDF_MASTER_SALT': 'dev-platform-salt-32-chars-minimum',
-    'MASTER_ENCRYPTION_KEY': '0x' + 'dev-256-bit-key-in-hex',
-    'PLATFORM_MASTER_SALT': 'dev-platform-master-salt-32-chars-minimum',
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",
+    "KDF_SECURITY_LEVEL": "LOW",  # Faster for development
+    "KDF_ITERATIONS": 10000,  # Lower iterations for speed
+    "KDF_MASTER_SALT": "dev-platform-salt-32-chars-minimum",
+    "MASTER_ENCRYPTION_KEY": "0x" + "dev-256-bit-key-in-hex",
+    "PLATFORM_MASTER_SALT": "dev-platform-master-salt-32-chars-minimum",
 }
 
 # Example 4: Basic Configuration
 # Simple configuration with required settings
 
-import os
 
 BLOCK_AUTH_SETTINGS = {
-    'KDF_ENABLED': True,
-    'KDF_ALGORITHM': 'pbkdf2_sha256',
-    'KDF_SECURITY_LEVEL': 'MEDIUM',
-    'KDF_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
-    'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-encryption-key-in-hex',
-    'PLATFORM_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
+    "KDF_ENABLED": True,
+    "KDF_ALGORITHM": "pbkdf2_sha256",
+    "KDF_SECURITY_LEVEL": "MEDIUM",
+    "KDF_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
+    "MASTER_ENCRYPTION_KEY": "0x" + "your-256-bit-encryption-key-in-hex",
+    "PLATFORM_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
 }
 
 # Example 5: Complete Configuration with All Options
@@ -69,26 +65,21 @@ BLOCK_AUTH_SETTINGS = {
 
 BLOCK_AUTH_SETTINGS = {
     # Master switch - must be True to use KDF
-    'KDF_ENABLED': True,
-    
+    "KDF_ENABLED": True,
     # Algorithm selection
-    'KDF_ALGORITHM': 'pbkdf2_sha256',  # pbkdf2_sha256, pbkdf2_sha512, argon2id
-    
+    "KDF_ALGORITHM": "pbkdf2_sha256",  # pbkdf2_sha256, pbkdf2_sha512, argon2id
     # Security presets (overrides individual settings)
-    'KDF_SECURITY_LEVEL': 'MEDIUM',  # LOW, MEDIUM, HIGH, CRITICAL
-    
+    "KDF_SECURITY_LEVEL": "MEDIUM",  # LOW, MEDIUM, HIGH, CRITICAL
     # Individual security settings (used if no preset)
-    'KDF_ITERATIONS': 100000,  # For PBKDF2 algorithms
-    
+    "KDF_ITERATIONS": 100000,  # For PBKDF2 algorithms
     # Platform security (REQUIRED)
-    'KDF_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
-    'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-encryption-key-in-hex',
-    'PLATFORM_MASTER_SALT': 'your-platform-master-salt-32-characters-minimum',
-    
+    "KDF_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
+    "MASTER_ENCRYPTION_KEY": "0x" + "your-256-bit-encryption-key-in-hex",
+    "PLATFORM_MASTER_SALT": "your-platform-master-salt-32-characters-minimum",
     # Optional: Custom Argon2 parameters (if using argon2id)
-    'KDF_ARGON2_TIME_COST': 3,        # Time cost (higher = more secure, slower)
-    'KDF_ARGON2_MEMORY_COST': 65536,  # Memory cost in KB (64MB)
-    'KDF_ARGON2_PARALLELISM': 4,      # Number of parallel threads
+    "KDF_ARGON2_TIME_COST": 3,  # Time cost (higher = more secure, slower)
+    "KDF_ARGON2_MEMORY_COST": 65536,  # Memory cost in KB (64MB)
+    "KDF_ARGON2_PARALLELISM": 4,  # Number of parallel threads
 }
 
 # Example 6: Configuration Notes
@@ -354,7 +345,7 @@ for key, value in keys.items():
     os.environ[key] = value
 """
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("KDF Configuration Examples")
     print("=========================")
     print("This file contains examples of how to configure KDF functionality.")

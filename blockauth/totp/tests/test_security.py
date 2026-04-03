@@ -7,17 +7,17 @@ Tests specifically for security features:
 - Encryption requirements
 - Input sanitization
 """
+
 import unittest
-from unittest.mock import MagicMock, Mock, patch
-from datetime import datetime
+from unittest.mock import MagicMock, patch
 
+from blockauth.utils.audit import _is_sensitive, _sanitize_value, audit_trail
 from blockauth.utils.rate_limiter import get_client_ip, validate_ip_address
-from blockauth.utils.audit import audit_trail, _is_sensitive, _sanitize_value
-
 
 # =============================================================================
 # IP Address Validation Tests
 # =============================================================================
+
 
 class TestIPAddressValidation(unittest.TestCase):
     """Test IP address validation security."""
@@ -93,9 +93,9 @@ class TestGetClientIP(unittest.TestCase):
         request = MagicMock()
         request.META = {}
         if remote_addr:
-            request.META['REMOTE_ADDR'] = remote_addr
+            request.META["REMOTE_ADDR"] = remote_addr
         if x_forwarded_for:
-            request.META['HTTP_X_FORWARDED_FOR'] = x_forwarded_for
+            request.META["HTTP_X_FORWARDED_FOR"] = x_forwarded_for
         return request
 
     def test_extracts_remote_addr(self):
@@ -106,27 +106,19 @@ class TestGetClientIP(unittest.TestCase):
 
     def test_prefers_x_forwarded_for(self):
         """Should prefer X-Forwarded-For over REMOTE_ADDR."""
-        request = self._make_request(
-            remote_addr="10.0.0.1",
-            x_forwarded_for="203.0.113.1"
-        )
+        request = self._make_request(remote_addr="10.0.0.1", x_forwarded_for="203.0.113.1")
         result = get_client_ip(request)
         self.assertEqual(result, "203.0.113.1")
 
     def test_handles_multiple_forwarded_ips(self):
         """Should extract first IP from X-Forwarded-For chain."""
-        request = self._make_request(
-            x_forwarded_for="203.0.113.1, 198.51.100.1, 192.0.2.1"
-        )
+        request = self._make_request(x_forwarded_for="203.0.113.1, 198.51.100.1, 192.0.2.1")
         result = get_client_ip(request)
         self.assertEqual(result, "203.0.113.1")
 
     def test_validates_forwarded_ip(self):
         """Should validate X-Forwarded-For IP."""
-        request = self._make_request(
-            remote_addr="10.0.0.1",
-            x_forwarded_for="invalid-ip"
-        )
+        request = self._make_request(remote_addr="10.0.0.1", x_forwarded_for="invalid-ip")
         result = get_client_ip(request)
         self.assertEqual(result, "10.0.0.1")  # Falls back to REMOTE_ADDR
 
@@ -149,18 +141,19 @@ class TestGetClientIP(unittest.TestCase):
 # Audit Trail Tests
 # =============================================================================
 
+
 class TestAuditTrailDecorator(unittest.TestCase):
     """Test audit trail decorator functionality."""
 
     def test_sensitive_param_detection(self):
         """Sensitive parameter names should be detected."""
-        sensitive = ['password', 'token', 'secret', 'key', 'private_key', 'backup_code']
+        sensitive = ["password", "token", "secret", "key", "private_key", "backup_code"]
         for param in sensitive:
             self.assertTrue(_is_sensitive(param), f"{param} should be sensitive")
 
     def test_non_sensitive_param_detection(self):
         """Non-sensitive parameter names should not be flagged."""
-        non_sensitive = ['user_id', 'email', 'name', 'status', 'count']
+        non_sensitive = ["user_id", "email", "name", "status", "count"]
         for param in non_sensitive:
             self.assertFalse(_is_sensitive(param), f"{param} should not be sensitive")
 
@@ -173,6 +166,7 @@ class TestAuditTrailDecorator(unittest.TestCase):
 
     def test_value_sanitization_handles_exceptions(self):
         """Unserializable values should be handled."""
+
         class Unserializable:
             def __str__(self):
                 raise Exception("Cannot serialize")
@@ -180,9 +174,10 @@ class TestAuditTrailDecorator(unittest.TestCase):
         result = _sanitize_value(Unserializable())
         self.assertEqual(result, "[UNSERIALIZABLE]")
 
-    @patch('blockauth.utils.audit.blockauth_logger')
+    @patch("blockauth.utils.audit.blockauth_logger")
     def test_decorator_logs_function_call(self, mock_logger):
         """Decorator should log function calls."""
+
         @audit_trail(event_type="test.event")
         def test_function(user_id):
             return "success"
@@ -192,9 +187,10 @@ class TestAuditTrailDecorator(unittest.TestCase):
         self.assertEqual(result, "success")
         mock_logger.info.assert_called()
 
-    @patch('blockauth.utils.audit.blockauth_logger')
+    @patch("blockauth.utils.audit.blockauth_logger")
     def test_decorator_logs_success(self, mock_logger):
         """Decorator should log successful completion."""
+
         @audit_trail(event_type="test.event")
         def test_function():
             return "success"
@@ -203,9 +199,10 @@ class TestAuditTrailDecorator(unittest.TestCase):
 
         mock_logger.success.assert_called()
 
-    @patch('blockauth.utils.audit.blockauth_logger')
+    @patch("blockauth.utils.audit.blockauth_logger")
     def test_decorator_logs_failure(self, mock_logger):
         """Decorator should log failures."""
+
         @audit_trail(event_type="test.event")
         def test_function():
             raise ValueError("Test error")
@@ -214,13 +211,12 @@ class TestAuditTrailDecorator(unittest.TestCase):
             test_function()
 
         # Should have logged warning or error
-        self.assertTrue(
-            mock_logger.warning.called or mock_logger.error.called
-        )
+        self.assertTrue(mock_logger.warning.called or mock_logger.error.called)
 
-    @patch('blockauth.utils.audit.blockauth_logger')
+    @patch("blockauth.utils.audit.blockauth_logger")
     def test_decorator_redacts_sensitive_args(self, mock_logger):
         """Decorator should redact sensitive arguments."""
+
         @audit_trail(event_type="test.event", log_args=True)
         def test_function(user_id, password, secret):
             return "success"
@@ -231,18 +227,18 @@ class TestAuditTrailDecorator(unittest.TestCase):
         call_args = mock_logger.info.call_args
         logged_data = call_args[0][1] if call_args else {}
 
-        if 'arguments' in logged_data:
-            args = logged_data['arguments']
-            self.assertEqual(args.get('password'), '[REDACTED]')
-            self.assertEqual(args.get('secret'), '[REDACTED]')
-            self.assertNotEqual(args.get('user_id'), '[REDACTED]')
+        if "arguments" in logged_data:
+            args = logged_data["arguments"]
+            self.assertEqual(args.get("password"), "[REDACTED]")
+            self.assertEqual(args.get("secret"), "[REDACTED]")
+            self.assertNotEqual(args.get("user_id"), "[REDACTED]")
 
     def test_decorator_preserves_function_metadata(self):
         """Decorator should preserve function name and docstring."""
+
         @audit_trail(event_type="test.event")
         def test_function():
             """Test docstring."""
-            pass
 
         self.assertEqual(test_function.__name__, "test_function")
         self.assertEqual(test_function.__doc__, "Test docstring.")
@@ -252,29 +248,29 @@ class TestAuditTrailDecorator(unittest.TestCase):
 # Encryption Requirement Tests
 # =============================================================================
 
+
 class TestEncryptionSecurity(unittest.TestCase):
     """Test encryption security requirements."""
 
     def test_totp_encryption_required_error_exists(self):
         """TOTPEncryptionRequiredError should exist."""
         from blockauth.totp.exceptions import TOTPEncryptionRequiredError
+
         error = TOTPEncryptionRequiredError("Test")
         self.assertIsNotNone(error)
 
     def test_encryption_required_has_error_code(self):
         """Encryption required error should have proper code."""
-        from blockauth.totp.exceptions import TOTPEncryptionRequiredError
         from blockauth.totp.constants import TOTPErrorCodes
+        from blockauth.totp.exceptions import TOTPEncryptionRequiredError
 
-        self.assertEqual(
-            TOTPEncryptionRequiredError.error_code,
-            TOTPErrorCodes.ENCRYPTION_REQUIRED
-        )
+        self.assertEqual(TOTPEncryptionRequiredError.error_code, TOTPErrorCodes.ENCRYPTION_REQUIRED)
 
 
 # =============================================================================
 # Secret Length Security Tests
 # =============================================================================
+
 
 class TestSecretLengthSecurity(unittest.TestCase):
     """Test secret length security requirements."""
@@ -282,12 +278,14 @@ class TestSecretLengthSecurity(unittest.TestCase):
     def test_default_secret_length_in_constants(self):
         """Default secret length should be 32 bytes in constants."""
         from blockauth.totp.constants import DEFAULTS, TOTPConfigKeys
+
         self.assertEqual(DEFAULTS[TOTPConfigKeys.SECRET_LENGTH], 32)
 
     def test_secret_minimum_validation(self):
         """Secret generation should reject lengths below 20 bytes."""
-        from blockauth.totp.services.totp_service import TOTPService
         from unittest.mock import MagicMock
+
+        from blockauth.totp.services.totp_service import TOTPService
 
         store = MagicMock()
         service = TOTPService(store=store)
@@ -301,6 +299,7 @@ class TestSecretLengthSecurity(unittest.TestCase):
 # =============================================================================
 # Fernet Encryption Service Tests
 # =============================================================================
+
 
 class TestFernetSecretEncryption(unittest.TestCase):
     """Test Fernet-based encryption service."""
@@ -388,8 +387,9 @@ class TestFernetSecretEncryption(unittest.TestCase):
 
     def test_valid_fernet_key_works(self):
         """Pre-generated valid Fernet key should work directly."""
-        from blockauth.totp.services.encryption import FernetSecretEncryption
         from cryptography.fernet import Fernet
+
+        from blockauth.totp.services.encryption import FernetSecretEncryption
 
         # Generate a valid Fernet key
         valid_key = Fernet.generate_key().decode()
@@ -406,13 +406,10 @@ class TestFernetSecretEncryption(unittest.TestCase):
 class TestGetEncryptionService(unittest.TestCase):
     """Test encryption service factory function."""
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_raises_error_when_key_not_configured(self, mock_settings):
         """Should raise error when encryption key is not configured."""
-        from blockauth.totp.services.encryption import (
-            get_encryption_service,
-            TOTPEncryptionNotConfiguredError
-        )
+        from blockauth.totp.services.encryption import TOTPEncryptionNotConfiguredError, get_encryption_service
 
         mock_settings.get.return_value = None
 
@@ -421,7 +418,7 @@ class TestGetEncryptionService(unittest.TestCase):
 
         self.assertIn("TOTP_ENCRYPTION_KEY", str(context.exception))
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_returns_none_when_key_not_configured_and_not_raising(self, mock_settings):
         """Should return None when key not configured and raise_if_missing=False."""
         from blockauth.totp.services.encryption import get_encryption_service
@@ -432,10 +429,10 @@ class TestGetEncryptionService(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_returns_service_when_key_configured(self, mock_settings):
         """Should return encryption service when key is configured."""
-        from blockauth.totp.services.encryption import get_encryption_service, FernetSecretEncryption
+        from blockauth.totp.services.encryption import FernetSecretEncryption, get_encryption_service
 
         mock_settings.get.return_value = "test-encryption-key-12345"
 
@@ -447,11 +444,11 @@ class TestGetEncryptionService(unittest.TestCase):
 class TestValidateTOTPEncryptionConfig(unittest.TestCase):
     """Test TOTP encryption configuration validation."""
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_passes_when_totp_disabled(self, mock_settings):
         """Should pass validation when TOTP is disabled."""
-        from blockauth.totp.services.encryption import validate_totp_encryption_config
         from blockauth.totp.constants import TOTPConfigKeys
+        from blockauth.totp.services.encryption import validate_totp_encryption_config
 
         mock_settings.get.side_effect = lambda key, default=None: {
             TOTPConfigKeys.ENABLED: False,
@@ -460,14 +457,11 @@ class TestValidateTOTPEncryptionConfig(unittest.TestCase):
         result = validate_totp_encryption_config()
         self.assertTrue(result)
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_fails_when_totp_enabled_without_key(self, mock_settings):
         """Should fail when TOTP enabled but no encryption key."""
-        from blockauth.totp.services.encryption import (
-            validate_totp_encryption_config,
-            TOTPEncryptionNotConfiguredError
-        )
         from blockauth.totp.constants import TOTPConfigKeys
+        from blockauth.totp.services.encryption import TOTPEncryptionNotConfiguredError, validate_totp_encryption_config
 
         mock_settings.get.side_effect = lambda key, default=None: {
             TOTPConfigKeys.ENABLED: True,
@@ -477,11 +471,11 @@ class TestValidateTOTPEncryptionConfig(unittest.TestCase):
         with self.assertRaises(TOTPEncryptionNotConfiguredError):
             validate_totp_encryption_config()
 
-    @patch('blockauth.totp.services.encryption.blockauth_settings')
+    @patch("blockauth.totp.services.encryption.blockauth_settings")
     def test_passes_when_totp_enabled_with_valid_key(self, mock_settings):
         """Should pass when TOTP enabled with valid encryption key."""
-        from blockauth.totp.services.encryption import validate_totp_encryption_config
         from blockauth.totp.constants import TOTPConfigKeys
+        from blockauth.totp.services.encryption import validate_totp_encryption_config
 
         mock_settings.get.side_effect = lambda key, default=None: {
             TOTPConfigKeys.ENABLED: True,
@@ -492,5 +486,5 @@ class TestValidateTOTPEncryptionConfig(unittest.TestCase):
         self.assertTrue(result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

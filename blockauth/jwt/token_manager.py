@@ -1,20 +1,27 @@
-import jwt
 import logging
-from typing import Optional, Dict, Any, List
+import uuid
 from datetime import datetime, timedelta
+from typing import Any, Dict, List
+
+import jwt
 from rest_framework.exceptions import AuthenticationFailed
 
-from blockauth.utils.config import get_config, get_block_auth_user_model
+from blockauth.utils.config import get_block_auth_user_model, get_config
+
 from .interfaces import CustomClaimsProvider
 
 # Try to import Django timezone, fallback to datetime if not available
 try:
     from django.utils import timezone
+
     def get_current_time():
         return timezone.now()
+
 except ImportError:
+
     def get_current_time():
         return datetime.utcnow()
+
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +36,11 @@ class JWTTokenManager:
     def __init__(self):
         from blockauth.utils.token import _resolve_keys
 
-        self.algorithm = get_config('ALGORITHM')
+        self.algorithm = get_config("ALGORITHM")
         self.signing_key, self.verification_key = _resolve_keys(self.algorithm)
         # Backward compatibility
         self.secret_key = self.signing_key
-        self.expiry_hours = get_config('ACCESS_TOKEN_LIFETIME')
+        self.expiry_hours = get_config("ACCESS_TOKEN_LIFETIME")
         self._claims_providers: List[CustomClaimsProvider] = []
 
     def register_claims_provider(self, provider: CustomClaimsProvider):
@@ -48,32 +55,34 @@ class JWTTokenManager:
             self._claims_providers.remove(provider)
             logger.info(f"Unregistered custom claims provider: {provider.__class__.__name__}")
 
-    def generate_token(self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None) -> str:
+    def generate_token(
+        self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None
+    ) -> str:
         """Generate JWT token with base and custom claims"""
-        # Base claims (always included)
-        base_claims = {
-            'user_id': user_id,
-            'exp': get_current_time() + token_lifetime,
-            'iat': get_current_time(),
-            'type': token_type
-        }
+        # User-provided data (applied first so base claims can't be overridden)
+        extra_claims = dict(user_data) if user_data else {}
 
-        # Add additional user data if provided
-        if user_data:
-            base_claims.update(user_data)
+        # Base claims (always included — set AFTER extra_claims to prevent override)
+        base_claims = {
+            "user_id": user_id,
+            "jti": str(uuid.uuid4()),
+            "exp": get_current_time() + token_lifetime,
+            "iat": get_current_time(),
+            "type": token_type,
+        }
 
         # Collect custom claims from all registered providers
         custom_claims = {}
         logger.info(f"🔍 Collecting custom claims from {len(self._claims_providers)} providers")
-        
+
         for provider in self._claims_providers:
             try:
                 logger.info(f"🔍 Calling provider: {provider.__class__.__name__}")
-                
+
                 # Try to get user object for custom claims
                 try:
                     user_model = get_block_auth_user_model()
-                    if hasattr(user_model, 'objects'):
+                    if hasattr(user_model, "objects"):
                         user = user_model.objects.get(id=user_id)
                         logger.info(f"✅ Got user from database: {user.email}")
                     else:
@@ -83,25 +92,28 @@ class JWTTokenManager:
                 except Exception as user_error:
                     # If we can't get the user from database, create a mock user
                     logger.warning(f"Could not get user from database: {user_error}")
-                    user = type('MockUser', (), {'id': user_id, 'email': f"user_{user_id}@example.com"})()
+                    user = type("MockUser", (), {"id": user_id, "email": f"user_{user_id}@example.com"})()
                     logger.info(f"✅ Created fallback mock user: {user.email}")
-                
+
                 provider_claims = provider.get_custom_claims(user)
                 logger.info(f"✅ Provider {provider.__class__.__name__} returned claims: {provider_claims}")
-                
+
                 if provider_claims:
                     custom_claims.update(provider_claims)
-                    logger.info(f"✅ Added custom claims from {provider.__class__.__name__}: {list(provider_claims.keys())}")
+                    logger.info(
+                        f"✅ Added custom claims from {provider.__class__.__name__}: {list(provider_claims.keys())}"
+                    )
                 else:
                     logger.info(f"⚠️ Provider {provider.__class__.__name__} returned no claims")
             except Exception as e:
                 # Log error but don't fail token generation
                 logger.error(f"❌ Error getting custom claims from {provider.__class__.__name__}: {e}")
                 import traceback
+
                 traceback.print_exc()
 
-        # Merge all claims (custom claims can't override base claims)
-        all_claims = {**custom_claims, **base_claims}
+        # Merge all claims: extra_claims < custom_claims < base_claims (base always wins)
+        all_claims = {**extra_claims, **custom_claims, **base_claims}
         logger.info(f"✅ Final claims for token: {list(all_claims.keys())}")
 
         # Generate token
@@ -137,7 +149,7 @@ class JWTTokenManager:
         try:
             claims = self.decode_token(token)
             # Remove base claims to get only custom claims
-            base_claim_keys = {'user_id', 'exp', 'iat', 'type'}
+            base_claim_keys = {"user_id", "jti", "exp", "iat", "type"}
             custom_claims = {k: v for k, v in claims.items() if k not in base_claim_keys}
             return custom_claims
         except Exception as e:
@@ -155,34 +167,25 @@ class JWTTokenManager:
             Dict with 'access' and 'refresh' token strings
         """
         # Get token lifetimes from config
-        access_lifetime = get_config('ACCESS_TOKEN_LIFETIME')
-        refresh_lifetime = get_config('REFRESH_TOKEN_LIFETIME')
+        access_lifetime = get_config("ACCESS_TOKEN_LIFETIME")
+        refresh_lifetime = get_config("REFRESH_TOKEN_LIFETIME")
 
         # Prepare user data
         user_data = {
-            'email': getattr(user, 'email', None),
+            "email": getattr(user, "email", None),
         }
 
         # Generate access token
         access_token = self.generate_token(
-            user_id=str(user.id),
-            token_type='access',
-            token_lifetime=access_lifetime,
-            user_data=user_data
+            user_id=str(user.id), token_type="access", token_lifetime=access_lifetime, user_data=user_data
         )
 
         # Generate refresh token
         refresh_token = self.generate_token(
-            user_id=str(user.id),
-            token_type='refresh',
-            token_lifetime=refresh_lifetime,
-            user_data=user_data
+            user_id=str(user.id), token_type="refresh", token_lifetime=refresh_lifetime, user_data=user_data
         )
 
-        return {
-            'access': access_token,
-            'refresh': refresh_token
-        }
+        return {"access": access_token, "refresh": refresh_token}
 
 
 # Global instance

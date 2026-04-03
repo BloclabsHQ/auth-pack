@@ -4,12 +4,13 @@ Django ORM Storage Backend for Passkey Credentials
 Implements ICredentialStore using Django ORM and the PasskeyCredential model.
 """
 
-from typing import Optional, List, Any
+from typing import Any, List, Optional
+
 from django.utils import timezone
 
-from .base import ICredentialStore, CredentialData
-from ..models import PasskeyCredential
 from ..exceptions import CredentialAlreadyExistsError, CredentialNotFoundError
+from ..models import PasskeyCredential
+from .base import CredentialData, ICredentialStore
 
 
 class DjangoCredentialStore(ICredentialStore):
@@ -45,12 +46,8 @@ class DjangoCredentialStore(ICredentialStore):
     def save(self, credential: CredentialData) -> CredentialData:
         """Save a new credential"""
         # Check if credential already exists
-        if PasskeyCredential.objects.filter(
-            credential_id=credential.credential_id
-        ).exists():
-            raise CredentialAlreadyExistsError(
-                f"Credential with ID {credential.credential_id[:20]}... already exists"
-            )
+        if PasskeyCredential.objects.filter(credential_id=credential.credential_id).exists():
+            raise CredentialAlreadyExistsError(f"Credential with ID {credential.credential_id[:20]}... already exists")
 
         # Create new credential
         db_credential = PasskeyCredential.objects.create(
@@ -93,24 +90,22 @@ class DjangoCredentialStore(ICredentialStore):
         queryset = PasskeyCredential.objects.filter(user_id=user_id)
         if active_only:
             queryset = queryset.filter(is_active=True)
-        return [self._model_to_data(c) for c in queryset.order_by('-created_at')]
+        return [self._model_to_data(c) for c in queryset.order_by("-created_at")]
 
     def get_by_user_handle(self, user_handle: str) -> Optional[CredentialData]:
         """Get credential by user handle (for discoverable credentials)"""
         try:
-            credential = PasskeyCredential.objects.get(
-                user_handle=user_handle,
-                is_active=True
-            )
+            credential = PasskeyCredential.objects.get(user_handle=user_handle, is_active=True)
             return self._model_to_data(credential)
         except PasskeyCredential.DoesNotExist:
             return None
         except PasskeyCredential.MultipleObjectsReturned:
             # Return the most recently used one
-            credential = PasskeyCredential.objects.filter(
-                user_handle=user_handle,
-                is_active=True
-            ).order_by('-last_used_at', '-created_at').first()
+            credential = (
+                PasskeyCredential.objects.filter(user_handle=user_handle, is_active=True)
+                .order_by("-last_used_at", "-created_at")
+                .first()
+            )
             return self._model_to_data(credential) if credential else None
 
     def update_counter(self, credential_id: str, new_count: int) -> bool:
@@ -123,19 +118,15 @@ class DjangoCredentialStore(ICredentialStore):
 
     def update_last_used(self, credential_id: str) -> None:
         """Update last used timestamp"""
-        PasskeyCredential.objects.filter(credential_id=credential_id).update(
-            last_used_at=timezone.now()
-        )
+        PasskeyCredential.objects.filter(credential_id=credential_id).update(last_used_at=timezone.now())
 
     def update_name(self, credential_id: str, name: str) -> None:
         """Update credential name"""
-        updated = PasskeyCredential.objects.filter(credential_id=credential_id).update(
-            name=name
-        )
+        updated = PasskeyCredential.objects.filter(credential_id=credential_id).update(name=name)
         if not updated:
             raise CredentialNotFoundError(f"Credential not found: {credential_id[:20]}...")
 
-    def revoke(self, credential_id: str, reason: str = '') -> None:
+    def revoke(self, credential_id: str, reason: str = "") -> None:
         """Revoke a credential"""
         try:
             credential = PasskeyCredential.objects.get(credential_id=credential_id)

@@ -16,32 +16,30 @@ Key Features:
 - Framework-agnostic design
 """
 
-import os
 import hashlib
 import json
 import logging
+import os
 import time
-from uuid6 import uuid7
-from typing import Dict, List, Optional, Tuple, Union
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime
+from typing import Dict, List
 
-# Web3 imports
-from web3 import Web3
 from eth_account import Account
+from uuid6 import uuid7
 
-# Import constants
-from .constants import (
-    KDFAlgorithms, 
-    ConfigKeys, 
-    SecurityLevels, 
-    SecurityConstants,
-    ErrorMessages
-)
+from blockauth.utils.generics import sanitize_log_context
 
 # Import blockauth logger and sanitization
 from blockauth.utils.logger import blockauth_logger
-from blockauth.utils.generics import sanitize_log_context
+
+# Import constants
+from .constants import ErrorMessages, KDFAlgorithms, SecurityConstants, SecurityLevels
+
+# Web3 imports
+
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,28 +47,28 @@ logger = logging.getLogger(__name__)
 def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str) -> str:
     """
     Securely derive private key from email + salt using PBKDF2
-    
+
     This is a shared utility function to avoid code duplication.
-    
+
     Args:
         email: User email address
         salt: User-specific salt
         platform_master_salt: Platform master salt
-        
+
     Returns:
         Private key as hex string with 0x prefix
     """
     email = email.lower().strip()
     kdf_input = f"{email}:{salt}:{platform_master_salt}"
-    
+
     # Use PBKDF2 for secure key derivation
     try:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-        
+
         # Use platform master salt as the salt for PBKDF2
-        salt_bytes = platform_master_salt.encode()[:SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
-        
+        salt_bytes = platform_master_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
+
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
@@ -78,48 +76,49 @@ def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str)
             iterations=100000,  # High iteration count for security
         )
         key_material = kdf.derive(kdf_input.encode())
-        return '0x' + key_material.hex()
-        
+        return "0x" + key_material.hex()
+
     except ImportError:
         # Fallback to hashlib if cryptography not available (less secure)
         blockauth_logger.warning(
             "cryptography library not available, using SHA-256 fallback",
-            sanitize_log_context({"function": "_derive_private_key_secure", "email": email})
+            sanitize_log_context({"function": "_derive_private_key_secure", "email": email}),
         )
         key_material = hashlib.sha256(kdf_input.encode()).digest()
-        return '0x' + key_material.hex()
+        return "0x" + key_material.hex()
 
 
 def get_kdf_config():
     """
     Get KDF configuration from Django settings (BLOCK_AUTH_SETTINGS)
-    
+
     This function now uses a single source of truth: BLOCK_AUTH_SETTINGS
     in the Django settings. Environment variable fallbacks have been removed
     to eliminate configuration duplication.
-    
+
     Returns:
         dict: Configuration dictionary with defaults
-        
+
     Raises:
         ImportError: If Django settings are not available
         ValueError: If required settings are missing
     """
     try:
         from django.conf import settings
-        block_auth_settings = getattr(settings, 'BLOCK_AUTH_SETTINGS', {})
-        
+
+        block_auth_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {})
+
         # Validate that KDF is enabled
-        if not block_auth_settings.get('KDF_ENABLED', False):
+        if not block_auth_settings.get("KDF_ENABLED", False):
             raise ValueError("KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS")
-        
+
         return {
-            'algorithm': block_auth_settings.get('KDF_ALGORITHM', KDFAlgorithms.PBKDF2_SHA256),
-            'iterations': block_auth_settings.get('KDF_ITERATIONS', 100000),
-            'master_salt': block_auth_settings.get('KDF_MASTER_SALT', ''),
-            'encryption_key': block_auth_settings.get('MASTER_ENCRYPTION_KEY', ''),
-            'security_level': block_auth_settings.get('KDF_SECURITY_LEVEL', 'MEDIUM'),
-            'platform_master_salt': block_auth_settings.get('PLATFORM_MASTER_SALT', ''),
+            "algorithm": block_auth_settings.get("KDF_ALGORITHM", KDFAlgorithms.PBKDF2_SHA256),
+            "iterations": block_auth_settings.get("KDF_ITERATIONS", 100000),
+            "master_salt": block_auth_settings.get("KDF_MASTER_SALT", ""),
+            "encryption_key": block_auth_settings.get("MASTER_ENCRYPTION_KEY", ""),
+            "security_level": block_auth_settings.get("KDF_SECURITY_LEVEL", "MEDIUM"),
+            "platform_master_salt": block_auth_settings.get("PLATFORM_MASTER_SALT", ""),
         }
     except ImportError:
         raise ImportError(
@@ -131,57 +130,53 @@ def get_kdf_config():
 
 class BaseKDFService(ABC):
     """Abstract base class for KDF implementations"""
-    
+
     @abstractmethod
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
         """Derive a private key from credentials"""
-        pass
-    
+
     @abstractmethod
-    def verify_key(self, email: str, password: str, salt: str, 
-                  expected_key: str, **kwargs) -> bool:
+    def verify_key(self, email: str, password: str, salt: str, expected_key: str, **kwargs) -> bool:
         """Verify if credentials produce expected key"""
-        pass
 
 
 class PBKDF2Service(BaseKDFService):
     """PBKDF2-based key derivation service"""
-    
-    def __init__(self, iterations: int = 100000, hash_algorithm: str = 'sha256'):
+
+    def __init__(self, iterations: int = 100000, hash_algorithm: str = "sha256"):
         self.iterations = max(SecurityConstants.MIN_ITERATIONS, iterations)  # Minimum security threshold
         self.hash_algorithm = hash_algorithm
-        
-        if hash_algorithm not in ['sha256', 'sha512']:
+
+        if hash_algorithm not in ["sha256", "sha512"]:
             raise ValueError(f"Unsupported hash algorithm: {hash_algorithm}")
-    
+
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
         """Derive private key using PBKDF2"""
         try:
             # Normalize inputs
             email = email.lower().strip()
             password = password.strip()
-            
+
             # Create input string with platform master salt if available
-            master_salt = kwargs.get('master_salt', '')
+            master_salt = kwargs.get("master_salt", "")
             kdf_input = f"{email}:{password}:{salt}:{master_salt}"
-            
+
             # Derive key material using PBKDF2
             key_material = hashlib.pbkdf2_hmac(
                 self.hash_algorithm,
-                kdf_input.encode('utf-8'),
-                salt.encode('utf-8'),
+                kdf_input.encode("utf-8"),
+                salt.encode("utf-8"),
                 self.iterations,
-                dklen=SecurityConstants.AES_KEY_LENGTH  # 32 bytes for private key
+                dklen=SecurityConstants.AES_KEY_LENGTH,  # 32 bytes for private key
             )
-            
-            return '0x' + key_material.hex()
-            
+
+            return "0x" + key_material.hex()
+
         except Exception as e:
             logger.error(f"PBKDF2 key derivation failed: {e}")
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
-    
-    def verify_key(self, email: str, password: str, salt: str, 
-                  expected_key: str, **kwargs) -> bool:
+
+    def verify_key(self, email: str, password: str, salt: str, expected_key: str, **kwargs) -> bool:
         """Verify if credentials produce expected key"""
         try:
             derived_key = self.derive_key(email, password, salt, **kwargs)
@@ -192,65 +187,63 @@ class PBKDF2Service(BaseKDFService):
 
 class Argon2Service(BaseKDFService):
     """Argon2-based key derivation service (most secure)"""
-    
-    def __init__(self, time_cost: int = 3, memory_cost: int = 65536, 
-                 parallelism: int = 4):
+
+    def __init__(self, time_cost: int = 3, memory_cost: int = 65536, parallelism: int = 4):
         self.time_cost = max(1, time_cost)
         self.memory_cost = max(1024, memory_cost)  # Minimum 1MB
         self.parallelism = max(1, parallelism)
-        
+
         # Try to import argon2, fallback to PBKDF2 if not available
         try:
-            import argon2
+            pass
+
             self.argon2_available = True
         except ImportError:
             blockauth_logger.warning(
-                "Argon2 not available, falling back to PBKDF2",
-                sanitize_log_context({"service": "Argon2Service"})
+                "Argon2 not available, falling back to PBKDF2", sanitize_log_context({"service": "Argon2Service"})
             )
             self.argon2_available = False
-    
+
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
         """Derive private key using Argon2id"""
         if not self.argon2_available:
             # Fallback to PBKDF2
             fallback_service = PBKDF2Service(iterations=100000)
             return fallback_service.derive_key(email, password, salt, **kwargs)
-        
+
         try:
             import argon2
-            
+
             # Normalize inputs
             email = email.lower().strip()
             password = password.strip()
-            
+
             # Create input string
-            master_salt = kwargs.get('master_salt', '')
+            master_salt = kwargs.get("master_salt", "")
             kdf_input = f"{email}:{password}:{salt}:{master_salt}"
-            
+
             # Create Argon2 hasher
             hasher = argon2.PasswordHasher(
                 time_cost=self.time_cost,
                 memory_cost=self.memory_cost,
                 parallelism=self.parallelism,
                 hash_len=SecurityConstants.AES_KEY_LENGTH,
-                type=argon2.Type.ID  # Argon2id variant
+                type=argon2.Type.ID,  # Argon2id variant
             )
-            
+
             # Generate hash
             hash_result = hasher.hash(kdf_input, salt=salt.encode())
-            
+
             # Extract key material (last 64 hex chars = 32 bytes)
-            key_material = hash_result[-(SecurityConstants.AES_KEY_LENGTH * 2):]
-            
-            return '0x' + key_material
-            
+            key_material = hash_result[-(SecurityConstants.AES_KEY_LENGTH * 2) :]
+
+            return "0x" + key_material
+
         except Exception as e:
             logger.error(f"Argon2 key derivation failed: {e}")
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
-    
-    def verify_key(self, email: str, password: str, salt: str, 
-                  expected_key: str, **kwargs) -> bool:
+
+    def verify_key(self, email: str, password: str, salt: str, expected_key: str, **kwargs) -> bool:
         """Verify if credentials produce expected key"""
         try:
             derived_key = self.derive_key(email, password, salt, **kwargs)
@@ -262,75 +255,75 @@ class Argon2Service(BaseKDFService):
 class PasswordlessKDFService:
     """
     Service for generating wallets for passwordless users
-    
+
     This service creates deterministic wallets from email addresses
     and encrypts them with platform-level keys.
     """
-    
+
     def __init__(self, platform_master_salt: str = None):
         """
         Initialize passwordless KDF service
-        
+
         Args:
             platform_master_salt: Platform master salt for deterministic generation
         """
         config = get_kdf_config()
-        self.platform_master_salt = platform_master_salt or config['platform_master_salt']
-        
+        self.platform_master_salt = platform_master_salt or config["platform_master_salt"]
+
         if not self.platform_master_salt:
             raise ValueError("Platform master salt required for passwordless wallets")
-        
+
         if len(self.platform_master_salt) < SecurityConstants.MIN_SALT_LENGTH:
             raise ValueError(f"Platform master salt must be at least {SecurityConstants.MIN_SALT_LENGTH} characters")
-    
+
     def create_user_wallet(self, email: str) -> Dict[str, str]:
         """
         Create deterministic wallet for passwordless user
-        
+
         Args:
             email: User's email address
-        
+
         Returns:
             Dict containing wallet data
         """
         try:
             # Generate deterministic salt from email
             email_salt = self._generate_email_salt(email)
-            
+
             # Derive private key from email + platform salt
             private_key = self._derive_private_key(email, email_salt)
-            
+
             # Generate wallet address
             account = Account.from_key(private_key)
             wallet_address = account.address
-            
+
             # Clear private key from memory immediately
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             return {
-                'wallet_address': wallet_address,
-                'salt': email_salt,
-                'public_key': account.key.hex(),
-                'algorithm': 'sha256_deterministic',
-                'auth_method': 'passwordless',
-                'deterministic': True,
-                'created_at': datetime.now().isoformat()
+                "wallet_address": wallet_address,
+                "salt": email_salt,
+                "public_key": account.key.hex(),
+                "algorithm": "sha256_deterministic",
+                "auth_method": "passwordless",
+                "deterministic": True,
+                "created_at": datetime.now().isoformat(),
             }
-            
+
         except Exception as e:
             # Log error using normal logger for debugging
             logger.error(f"Passwordless wallet creation failed: {e}")
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
-    
+
     def get_wallet_address(self, email: str) -> str:
         """
         Get wallet address for email (deterministic)
-        
+
         Args:
             email: User's email address
-        
+
         Returns:
             Wallet address (always the same for same email)
         """
@@ -339,24 +332,24 @@ class PasswordlessKDFService:
             private_key = self._derive_private_key(email, email_salt)
             account = Account.from_key(private_key)
             address = account.address
-            
+
             # Clear private key from memory
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             return address
-            
+
         except Exception as e:
             # Use secure error handling to prevent information disclosure
             # Return generic error message to prevent information disclosure
             raise ValueError("Unable to retrieve wallet address. Please try again.")
-    
+
     def _generate_email_salt(self, email: str) -> str:
         """Generate deterministic salt from email"""
         email = email.lower().strip()
         salt_input = f"{email}:{self.platform_master_salt}"
         return hashlib.sha256(salt_input.encode()).hexdigest()
-    
+
     def _derive_private_key(self, email: str, salt: str) -> str:
         """Derive private key from email + platform salt using PBKDF2"""
         return _derive_private_key_secure(email, salt, self.platform_master_salt)
@@ -365,20 +358,18 @@ class PasswordlessKDFService:
 class KeyDerivationService:
     """
     Main service for deriving cryptographic keys from user credentials
-    
+
     This service is framework-agnostic and can be used in any Python project.
     It supports multiple KDF algorithms and provides a unified interface.
     Configuration is automatically read from project settings.
     """
-    
-    def __init__(self, 
-                 algorithm: str = None,
-                 iterations: int = None,
-                 master_salt: str = None,
-                 security_level: str = None):
+
+    def __init__(
+        self, algorithm: str = None, iterations: int = None, master_salt: str = None, security_level: str = None
+    ):
         """
         Initialize KDF service
-        
+
         Args:
             algorithm: KDF algorithm to use (defaults to settings)
             iterations: Number of iterations for PBKDF2 (defaults to settings)
@@ -387,50 +378,49 @@ class KeyDerivationService:
         """
         # Get configuration from project settings
         config = get_kdf_config()
-        
+
         # Use provided values or defaults from settings
-        self.algorithm = algorithm or config['algorithm']
-        self.iterations = iterations or config['iterations']
-        self.master_salt = master_salt or config['master_salt']
-        security_level = security_level or config['security_level']
-        
+        self.algorithm = algorithm or config["algorithm"]
+        self.iterations = iterations or config["iterations"]
+        self.master_salt = master_salt or config["master_salt"]
+        security_level = security_level or config["security_level"]
+
         # Validate algorithm
         if not KDFAlgorithms.is_supported(self.algorithm):
             raise ValueError(ErrorMessages.INVALID_ALGORITHM)
-        
+
         # Apply security preset if specified
         if security_level:
             preset = SecurityLevels.get_preset(security_level)
-            self.algorithm = preset['algorithm']
-            self.iterations = preset['iterations']
-        
+            self.algorithm = preset["algorithm"]
+            self.iterations = preset["iterations"]
+
         self.iterations = max(SecurityConstants.MIN_ITERATIONS, self.iterations)
-        
+
         # Initialize algorithm-specific service
         if self.algorithm == KDFAlgorithms.ARGON2ID:
             self.kdf_service = Argon2Service()
         elif self.algorithm == KDFAlgorithms.PBKDF2_SHA512:
-            self.kdf_service = PBKDF2Service(self.iterations, 'sha512')
+            self.kdf_service = PBKDF2Service(self.iterations, "sha512")
         else:  # Default to PBKDF2_SHA256
-            self.kdf_service = PBKDF2Service(self.iterations, 'sha256')
-        
+            self.kdf_service = PBKDF2Service(self.iterations, "sha256")
+
         # Validate master salt if provided
         if self.master_salt and len(self.master_salt) < SecurityConstants.MIN_SALT_LENGTH:
             raise ValueError(ErrorMessages.INVALID_MASTER_SALT)
-    
-    def create_user_wallet(self, email: str, password: str, 
-                          user_salt: str = None) -> Dict[str, str]:
+
+    def create_user_wallet(self, email: str, password: str, user_salt: str = None) -> Dict[str, str]:
         """
         Create a new wallet for an email user (password-based)
-        
+
         Args:
             email: User's email address
             password: User's password
             user_salt: Optional custom salt (generated if not provided)
-        
+
         Returns:
             Dict containing wallet_address, encrypted_private_key, salt
-            
+
         Raises:
             ValueError: If key derivation fails
         """
@@ -438,93 +428,87 @@ class KeyDerivationService:
             # Generate unique salt for this user if not provided
             if not user_salt:
                 user_salt = os.urandom(SecurityConstants.AES_KEY_LENGTH).hex()
-            
+
             # Derive private key
             private_key = self.derive_private_key(email, password, user_salt)
-            
+
             # Generate wallet address
             account = Account.from_key(private_key)
             wallet_address = account.address
-            
+
             # Clear private key from memory immediately
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             return {
-                'wallet_address': wallet_address,
-                'salt': user_salt,
-                'public_key': account.key.hex(),
-                'algorithm': self.algorithm,
-                'iterations': self.iterations,
-                'auth_method': 'password',
-                'deterministic': False
+                "wallet_address": wallet_address,
+                "salt": user_salt,
+                "public_key": account.key.hex(),
+                "algorithm": self.algorithm,
+                "iterations": self.iterations,
+                "auth_method": "password",
+                "deterministic": False,
             }
-            
+
         except Exception as e:
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
-    
+
     def derive_private_key(self, email: str, password: str, salt: str) -> str:
         """
         Derive private key from user credentials
-        
+
         Args:
             email: User's email address
             password: User's password
             salt: User-specific salt
-        
+
         Returns:
             32-byte private key as hex string
         """
-        return self.kdf_service.derive_key(
-            email, 
-            password, 
-            salt, 
-            master_salt=self.master_salt
-        )
-    
-    def verify_password(self, email: str, password: str, 
-                       stored_salt: str, stored_address: str) -> bool:
+        return self.kdf_service.derive_key(email, password, salt, master_salt=self.master_salt)
+
+    def verify_password(self, email: str, password: str, stored_salt: str, stored_address: str) -> bool:
         """
         Verify if the provided password generates the correct wallet address
-        
+
         Args:
             email: User's email address
             password: Password to verify
             stored_salt: Salt stored in database
             stored_address: Wallet address stored in database
-        
+
         Returns:
             True if password is correct, False otherwise
         """
         try:
             # Derive private key with provided credentials
             private_key = self.derive_private_key(email, password, stored_salt)
-            
+
             # Generate address
             account = Account.from_key(private_key)
             derived_address = account.address
-            
+
             # Clear private key from memory
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             # Compare addresses (case-insensitive)
             return derived_address.lower() == stored_address.lower()
-            
+
         except Exception as e:
             logger.error(f"Password verification failed: {e}")
             return False
-    
+
     def get_wallet_address(self, email: str, password: str, salt: str) -> str:
         """
         Get wallet address for given credentials without storing private key
-        
+
         Args:
             email: User's email address
             password: User's password
             salt: User-specific salt
-        
+
         Returns:
             Wallet address (0x...)
         """
@@ -532,13 +516,13 @@ class KeyDerivationService:
             private_key = self.derive_private_key(email, password, salt)
             account = Account.from_key(private_key)
             address = account.address
-            
+
             # Clear private key from memory
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             return address
-            
+
         except Exception as e:
             # Use secure error handling to prevent information disclosure
             # Return generic error message to prevent information disclosure
@@ -548,130 +532,118 @@ class KeyDerivationService:
 class KeyEncryptionService:
     """
     Service for securely encrypting and decrypting private keys
-    
+
     This service provides AES-256-GCM encryption for private keys
     and can be extended to use HSM/KMS in production.
     """
-    
+
     def __init__(self, encryption_key: str = None):
         """
         Initialize encryption service
-        
+
         Args:
             encryption_key: 256-bit encryption key in hex format (defaults to settings)
         """
         if encryption_key is None:
             # Try to get from settings
             config = get_kdf_config()
-            encryption_key = config['encryption_key']
-        
+            encryption_key = config["encryption_key"]
+
         self.encryption_key = self._get_or_create_key(encryption_key)
-    
+
     def encrypt_private_key(self, private_key: str) -> Dict[str, str]:
         """
         Encrypt private key using AES-256-GCM
-        
+
         Args:
             private_key: Private key to encrypt (hex string)
-        
+
         Returns:
             Dict with encrypted_key, nonce, and tag
         """
         try:
             # Generate random nonce
             nonce = os.urandom(SecurityConstants.AES_NONCE_LENGTH)  # 96 bits for GCM
-            
+
             # Import cryptography library
             try:
-                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
                 from cryptography.hazmat.backends import default_backend
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             except ImportError:
                 raise ImportError("cryptography library required for encryption")
-            
+
             # Create cipher
-            cipher = Cipher(
-                algorithms.AES(self.encryption_key),
-                modes.GCM(nonce),
-                backend=default_backend()
-            )
+            cipher = Cipher(algorithms.AES(self.encryption_key), modes.GCM(nonce), backend=default_backend())
             encryptor = cipher.encryptor()
-            
+
             # Encrypt the private key
             ciphertext = encryptor.update(private_key.encode()) + encryptor.finalize()
-            
-            return {
-                'encrypted_key': ciphertext.hex(),
-                'nonce': nonce.hex(),
-                'tag': encryptor.tag.hex()
-            }
-            
+
+            return {"encrypted_key": ciphertext.hex(), "nonce": nonce.hex(), "tag": encryptor.tag.hex()}
+
         except Exception as e:
             logger.error(f"Encryption failed: {e}")
             raise ValueError(ErrorMessages.ENCRYPTION_FAILED)
-    
+
     def decrypt_private_key(self, encrypted_data: Dict[str, str]) -> str:
         """
         Decrypt private key
-        
+
         Args:
             encrypted_data: Dict with encrypted_key, nonce, and tag
-        
+
         Returns:
             Decrypted private key
         """
         try:
             # Import cryptography library
             try:
-                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
                 from cryptography.hazmat.backends import default_backend
+                from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             except ImportError:
                 raise ImportError("cryptography library required for decryption")
-            
+
             # Decode from hex
-            ciphertext = bytes.fromhex(encrypted_data['encrypted_key'])
-            nonce = bytes.fromhex(encrypted_data['nonce'])
-            tag = bytes.fromhex(encrypted_data['tag'])
-            
+            ciphertext = bytes.fromhex(encrypted_data["encrypted_key"])
+            nonce = bytes.fromhex(encrypted_data["nonce"])
+            tag = bytes.fromhex(encrypted_data["tag"])
+
             # Create cipher
-            cipher = Cipher(
-                algorithms.AES(self.encryption_key),
-                modes.GCM(nonce, tag),
-                backend=default_backend()
-            )
+            cipher = Cipher(algorithms.AES(self.encryption_key), modes.GCM(nonce, tag), backend=default_backend())
             decryptor = cipher.decryptor()
-            
+
             # Decrypt
             private_key = decryptor.update(ciphertext) + decryptor.finalize()
-            
+
             return private_key.decode()
-            
+
         except Exception as e:
             logger.error(f"Decryption failed: {e}")
             raise ValueError(ErrorMessages.DECRYPTION_FAILED)
-    
+
     def _get_or_create_key(self, encryption_key: str = None) -> bytes:
         """
         Get or create master encryption key
-        
+
         Args:
             encryption_key: Optional encryption key in hex format
-        
+
         Returns:
             Encryption key as bytes
-            
+
         Raises:
             ValueError: If encryption key is invalid or missing
         """
         if encryption_key:
             # Use provided key
-            if encryption_key.startswith('0x'):
+            if encryption_key.startswith("0x"):
                 encryption_key = encryption_key[2:]
-            
+
             if len(encryption_key) != (SecurityConstants.AES_KEY_LENGTH * 2):  # 32 bytes = 64 hex chars
                 raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
-            
+
             return bytes.fromhex(encryption_key)
-        
+
         # No key provided - this should not happen with single source of truth
         raise ValueError(
             "Master encryption key is required. Set MASTER_ENCRYPTION_KEY "
@@ -683,23 +655,25 @@ class KeyEncryptionService:
 class KDFManager:
     """
     Main KDF Manager with dual encryption for platform access + user control
-    
+
     This manager creates wallets that can be decrypted by:
     1. User password (for user operations)
     2. Platform key (for platform operations/recovery)
-    
+
     It also supports multiple wallets per user with different salts.
     """
-    
-    def __init__(self, 
-                 algorithm: str = None,
-                 security_level: str = None,
-                 master_salt: str = None,
-                 encryption_key: str = None,
-                 platform_master_salt: str = None):
+
+    def __init__(
+        self,
+        algorithm: str = None,
+        security_level: str = None,
+        master_salt: str = None,
+        encryption_key: str = None,
+        platform_master_salt: str = None,
+    ):
         """
         Initialize KDF manager
-        
+
         Args:
             algorithm: KDF algorithm to use
             security_level: Security preset
@@ -709,308 +683,287 @@ class KDFManager:
         """
         # Initialize password-based KDF service
         self.password_kdf_service = KeyDerivationService(
-            algorithm=algorithm,
-            security_level=security_level,
-            master_salt=master_salt
+            algorithm=algorithm, security_level=security_level, master_salt=master_salt
         )
-        
+
         # Initialize platform encryption service
         self.platform_encryption_service = KeyEncryptionService(encryption_key)
-        
+
         # Store platform master salt for passwordless wallets
         config = get_kdf_config()
-        self.platform_master_salt = platform_master_salt or config.get('platform_master_salt', '')
-        
+        self.platform_master_salt = platform_master_salt or config.get("platform_master_salt", "")
+
         if not self.platform_master_salt:
             blockauth_logger.warning(
                 "Platform master salt not set. Passwordless wallets will not work.",
-                sanitize_log_context({"service": "KDFManager"})
+                sanitize_log_context({"service": "KDFManager"}),
             )
-    
-    def create_wallet(self, email: str, password: str = None, 
-                     wallet_name: str = None, 
-                     custom_salt: str = None,
-                     auth_method: str = 'auto') -> Dict[str, str]:
+
+    def create_wallet(
+        self,
+        email: str,
+        password: str = None,
+        wallet_name: str = None,
+        custom_salt: str = None,
+        auth_method: str = "auto",
+    ) -> Dict[str, str]:
         """
         Create wallet with dual encryption (user password + platform key)
-        
+
         Args:
             email: User's email address
             password: User's password (required for password-based)
             wallet_name: Optional name for the wallet (for multiple wallets)
             custom_salt: Optional custom salt (generated if not provided)
             auth_method: 'auto', 'password', or 'passwordless'
-        
+
         Returns:
             Dict containing complete wallet data with dual encryption
         """
         # Auto-detect method if not specified
-        if auth_method == 'auto':
-            auth_method = 'password' if password else 'passwordless'
-        
-        if auth_method == 'password':
+        if auth_method == "auto":
+            auth_method = "password" if password else "passwordless"
+
+        if auth_method == "password":
             if not password:
                 raise ValueError("Password required for password-based authentication")
             return self._create_password_wallet(email, password, wallet_name, custom_salt)
-        
-        elif auth_method == 'passwordless':
+
+        elif auth_method == "passwordless":
             return self._create_passwordless_wallet(email, wallet_name, custom_salt)
-        
+
         else:
             raise ValueError("Invalid authentication method provided.")
-    
-    def _create_password_wallet(self, email: str, password: str, 
-                              wallet_name: str = None, custom_salt: str = None) -> Dict[str, str]:
+
+    def _create_password_wallet(
+        self, email: str, password: str, wallet_name: str = None, custom_salt: str = None
+    ) -> Dict[str, str]:
         """Create password-based wallet with dual encryption"""
-        
+
         # Generate or use custom salt
         if custom_salt:
             user_salt = custom_salt
         else:
             user_salt = self._generate_wallet_salt(email, wallet_name)
-        
+
         # Derive private key using KDF
-        private_key = self.password_kdf_service.derive_private_key(
-            email, password, user_salt
-        )
-        
+        private_key = self.password_kdf_service.derive_private_key(email, password, user_salt)
+
         # Generate wallet address
         account = Account.from_key(private_key)
         wallet_address = account.address
-        
+
         # Encrypt with user password (primary encryption)
-        user_encrypted = self._encrypt_with_user_key(
-            private_key, email, password, user_salt
-        )
-        
+        user_encrypted = self._encrypt_with_user_key(private_key, email, password, user_salt)
+
         # Encrypt with platform key (backup encryption)
-        platform_encrypted = self.platform_encryption_service.encrypt_private_key(
-            private_key
-        )
-        
+        platform_encrypted = self.platform_encryption_service.encrypt_private_key(private_key)
+
         # Clear private key from memory immediately
-        private_key = '0' * len(private_key)
+        private_key = "0" * len(private_key)
         del private_key
-        
+
         # Generate wallet ID for multiple wallet support
         wallet_id = self._generate_wallet_id(email, user_salt)
-        
+
         return {
-            'wallet_id': wallet_id,
-            'wallet_address': wallet_address,
-            'wallet_name': wallet_name or 'default',
-            'user_salt': user_salt,
-            'user_encrypted_key': user_encrypted,
-            'platform_encrypted_key': platform_encrypted,
-            'public_key': account.key.hex(),
-            'algorithm': self.password_kdf_service.algorithm,
-            'iterations': self.password_kdf_service.iterations,
-            'encryption_type': 'dual',
-            'auth_method': 'password',
-            'deterministic': True,  # Same input = same output
-            'created_at': datetime.now().isoformat(),
-            'wallet_version': '2.0'
+            "wallet_id": wallet_id,
+            "wallet_address": wallet_address,
+            "wallet_name": wallet_name or "default",
+            "user_salt": user_salt,
+            "user_encrypted_key": user_encrypted,
+            "platform_encrypted_key": platform_encrypted,
+            "public_key": account.key.hex(),
+            "algorithm": self.password_kdf_service.algorithm,
+            "iterations": self.password_kdf_service.iterations,
+            "encryption_type": "dual",
+            "auth_method": "password",
+            "deterministic": True,  # Same input = same output
+            "created_at": datetime.now().isoformat(),
+            "wallet_version": "2.0",
         }
-    
-    def _create_passwordless_wallet(self, email: str, wallet_name: str = None, 
-                                  custom_salt: str = None) -> Dict[str, str]:
+
+    def _create_passwordless_wallet(
+        self, email: str, wallet_name: str = None, custom_salt: str = None
+    ) -> Dict[str, str]:
         """Create passwordless wallet (deterministic)"""
-        
+
         # Generate deterministic salt from email
         if custom_salt:
             email_salt = custom_salt
         else:
             email_salt = self._generate_email_salt(email, wallet_name)
-        
+
         # Derive private key from email + platform salt
         private_key = self._derive_private_key(email, email_salt)
-        
+
         # Generate wallet address
         account = Account.from_key(private_key)
         wallet_address = account.address
-        
+
         # For passwordless, encrypt with platform key only
-        platform_encrypted = self.platform_encryption_service.encrypt_private_key(
-            private_key
-        )
-        
+        platform_encrypted = self.platform_encryption_service.encrypt_private_key(private_key)
+
         # Clear private key from memory
-        private_key = '0' * len(private_key)
+        private_key = "0" * len(private_key)
         del private_key
-        
+
         # Generate wallet ID
         wallet_id = self._generate_wallet_id(email, email_salt)
-        
+
         return {
-            'wallet_id': wallet_id,
-            'wallet_address': wallet_address,
-            'wallet_name': wallet_name or 'default',
-            'user_salt': email_salt,
-            'user_encrypted_key': '',  # No user encryption for passwordless
-            'platform_encrypted_key': platform_encrypted,
-            'public_key': account.key.hex(),
-            'algorithm': 'sha256_deterministic',
-            'iterations': 0,
-            'encryption_type': 'platform_only',
-            'auth_method': 'passwordless',
-            'deterministic': True,
-            'created_at': datetime.now().isoformat(),
-            'wallet_version': '2.0'
+            "wallet_id": wallet_id,
+            "wallet_address": wallet_address,
+            "wallet_name": wallet_name or "default",
+            "user_salt": email_salt,
+            "user_encrypted_key": "",  # No user encryption for passwordless
+            "platform_encrypted_key": platform_encrypted,
+            "public_key": account.key.hex(),
+            "algorithm": "sha256_deterministic",
+            "iterations": 0,
+            "encryption_type": "platform_only",
+            "auth_method": "passwordless",
+            "deterministic": True,
+            "created_at": datetime.now().isoformat(),
+            "wallet_version": "2.0",
         }
-    
-    def create_multiple_wallets(self, email: str, password: str, 
-                               wallet_names: List[str]) -> List[Dict[str, str]]:
+
+    def create_multiple_wallets(self, email: str, password: str, wallet_names: List[str]) -> List[Dict[str, str]]:
         """
         Create multiple wallets for a user with different salts
-        
+
         Args:
             email: User's email address
             password: User's password
             wallet_names: List of wallet names to create
-        
+
         Returns:
             List of wallet data dictionaries
         """
         wallets = []
-        
+
         for wallet_name in wallet_names:
             try:
-                wallet = self.create_wallet(
-                    email=email,
-                    password=password,
-                    wallet_name=wallet_name
-                )
-                
+                wallet = self.create_wallet(email=email, password=password, wallet_name=wallet_name)
+
                 wallets.append(wallet)
                 logger.info(f"Created wallet '{wallet_name}' for {email}")
-                
+
             except Exception as e:
                 logger.error(f"Failed to create wallet '{wallet_name}' for {email}: {e}")
-                wallets.append({
-                    'wallet_name': wallet_name,
-                    'error': str(e),
-                    'success': False
-                })
-        
+                wallets.append({"wallet_name": wallet_name, "error": str(e), "success": False})
+
         return wallets
-    
-    def decrypt_with_user_password(self, email: str, password: str, 
-                                 user_encrypted_key: str, user_salt: str) -> str:
+
+    def decrypt_with_user_password(self, email: str, password: str, user_encrypted_key: str, user_salt: str) -> str:
         """
         Decrypt private key using user password (for user operations)
-        
+
         Args:
             email: User's email address
             password: User's password
             user_encrypted_key: User-encrypted private key
             user_salt: Salt used for this wallet
-        
+
         Returns:
             Decrypted private key
         """
         try:
             # Recreate user encryption key
             user_key = self._derive_user_encryption_key(email, password, user_salt)
-            
+
             # Decrypt private key
             private_key = self._decrypt_with_user_key(user_encrypted_key, user_key)
-            
+
             # Clear user key from memory
-            user_key = b'\x00' * len(user_key)
+            user_key = b"\x00" * len(user_key)
             del user_key
-            
+
             return private_key
-            
+
         except Exception as e:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please check your credentials.")
-    
+
     def decrypt_with_platform_key(self, platform_encrypted_key: str) -> str:
         """
         Decrypt private key using platform key (for platform operations)
-        
+
         Args:
             platform_encrypted_key: Platform-encrypted private key
-        
+
         Returns:
             Decrypted private key
         """
         try:
             # Platform can decrypt any wallet without user password
-            private_key = self.platform_encryption_service.decrypt_private_key(
-                json.loads(platform_encrypted_key)
-            )
-            
+            private_key = self.platform_encryption_service.decrypt_private_key(json.loads(platform_encrypted_key))
+
             return private_key
-            
+
         except Exception as e:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please try again.")
-    
-    def verify_wallet_ownership(self, email: str, password: str, 
-                               wallet_address: str, user_salt: str) -> bool:
+
+    def verify_wallet_ownership(self, email: str, password: str, wallet_address: str, user_salt: str) -> bool:
         """
         Verify that user owns the wallet (for authentication)
-        
+
         Args:
             email: User's email address
             password: User's password
             wallet_address: Wallet address to verify
             user_salt: Salt used for this wallet
-        
+
         Returns:
             True if user owns the wallet, False otherwise
         """
         try:
             # Derive private key
-            private_key = self.password_kdf_service.derive_private_key(
-                email, password, user_salt
-            )
-            
+            private_key = self.password_kdf_service.derive_private_key(email, password, user_salt)
+
             # Generate address
             account = Account.from_key(private_key)
             derived_address = account.address
-            
+
             # Clear private key from memory
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             # Compare addresses
             return derived_address.lower() == wallet_address.lower()
-            
+
         except Exception as e:
             logger.error(f"Wallet ownership verification failed: {e}")
             return False
-    
+
     def get_wallet_address(self, email: str, password: str, user_salt: str) -> str:
         """
         Get wallet address for given credentials
-        
+
         Args:
             email: User's email address
             password: User's password
             user_salt: Salt used for this wallet
-        
+
         Returns:
             Wallet address
         """
         try:
-            private_key = self.password_kdf_service.derive_private_key(
-                email, password, user_salt
-            )
+            private_key = self.password_kdf_service.derive_private_key(email, password, user_salt)
             account = Account.from_key(private_key)
             address = account.address
-            
+
             # Clear private key from memory
-            private_key = '0' * len(private_key)
+            private_key = "0" * len(private_key)
             del private_key
-            
+
             return address
-            
+
         except Exception as e:
             # Return generic error message to prevent information disclosure
             raise ValueError("Unable to retrieve wallet address. Please try again.")
-    
+
     def _generate_wallet_salt(self, email: str, wallet_name: str = None) -> str:
         """Generate unique salt for wallet"""
         if wallet_name:
@@ -1019,11 +972,11 @@ class KDFManager:
         else:
             # Default salt generation
             salt_input = f"{email}:{self.password_kdf_service.master_salt}"
-        
+
         # Generate deterministic but unique salt
         salt_hash = hashlib.sha256(salt_input.encode()).hexdigest()
-        return salt_hash[:SecurityConstants.MIN_SALT_LENGTH]  # 32 characters for salt
-    
+        return salt_hash[: SecurityConstants.MIN_SALT_LENGTH]  # 32 characters for salt
+
     def _generate_email_salt(self, email: str, wallet_name: str = None) -> str:
         """Generate deterministic salt from email"""
         email = email.lower().strip()
@@ -1032,25 +985,25 @@ class KDFManager:
         else:
             salt_input = f"{email}:{self.platform_master_salt}"
         return hashlib.sha256(salt_input.encode()).hexdigest()
-    
+
     def _generate_wallet_id(self, email: str, user_salt: str) -> str:
         """Generate unique wallet ID"""
         wallet_input = f"{email}:{user_salt}:{time.time()}"
         wallet_hash = hashlib.sha256(wallet_input.encode()).hexdigest()
-        return wallet_hash[:SecurityConstants.MIN_SALT_BYTES * 2]  # 16 characters for wallet ID
-    
+        return wallet_hash[: SecurityConstants.MIN_SALT_BYTES * 2]  # 16 characters for wallet ID
+
     def _derive_user_encryption_key(self, email: str, password: str, user_salt: str) -> bytes:
         """Derive user-specific encryption key using PBKDF2"""
         key_input = f"{email}:{password}:{user_salt}:user_encryption"
-        
+
         # Use PBKDF2 for secure key derivation
         try:
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            
+
             # Use user_salt as the salt for PBKDF2
-            salt_bytes = user_salt.encode()[:SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
-            
+            salt_bytes = user_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
+
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
@@ -1059,46 +1012,41 @@ class KDFManager:
             )
             key_material = kdf.derive(key_input.encode())
             return key_material
-            
+
         except ImportError:
             # Fallback to hashlib if cryptography not available (less secure)
             blockauth_logger.warning(
                 "cryptography library not available, using SHA-256 fallback",
-                sanitize_log_context({"function": "_derive_user_encryption_key", "email": email})
+                sanitize_log_context({"function": "_derive_user_encryption_key", "email": email}),
             )
             key_material = hashlib.sha256(key_input.encode()).digest()
             return key_material
-    
-    def _encrypt_with_user_key(self, private_key: str, email: str, 
-                              password: str, user_salt: str) -> str:
+
+    def _encrypt_with_user_key(self, private_key: str, email: str, password: str, user_salt: str) -> str:
         """Encrypt private key with user-derived key using AES-256-GCM"""
         user_key = self._derive_user_encryption_key(email, password, user_salt)
-        
+
         try:
             # Import cryptography library
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.backends import default_backend
-            
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
             # Generate random nonce for GCM
             nonce = os.urandom(SecurityConstants.AES_NONCE_LENGTH)  # 96 bits for GCM
-            
+
             # Create AES-GCM cipher
-            cipher = Cipher(
-                algorithms.AES(user_key),
-                modes.GCM(nonce),
-                backend=default_backend()
-            )
+            cipher = Cipher(algorithms.AES(user_key), modes.GCM(nonce), backend=default_backend())
             encryptor = cipher.encryptor()
-            
+
             # Encrypt the private key
             private_key_bytes = private_key.encode()
             ciphertext = encryptor.update(private_key_bytes) + encryptor.finalize()
-            
+
             # Combine nonce + tag + ciphertext for storage
             encrypted_data = nonce + encryptor.tag + ciphertext
-            
+
             return encrypted_data.hex()
-            
+
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM encryption")
         except Exception as e:
@@ -1106,39 +1054,35 @@ class KDFManager:
             logger.error(f"User key encryption failed: {e}")
             # Return generic error message to prevent information disclosure
             raise ValueError("Encryption failed. Please try again.")
-    
+
     def _decrypt_with_user_key(self, encrypted_key: str, user_key: bytes) -> str:
         """Decrypt private key with user key using AES-256-GCM"""
         try:
             # Import cryptography library
-            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
             from cryptography.hazmat.backends import default_backend
-            
+            from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
             encrypted_bytes = bytes.fromhex(encrypted_key)
-            
+
             # Check minimum length (nonce + tag + some ciphertext)
             min_length = SecurityConstants.AES_NONCE_LENGTH + SecurityConstants.AES_TAG_LENGTH
             if len(encrypted_bytes) < min_length:
                 raise ValueError("Invalid encrypted data: too short")
-            
+
             # Extract nonce, tag, and ciphertext
-            nonce = encrypted_bytes[:SecurityConstants.AES_NONCE_LENGTH]
-            tag = encrypted_bytes[SecurityConstants.AES_NONCE_LENGTH:min_length]
+            nonce = encrypted_bytes[: SecurityConstants.AES_NONCE_LENGTH]
+            tag = encrypted_bytes[SecurityConstants.AES_NONCE_LENGTH : min_length]
             ciphertext = encrypted_bytes[min_length:]
-            
+
             # Create AES-GCM cipher
-            cipher = Cipher(
-                algorithms.AES(user_key),
-                modes.GCM(nonce, tag),
-                backend=default_backend()
-            )
+            cipher = Cipher(algorithms.AES(user_key), modes.GCM(nonce, tag), backend=default_backend())
             decryptor = cipher.decryptor()
-            
+
             # Decrypt the private key
             decrypted_bytes = decryptor.update(ciphertext) + decryptor.finalize()
-            
+
             return decrypted_bytes.decode()
-            
+
         except ImportError:
             raise ImportError("cryptography library required for AES-GCM decryption")
         except Exception as e:
@@ -1146,7 +1090,7 @@ class KDFManager:
             logger.error(f"User key decryption failed: {e}")
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please try again.")
-    
+
     def _derive_private_key(self, email: str, salt: str) -> str:
         """Derive private key from email + platform salt using PBKDF2"""
         return _derive_private_key_secure(email, salt, self.platform_master_salt)
@@ -1155,173 +1099,166 @@ class KDFManager:
 class MultipleWalletService:
     """
     High-level service for managing multiple wallets per user
-    
+
     This service provides convenient methods for:
     - Creating multiple wallets
     - Managing wallet collections
     - Batch operations
     - Wallet recovery
     """
-    
+
     def __init__(self):
         """Initialize multiple wallet service"""
         self.kdf_manager = KDFManager()
-    
-    def create_user_wallet_collection(self, email: str, password: str, 
-                                    wallet_configs: List[Dict]) -> Dict[str, str]:
+
+    def create_user_wallet_collection(self, email: str, password: str, wallet_configs: List[Dict]) -> Dict[str, str]:
         """
         Create a collection of wallets for a user
-        
+
         Args:
             email: User's email address
             password: User's password
             wallet_configs: List of wallet configurations
-        
+
         Returns:
             Dict containing collection info and wallet list
         """
         try:
             collection_id = str(uuid7())
             wallets = []
-            
+
             for config in wallet_configs:
-                wallet_name = config.get('name', f'wallet_{len(wallets) + 1}')
-                custom_salt = config.get('custom_salt')
-                
+                wallet_name = config.get("name", f"wallet_{len(wallets) + 1}")
+                custom_salt = config.get("custom_salt")
+
                 wallet = self.kdf_manager.create_wallet(
-                    email=email,
-                    password=password,
-                    wallet_name=wallet_name,
-                    custom_salt=custom_salt
+                    email=email, password=password, wallet_name=wallet_name, custom_salt=custom_salt
                 )
-                
+
                 wallets.append(wallet)
-            
+
             return {
-                'collection_id': collection_id,
-                'user_email': email,
-                'wallet_count': len(wallets),
-                'wallets': wallets,
-                'created_at': datetime.now().isoformat(),
-                'collection_type': 'multiple_wallets'
+                "collection_id": collection_id,
+                "user_email": email,
+                "wallet_count": len(wallets),
+                "wallets": wallets,
+                "created_at": datetime.now().isoformat(),
+                "collection_type": "multiple_wallets",
             }
-            
+
         except Exception as e:
-            return {
-                'error': str(e),
-                'success': False
-            }
-    
-    def get_user_wallet_summary(self, email: str, password: str, 
-                               wallet_data_list: List[Dict]) -> Dict[str, str]:
+            return {"error": str(e), "success": False}
+
+    def get_user_wallet_summary(self, email: str, password: str, wallet_data_list: List[Dict]) -> Dict[str, str]:
         """
         Get summary of all user wallets
-        
+
         Args:
             email: User's email address
             password: User's password
             wallet_data_list: List of wallet data from database
-        
+
         Returns:
             Dict containing wallet summary
         """
         try:
             wallet_summaries = []
-            
+
             for wallet_data in wallet_data_list:
-                if wallet_data['auth_method'] != 'password':
+                if wallet_data["auth_method"] != "password":
                     continue
-                
+
                 # Verify ownership
                 if self.kdf_manager.verify_wallet_ownership(
-                    email, password,
-                    wallet_data['wallet_address'],
-                    wallet_data['user_salt']
+                    email, password, wallet_data["wallet_address"], wallet_data["user_salt"]
                 ):
-                    wallet_summaries.append({
-                        'wallet_id': wallet_data.get('wallet_id'),
-                        'wallet_name': wallet_data.get('wallet_name', 'default'),
-                        'wallet_address': wallet_data['wallet_address'],
-                        'created_at': wallet_data.get('created_at'),
-                        'verified': True
-                    })
+                    wallet_summaries.append(
+                        {
+                            "wallet_id": wallet_data.get("wallet_id"),
+                            "wallet_name": wallet_data.get("wallet_name", "default"),
+                            "wallet_address": wallet_data["wallet_address"],
+                            "created_at": wallet_data.get("created_at"),
+                            "verified": True,
+                        }
+                    )
                 else:
-                    wallet_summaries.append({
-                        'wallet_id': wallet_data.get('wallet_id'),
-                        'wallet_name': wallet_data.get('wallet_name', 'default'),
-                        'wallet_address': wallet_data['wallet_address'],
-                        'verified': False,
-                        'error': 'Ownership verification failed'
-                    })
-            
+                    wallet_summaries.append(
+                        {
+                            "wallet_id": wallet_data.get("wallet_id"),
+                            "wallet_name": wallet_data.get("wallet_name", "default"),
+                            "wallet_address": wallet_data["wallet_address"],
+                            "verified": False,
+                            "error": "Ownership verification failed",
+                        }
+                    )
+
             return {
-                'user_email': email,
-                'total_wallets': len(wallet_summaries),
-                'verified_wallets': len([w for w in wallet_summaries if w['verified']]),
-                'wallets': wallet_summaries,
-                'summary_generated_at': datetime.now().isoformat()
+                "user_email": email,
+                "total_wallets": len(wallet_summaries),
+                "verified_wallets": len([w for w in wallet_summaries if w["verified"]]),
+                "wallets": wallet_summaries,
+                "summary_generated_at": datetime.now().isoformat(),
             }
-            
+
         except Exception as e:
-            return {
-                'error': str(e),
-                'success': False
-            }
-    
-    def batch_sign_transactions(self, email: str, password: str,
-                               wallet_data_list: List[Dict],
-                               transaction_data: Dict) -> List[Dict[str, str]]:
+            return {"error": str(e), "success": False}
+
+    def batch_sign_transactions(
+        self, email: str, password: str, wallet_data_list: List[Dict], transaction_data: Dict
+    ) -> List[Dict[str, str]]:
         """
         Sign the same transaction with multiple user wallets
-        
+
         Args:
             email: User's email address
             password: User's password
             wallet_data_list: List of wallet data
             transaction_data: Transaction to sign
-        
+
         Returns:
             List of signed transactions
         """
         signed_transactions = []
-        
+
         for wallet_data in wallet_data_list:
             try:
-                if wallet_data['auth_method'] != 'password':
+                if wallet_data["auth_method"] != "password":
                     continue
-                
+
                 # Decrypt private key
                 private_key = self.kdf_manager.decrypt_with_user_password(
-                    email, password,
-                    wallet_data['user_encrypted_key'],
-                    wallet_data['user_salt']
+                    email, password, wallet_data["user_encrypted_key"], wallet_data["user_salt"]
                 )
-                
+
                 # Sign transaction
                 account = Account.from_key(private_key)
                 signed_tx = account.sign_transaction(transaction_data)
-                
-                signed_transactions.append({
-                    'wallet_id': wallet_data.get('wallet_id'),
-                    'wallet_name': wallet_data.get('wallet_name', 'default'),
-                    'wallet_address': wallet_data['wallet_address'],
-                    'signed_transaction': signed_tx.rawTransaction.hex(),
-                    'signature_success': True
-                })
-                
+
+                signed_transactions.append(
+                    {
+                        "wallet_id": wallet_data.get("wallet_id"),
+                        "wallet_name": wallet_data.get("wallet_name", "default"),
+                        "wallet_address": wallet_data["wallet_address"],
+                        "signed_transaction": signed_tx.rawTransaction.hex(),
+                        "signature_success": True,
+                    }
+                )
+
                 # Clear private key from memory
-                private_key = '0' * len(private_key)
+                private_key = "0" * len(private_key)
                 del private_key
-                
+
             except Exception as e:
-                signed_transactions.append({
-                    'wallet_id': wallet_data.get('wallet_id'),
-                    'wallet_name': wallet_data.get('wallet_name', 'default'),
-                    'wallet_address': wallet_data['wallet_address'],
-                    'signature_success': False,
-                    'error': str(e)
-                })
-        
+                signed_transactions.append(
+                    {
+                        "wallet_id": wallet_data.get("wallet_id"),
+                        "wallet_name": wallet_data.get("wallet_name", "default"),
+                        "wallet_address": wallet_data["wallet_address"],
+                        "signature_success": False,
+                        "error": str(e),
+                    }
+                )
+
         return signed_transactions
 
 

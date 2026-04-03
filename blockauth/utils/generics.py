@@ -1,9 +1,8 @@
-import json
-from typing import Any, Dict, List, Optional, Union
-from datetime import datetime, date
-from django.core.serializers.json import DjangoJSONEncoder
-from django.db import models
+from datetime import date, datetime
+from typing import Any, Dict, List
+
 from django.contrib.auth.password_validation import get_default_password_validators
+from django.db import models
 
 # Import from enums module (Django-independent, no AppRegistryNotReady errors)
 from blockauth.enums import AuthenticationType
@@ -12,17 +11,17 @@ from blockauth.enums import AuthenticationType
 def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[str, Any]:
     """
     Convert a Django model instance to a JSON-serializable dictionary.
-    
+
     Args:
         instance: Django model instance
         remove_fields: Tuple of field names to exclude from the output
-        
+
     Returns:
         Dictionary representation of the model instance
     """
     if remove_fields is None:
         remove_fields = ()
-    
+
     data = {}
     for field in instance._meta.fields:
         if field.name not in remove_fields:
@@ -31,33 +30,33 @@ def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[s
                 data[field.name] = value.isoformat()
             else:
                 data[field.name] = value
-    
+
     return data
 
 
 def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Sanitize sensitive data from logging context.
-    
+
     Args:
         data: Original data dictionary
         additional_context: Additional context to include
-        
+
     Returns:
         Sanitized dictionary safe for logging
     """
-    from blockauth.constants import SENSITIVE_FIELDS, REDACTION_STRING
-    
+    from blockauth.constants import REDACTION_STRING, SENSITIVE_FIELDS
+
     sanitized = {}
     for key, value in data.items():
         if key.lower() in SENSITIVE_FIELDS:
             sanitized[key] = REDACTION_STRING
         else:
             sanitized[key] = value
-    
+
     if additional_context:
         sanitized.update(additional_context)
-    
+
     return sanitized
 
 
@@ -110,10 +109,7 @@ def get_available_authentication_types() -> List[Dict[str, str]]:
     Returns:
         List of dictionaries with 'code' and 'label' keys
     """
-    return [
-        {'code': choice[0], 'label': choice[1]}
-        for choice in AuthenticationType.choices
-    ]
+    return [{"code": choice[0], "label": choice[1]} for choice in AuthenticationType.choices]
 
 
 def get_password_help_text():
@@ -122,4 +118,4 @@ def get_password_help_text():
     """
     validators = get_default_password_validators()
     help_texts = [validator.get_help_text() for validator in validators]
-    return '\n\n'.join(help_texts)
+    return "\n\n".join(help_texts)
