@@ -175,15 +175,20 @@ class Token(AbstractToken):
         Returns:
             str: The generated JWT token string
         """
-        payload = {
-            "user_id": user_id,
-            "jti": str(uuid.uuid4()),
-            "exp": timezone.now() + token_lifetime,
-            "iat": timezone.now(),
-            "type": token_type,
-        }
+        payload = {}
         if user_data:
             payload.update(user_data)
+
+        # Base claims set AFTER user_data to prevent override of security-critical fields
+        payload.update(
+            {
+                "user_id": user_id,
+                "jti": str(uuid.uuid4()),
+                "exp": timezone.now() + token_lifetime,
+                "iat": timezone.now(),
+                "type": token_type,
+            }
+        )
 
         return jwt.encode(payload, self.signing_key, algorithm=self.algorithm)
 

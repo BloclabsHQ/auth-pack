@@ -59,7 +59,10 @@ class JWTTokenManager:
         self, user_id: str, token_type: str, token_lifetime: timedelta, user_data: Dict[str, Any] = None
     ) -> str:
         """Generate JWT token with base and custom claims"""
-        # Base claims (always included)
+        # User-provided data (applied first so base claims can't be overridden)
+        extra_claims = dict(user_data) if user_data else {}
+
+        # Base claims (always included — set AFTER extra_claims to prevent override)
         base_claims = {
             "user_id": user_id,
             "jti": str(uuid.uuid4()),
@@ -67,10 +70,6 @@ class JWTTokenManager:
             "iat": get_current_time(),
             "type": token_type,
         }
-
-        # Add additional user data if provided
-        if user_data:
-            base_claims.update(user_data)
 
         # Collect custom claims from all registered providers
         custom_claims = {}
@@ -113,8 +112,8 @@ class JWTTokenManager:
 
                 traceback.print_exc()
 
-        # Merge all claims (custom claims can't override base claims)
-        all_claims = {**custom_claims, **base_claims}
+        # Merge all claims: extra_claims < custom_claims < base_claims (base always wins)
+        all_claims = {**extra_claims, **custom_claims, **base_claims}
         logger.info(f"✅ Final claims for token: {list(all_claims.keys())}")
 
         # Generate token
