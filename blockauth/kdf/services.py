@@ -28,8 +28,6 @@ from typing import Dict, List
 from eth_account import Account
 from uuid6 import uuid7
 
-# Web3 imports
-
 from blockauth.utils.generics import sanitize_log_context
 
 # Import blockauth logger and sanitization
@@ -37,6 +35,11 @@ from blockauth.utils.logger import blockauth_logger
 
 # Import constants
 from .constants import ErrorMessages, KDFAlgorithms, SecurityConstants, SecurityLevels
+
+# Web3 imports
+
+
+
 
 logger = logging.getLogger(__name__)
 

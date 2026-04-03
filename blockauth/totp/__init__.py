@@ -62,7 +62,6 @@ Startup Validation (recommended in Django AppConfig):
     validate_totp_encryption_config()  # Raises if misconfigured
 """
 
-
 from .constants import DEFAULTS, TOTP_CONFIG_KEY, TOTP_FEATURE_FLAG, TOTPAlgorithm, TOTPConfigKeys, TOTPStatus
 
 

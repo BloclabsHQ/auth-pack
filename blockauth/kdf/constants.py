@@ -6,7 +6,6 @@ feature flags, configuration keys, and security parameters.
 """
 
 
-
 class KDFFeatures:
     """Feature flags for KDF functionality"""
 

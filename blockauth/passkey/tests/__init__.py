@@ -9,4 +9,3 @@ Run tests with:
 Or with pytest:
     pytest blockauth/passkey/tests/
 """
-
