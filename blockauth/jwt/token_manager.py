@@ -1,5 +1,6 @@
 import jwt
 import logging
+import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from rest_framework.exceptions import AuthenticationFailed
@@ -53,6 +54,7 @@ class JWTTokenManager:
         # Base claims (always included)
         base_claims = {
             'user_id': user_id,
+            'jti': str(uuid.uuid4()),
             'exp': get_current_time() + token_lifetime,
             'iat': get_current_time(),
             'type': token_type
@@ -137,7 +139,7 @@ class JWTTokenManager:
         try:
             claims = self.decode_token(token)
             # Remove base claims to get only custom claims
-            base_claim_keys = {'user_id', 'exp', 'iat', 'type'}
+            base_claim_keys = {'user_id', 'jti', 'exp', 'iat', 'type'}
             custom_claims = {k: v for k, v in claims.items() if k not in base_claim_keys}
             return custom_claims
         except Exception as e:

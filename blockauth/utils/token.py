@@ -35,6 +35,7 @@ Usage:
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Tuple, Dict, Any, Union
 
@@ -175,6 +176,7 @@ class Token(AbstractToken):
         """
         payload = {
             "user_id": user_id,
+            "jti": str(uuid.uuid4()),
             "exp": timezone.now() + token_lifetime,
             "iat": timezone.now(),
             "type": token_type,
