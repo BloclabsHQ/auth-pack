@@ -10,14 +10,3 @@ Or with pytest:
     pytest blockauth/passkey/tests/
 """
 
-from .tests import (
-    TestPasskeyConstants,
-    TestPasskeyExceptions,
-    TestPasskeySubjects,
-    TestGenericErrorMessages,
-    TestIsEnabled,
-    TestPasskeyViews,
-    TestRateLimiting,
-    TestViewErrorHandling,
-    TestCredentialManagement,
-)

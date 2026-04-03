@@ -1,16 +1,17 @@
-from drf_spectacular.utils import OpenApiParameter, OpenApiExample
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter
+
 from blockauth.schemas.factory import CustomOpenApiResponse
 
 """Google OAuth Authentication"""
 
 google_auth_login_schema = {
-    'operation_id': 'google_oauth_login',
-    'summary': 'Initiate Google OAuth Login',
-    'description': (
+    "operation_id": "google_oauth_login",
+    "summary": "Initiate Google OAuth Login",
+    "description": (
         "Initiates the Google OAuth authentication flow by redirecting users to Google's authorization server\n"
         "\n"
         "**Flow:**\n"
-        "1. User clicks \"Login with Google\"\n"
+        '1. User clicks "Login with Google"\n'
         "2. Redirected to Google OAuth consent screen\n"
         "3. User authorizes the application\n"
         "4. Google redirects back to callback URL with authorization code\n"
@@ -29,83 +30,76 @@ google_auth_login_schema = {
         "- Reduced friction user onboarding\n"
         "- Mobile app social login\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'external_docs': {
-        'description': 'Google OAuth 2.0 Documentation',
-        'url': 'https://developers.google.com/identity/protocols/oauth2'
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "external_docs": {
+        "description": "Google OAuth 2.0 Documentation",
+        "url": "https://developers.google.com/identity/protocols/oauth2",
     },
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Redirect',
+            "Successful Redirect",
             value={
-                'redirect_url': 'https://accounts.google.com/oauth/authorize?client_id=...&redirect_uri=...&scope=...&response_type=code&state=...'
+                "redirect_url": "https://accounts.google.com/oauth/authorize?client_id=...&redirect_uri=...&scope=...&response_type=code&state=..."
             },
             response_only=True,
-            status_codes=['301']
+            status_codes=["301"],
         ),
         OpenApiExample(
-            'Configuration Error',
-            value={
-                'error': 'oauth_config_error',
-                'message': 'Google OAuth credentials not configured'
-            },
+            "Configuration Error",
+            value={"error": "oauth_config_error", "message": "Google OAuth credentials not configured"},
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         301: CustomOpenApiResponse(
             status=301,
-            description='Redirect to Google OAuth authorization URL',
+            description="Redirect to Google OAuth authorization URL",
             response={
-                'type': 'object',
-                'properties': {
-                    'redirect_url': {
-                        'type': 'string',
-                        'description': 'Google OAuth authorization URL',
-                        'format': 'uri'
-                    }
+                "type": "object",
+                "properties": {
+                    "redirect_url": {"type": "string", "description": "Google OAuth authorization URL", "format": "uri"}
                 },
-                'required': ['redirect_url']
-            }
+                "required": ["redirect_url"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid OAuth configuration or missing credentials',
+            description="Invalid OAuth configuration or missing credentials",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['oauth_config_error', 'invalid_redirect_uri', 'missing_credentials']
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "enum": ["oauth_config_error", "invalid_redirect_uri", "missing_credentials"],
                     },
-                    'message': {'type': 'string'},
-                    'details': {'type': 'object'}
+                    "message": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during OAuth initialization',
+            description="Internal server error during OAuth initialization",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }
 
 google_auth_callback_schema = {
-    'operation_id': 'google_oauth_callback',
-    'summary': 'Handle Google OAuth Callback',
-    'description': (
+    "operation_id": "google_oauth_callback",
+    "summary": "Handle Google OAuth Callback",
+    "description": (
         "Processes the authorization code returned by Google OAuth and authenticates the user\n"
         "\n"
         "**Process:**\n"
@@ -131,124 +125,115 @@ google_auth_callback_schema = {
         "- Account linking with social profiles\n"
         "- Social login completion\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'parameters': [
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "parameters": [
         OpenApiParameter(
-            name='code',
-            description='Authorization code received from Google OAuth',
+            name="code",
+            description="Authorization code received from Google OAuth",
             required=True,
             type=str,
-            location='query',
+            location="query",
             examples=[
-                OpenApiExample(
-                    'Valid Code',
-                    value='4/0AfJohXn...',
-                    description='Google OAuth authorization code'
-                )
-            ]
+                OpenApiExample("Valid Code", value="4/0AfJohXn...", description="Google OAuth authorization code")
+            ],
         ),
         OpenApiParameter(
-            name='state',
-            description='OAuth state parameter for CSRF protection',
+            name="state",
+            description="OAuth state parameter for CSRF protection",
             required=False,
             type=str,
-            location='query',
+            location="query",
             examples=[
                 OpenApiExample(
-                    'State Parameter',
-                    value='abc123def456',
-                    description='Random state string for CSRF protection'
+                    "State Parameter", value="abc123def456", description="Random state string for CSRF protection"
                 )
-            ]
-        )
+            ],
+        ),
     ],
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Authentication',
+            "Successful Authentication",
             value={
-                'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
             },
             response_only=True,
-            status_codes=['200']
+            status_codes=["200"],
         ),
         OpenApiExample(
-            'Invalid Code',
+            "Invalid Code",
             value={
-                'error': 'invalid_grant',
-                'message': 'Authorization code is invalid or expired',
-                'oauth_error': 'invalid_grant'
+                "error": "invalid_grant",
+                "message": "Authorization code is invalid or expired",
+                "oauth_error": "invalid_grant",
             },
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         200: CustomOpenApiResponse(
             status=200,
-            description='Successfully authenticated with Google',
+            description="Successfully authenticated with Google",
             response={
-                'type': 'object',
-                'properties': {
-                    'access': {
-                        'type': 'string',
-                        'description': 'JWT access token for API authentication',
-                        'format': 'jwt'
+                "type": "object",
+                "properties": {
+                    "access": {
+                        "type": "string",
+                        "description": "JWT access token for API authentication",
+                        "format": "jwt",
                     },
-                    'refresh': {
-                        'type': 'string',
-                        'description': 'JWT refresh token for token renewal',
-                        'format': 'jwt'
-                    }
+                    "refresh": {
+                        "type": "string",
+                        "description": "JWT refresh token for token renewal",
+                        "format": "jwt",
+                    },
                 },
-                'required': ['access', 'refresh']
-            }
+                "required": ["access", "refresh"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid authorization code or OAuth error',
+            description="Invalid authorization code or OAuth error",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['invalid_grant', 'invalid_request', 'unauthorized_client']
-                    },
-                    'message': {'type': 'string'},
-                    'oauth_error': {'type': 'string'},
-                    'details': {'type': 'object'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string", "enum": ["invalid_grant", "invalid_request", "unauthorized_client"]},
+                    "message": {"type": "string"},
+                    "oauth_error": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during authentication',
+            description="Internal server error during authentication",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }
 
 
 """Facebook OAuth Authentication"""
 
 facebook_auth_login_schema = {
-    'operation_id': 'facebook_oauth_login',
-    'summary': 'Initiate Facebook OAuth Login',
-    'description': (
+    "operation_id": "facebook_oauth_login",
+    "summary": "Initiate Facebook OAuth Login",
+    "description": (
         "Initiates the Facebook OAuth authentication flow by redirecting users to Facebook's authorization server\n"
         "\n"
         "**Flow:**\n"
-        "1. User clicks \"Login with Facebook\"\n"
+        '1. User clicks "Login with Facebook"\n'
         "2. Redirected to Facebook OAuth consent screen\n"
         "3. User authorizes the application\n"
         "4. Facebook redirects back to callback URL with authorization code\n"
@@ -268,83 +253,80 @@ facebook_auth_login_schema = {
         "- E-commerce social authentication\n"
         "- Gaming platform social login\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'external_docs': {
-        'description': 'Facebook Login Documentation',
-        'url': 'https://developers.facebook.com/docs/facebook-login/'
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "external_docs": {
+        "description": "Facebook Login Documentation",
+        "url": "https://developers.facebook.com/docs/facebook-login/",
     },
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Redirect',
+            "Successful Redirect",
             value={
-                'redirect_url': 'https://www.facebook.com/v12.0/dialog/oauth?client_id=...&redirect_uri=...&scope=...&response_type=code&state=...'
+                "redirect_url": "https://www.facebook.com/v12.0/dialog/oauth?client_id=...&redirect_uri=...&scope=...&response_type=code&state=..."
             },
             response_only=True,
-            status_codes=['301']
+            status_codes=["301"],
         ),
         OpenApiExample(
-            'Configuration Error',
-            value={
-                'error': 'oauth_config_error',
-                'message': 'Facebook OAuth credentials not configured'
-            },
+            "Configuration Error",
+            value={"error": "oauth_config_error", "message": "Facebook OAuth credentials not configured"},
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         301: CustomOpenApiResponse(
             status=301,
-            description='Redirect to Facebook OAuth authorization URL',
+            description="Redirect to Facebook OAuth authorization URL",
             response={
-                'type': 'object',
-                'properties': {
-                    'redirect_url': {
-                        'type': 'string',
-                        'description': 'Facebook OAuth authorization URL',
-                        'format': 'uri'
+                "type": "object",
+                "properties": {
+                    "redirect_url": {
+                        "type": "string",
+                        "description": "Facebook OAuth authorization URL",
+                        "format": "uri",
                     }
                 },
-                'required': ['redirect_url']
-            }
+                "required": ["redirect_url"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid OAuth configuration or missing credentials',
+            description="Invalid OAuth configuration or missing credentials",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['oauth_config_error', 'invalid_redirect_uri', 'missing_credentials']
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "enum": ["oauth_config_error", "invalid_redirect_uri", "missing_credentials"],
                     },
-                    'message': {'type': 'string'},
-                    'details': {'type': 'object'}
+                    "message": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during OAuth initialization',
+            description="Internal server error during OAuth initialization",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }
 
 facebook_auth_callback_schema = {
-    'operation_id': 'facebook_oauth_callback',
-    'summary': 'Handle Facebook OAuth Callback',
-    'description': (
+    "operation_id": "facebook_oauth_callback",
+    "summary": "Handle Facebook OAuth Callback",
+    "description": (
         "Processes the authorization code returned by Facebook OAuth and authenticates the user\n"
         "\n"
         "**Process:**\n"
@@ -371,124 +353,116 @@ facebook_auth_callback_schema = {
         "- Social login completion\n"
         "- Account linking with Facebook profile\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'parameters': [
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "parameters": [
         OpenApiParameter(
-            name='code',
-            description='Authorization code received from Facebook OAuth',
+            name="code",
+            description="Authorization code received from Facebook OAuth",
             required=True,
             type=str,
-            location='query',
-            examples=[
-                OpenApiExample(
-                    'Valid Code',
-                    value='AQD...',
-                    description='Facebook OAuth authorization code'
-                )
-            ]
+            location="query",
+            examples=[OpenApiExample("Valid Code", value="AQD...", description="Facebook OAuth authorization code")],
         ),
         OpenApiParameter(
-            name='state',
-            description='OAuth state parameter for CSRF protection',
+            name="state",
+            description="OAuth state parameter for CSRF protection",
             required=False,
             type=str,
-            location='query',
+            location="query",
             examples=[
                 OpenApiExample(
-                    'State Parameter',
-                    value='abc123def456',
-                    description='Random state string for CSRF protection'
+                    "State Parameter", value="abc123def456", description="Random state string for CSRF protection"
                 )
-            ]
-        )
+            ],
+        ),
     ],
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Authentication',
+            "Successful Authentication",
             value={
-                'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
             },
             response_only=True,
-            status_codes=['200']
+            status_codes=["200"],
         ),
         OpenApiExample(
-            'Permission Denied',
+            "Permission Denied",
             value={
-                'error': 'permission_denied',
-                'message': 'User denied permission to access profile information',
-                'oauth_error': 'access_denied'
+                "error": "permission_denied",
+                "message": "User denied permission to access profile information",
+                "oauth_error": "access_denied",
             },
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         200: CustomOpenApiResponse(
             status=200,
-            description='Successfully authenticated with Facebook',
+            description="Successfully authenticated with Facebook",
             response={
-                'type': 'object',
-                'properties': {
-                    'access': {
-                        'type': 'string',
-                        'description': 'JWT access token for API authentication',
-                        'format': 'jwt'
+                "type": "object",
+                "properties": {
+                    "access": {
+                        "type": "string",
+                        "description": "JWT access token for API authentication",
+                        "format": "jwt",
                     },
-                    'refresh': {
-                        'type': 'string',
-                        'description': 'JWT refresh token for token renewal',
-                        'format': 'jwt'
-                    }
+                    "refresh": {
+                        "type": "string",
+                        "description": "JWT refresh token for token renewal",
+                        "format": "jwt",
+                    },
                 },
-                'required': ['access', 'refresh']
-            }
+                "required": ["access", "refresh"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid authorization code or OAuth error',
+            description="Invalid authorization code or OAuth error",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['invalid_grant', 'invalid_request', 'unauthorized_client', 'permission_denied']
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "enum": ["invalid_grant", "invalid_request", "unauthorized_client", "permission_denied"],
                     },
-                    'message': {'type': 'string'},
-                    'oauth_error': {'type': 'string'},
-                    'details': {'type': 'object'}
+                    "message": {"type": "string"},
+                    "oauth_error": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during authentication',
+            description="Internal server error during authentication",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }
 
 
 """LinkedIn OAuth Authentication"""
 
 linkedin_auth_login_schema = {
-    'operation_id': 'linkedin_oauth_login',
-    'summary': 'Initiate LinkedIn OAuth Login',
-    'description': (
+    "operation_id": "linkedin_oauth_login",
+    "summary": "Initiate LinkedIn OAuth Login",
+    "description": (
         "Initiates the LinkedIn OAuth authentication flow by redirecting users to LinkedIn's authorization server\n"
         "\n"
         "**Flow:**\n"
-        "1. User clicks \"Login with LinkedIn\"\n"
+        '1. User clicks "Login with LinkedIn"\n'
         "2. Redirected to LinkedIn OAuth consent screen\n"
         "3. User authorizes the application\n"
         "4. LinkedIn redirects back to callback URL with authorization code\n"
@@ -508,83 +482,80 @@ linkedin_auth_login_schema = {
         "- Enterprise social login\n"
         "- Professional profile import\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'external_docs': {
-        'description': 'LinkedIn OAuth 2.0 Documentation',
-        'url': 'https://docs.microsoft.com/en-us/linkedin/shared/authentication/authentication'
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "external_docs": {
+        "description": "LinkedIn OAuth 2.0 Documentation",
+        "url": "https://docs.microsoft.com/en-us/linkedin/shared/authentication/authentication",
     },
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Redirect',
+            "Successful Redirect",
             value={
-                'redirect_url': 'https://www.linkedin.com/oauth/v2/authorization?client_id=...&redirect_uri=...&scope=...&response_type=code&state=...'
+                "redirect_url": "https://www.linkedin.com/oauth/v2/authorization?client_id=...&redirect_uri=...&scope=...&response_type=code&state=..."
             },
             response_only=True,
-            status_codes=['301']
+            status_codes=["301"],
         ),
         OpenApiExample(
-            'Configuration Error',
-            value={
-                'error': 'oauth_config_error',
-                'message': 'LinkedIn OAuth credentials not configured'
-            },
+            "Configuration Error",
+            value={"error": "oauth_config_error", "message": "LinkedIn OAuth credentials not configured"},
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         301: CustomOpenApiResponse(
             status=301,
-            description='Redirect to LinkedIn OAuth authorization URL',
+            description="Redirect to LinkedIn OAuth authorization URL",
             response={
-                'type': 'object',
-                'properties': {
-                    'redirect_url': {
-                        'type': 'string',
-                        'description': 'LinkedIn OAuth authorization URL',
-                        'format': 'uri'
+                "type": "object",
+                "properties": {
+                    "redirect_url": {
+                        "type": "string",
+                        "description": "LinkedIn OAuth authorization URL",
+                        "format": "uri",
                     }
                 },
-                'required': ['redirect_url']
-            }
+                "required": ["redirect_url"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid OAuth configuration or missing credentials',
+            description="Invalid OAuth configuration or missing credentials",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['oauth_config_error', 'invalid_redirect_uri', 'missing_credentials']
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "enum": ["oauth_config_error", "invalid_redirect_uri", "missing_credentials"],
                     },
-                    'message': {'type': 'string'},
-                    'details': {'type': 'object'}
+                    "message": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during OAuth initialization',
+            description="Internal server error during OAuth initialization",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }
 
 linkedin_auth_callback_schema = {
-    'operation_id': 'linkedin_oauth_callback',
-    'summary': 'Handle LinkedIn OAuth Callback',
-    'description': (
+    "operation_id": "linkedin_oauth_callback",
+    "summary": "Handle LinkedIn OAuth Callback",
+    "description": (
         "Processes the authorization code returned by LinkedIn OAuth and authenticates the user\n"
         "\n"
         "**Process:**\n"
@@ -611,109 +582,101 @@ linkedin_auth_callback_schema = {
         "- Business networking integration\n"
         "- Professional identity verification\n"
     ),
-    'tags': ['Social Authentication'],
-    'deprecated': False,
-    'parameters': [
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "parameters": [
         OpenApiParameter(
-            name='code',
-            description='Authorization code received from LinkedIn OAuth',
+            name="code",
+            description="Authorization code received from LinkedIn OAuth",
             required=True,
             type=str,
-            location='query',
-            examples=[
-                OpenApiExample(
-                    'Valid Code',
-                    value='AQT...',
-                    description='LinkedIn OAuth authorization code'
-                )
-            ]
+            location="query",
+            examples=[OpenApiExample("Valid Code", value="AQT...", description="LinkedIn OAuth authorization code")],
         ),
         OpenApiParameter(
-            name='state',
-            description='OAuth state parameter for CSRF protection',
+            name="state",
+            description="OAuth state parameter for CSRF protection",
             required=False,
             type=str,
-            location='query',
+            location="query",
             examples=[
                 OpenApiExample(
-                    'State Parameter',
-                    value='abc123def456',
-                    description='Random state string for CSRF protection'
+                    "State Parameter", value="abc123def456", description="Random state string for CSRF protection"
                 )
-            ]
-        )
+            ],
+        ),
     ],
-    'examples': [
+    "examples": [
         OpenApiExample(
-            'Successful Authentication',
+            "Successful Authentication",
             value={
-                'access': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                'refresh': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+                "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
             },
             response_only=True,
-            status_codes=['200']
+            status_codes=["200"],
         ),
         OpenApiExample(
-            'Permission Denied',
+            "Permission Denied",
             value={
-                'error': 'permission_denied',
-                'message': 'User denied permission to access profile information',
-                'oauth_error': 'access_denied'
+                "error": "permission_denied",
+                "message": "User denied permission to access profile information",
+                "oauth_error": "access_denied",
             },
             response_only=True,
-            status_codes=['400']
-        )
+            status_codes=["400"],
+        ),
     ],
-    'responses': {
+    "responses": {
         200: CustomOpenApiResponse(
             status=200,
-            description='Successfully authenticated with LinkedIn',
+            description="Successfully authenticated with LinkedIn",
             response={
-                'type': 'object',
-                'properties': {
-                    'access': {
-                        'type': 'string',
-                        'description': 'JWT access token for API authentication',
-                        'format': 'jwt'
+                "type": "object",
+                "properties": {
+                    "access": {
+                        "type": "string",
+                        "description": "JWT access token for API authentication",
+                        "format": "jwt",
                     },
-                    'refresh': {
-                        'type': 'string',
-                        'description': 'JWT refresh token for token renewal',
-                        'format': 'jwt'
-                    }
+                    "refresh": {
+                        "type": "string",
+                        "description": "JWT refresh token for token renewal",
+                        "format": "jwt",
+                    },
                 },
-                'required': ['access', 'refresh']
-            }
+                "required": ["access", "refresh"],
+            },
         ),
         400: CustomOpenApiResponse(
             status=400,
-            description='Invalid authorization code or OAuth error',
+            description="Invalid authorization code or OAuth error",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {
-                        'type': 'string',
-                        'enum': ['invalid_grant', 'invalid_request', 'unauthorized_client', 'permission_denied']
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "enum": ["invalid_grant", "invalid_request", "unauthorized_client", "permission_denied"],
                     },
-                    'message': {'type': 'string'},
-                    'oauth_error': {'type': 'string'},
-                    'details': {'type': 'object'}
+                    "message": {"type": "string"},
+                    "oauth_error": {"type": "string"},
+                    "details": {"type": "object"},
                 },
-                'required': ['error', 'message']
-            }
+                "required": ["error", "message"],
+            },
         ),
         500: CustomOpenApiResponse(
             status=500,
-            description='Internal server error during authentication',
+            description="Internal server error during authentication",
             response={
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'message': {'type': 'string'},
-                    'request_id': {'type': 'string'}
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
                 },
-                'required': ['error', 'message']
-            }
-        )
-    }
+                "required": ["error", "message"],
+            },
+        ),
+    },
 }

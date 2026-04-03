@@ -12,28 +12,27 @@ Security-focused test suite covering:
 
 Per SECURITY_STANDARDS.md requirements.
 """
+
 import time
 import unittest
-from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch, PropertyMock
+from datetime import datetime
 
-from ..constants import TOTPStatus, TOTPAlgorithm, TOTPErrorCodes, DEFAULTS
+from ..constants import DEFAULTS, TOTPAlgorithm, TOTPErrorCodes, TOTPStatus
 from ..exceptions import (
-    TOTPError,
-    TOTPAlreadyEnabledError,
-    TOTPNotEnabledError,
-    TOTPInvalidCodeError,
-    TOTPInvalidSecretError,
-    TOTPCodeReusedError,
-    TOTPTooManyAttemptsError,
     TOTPAccountLockedError,
-    TOTPEncryptionRequiredError,
-    TOTPInvalidBackupCodeError,
+    TOTPAlreadyEnabledError,
     TOTPBackupCodeUsedError,
+    TOTPCodeReusedError,
+    TOTPEncryptionRequiredError,
+    TOTPError,
+    TOTPInvalidBackupCodeError,
+    TOTPInvalidCodeError,
+    TOTPNotEnabledError,
     TOTPSetupError,
+    TOTPTooManyAttemptsError,
     TOTPVerificationError,
 )
-from ..services.totp_service import TOTPService, SetupResult, VerifyResult
+from ..services.totp_service import SetupResult, TOTPService
 from ..storage.base import ITOTP2FAStore, TOTP2FAData
 
 
@@ -49,8 +48,7 @@ class MockTOTPStore(ITOTP2FAStore):
     def get_by_user_id(self, user_id: str):
         return self.data.get(user_id)
 
-    def create(self, user_id: str, encrypted_secret: str, algorithm: str,
-               digits: int, time_step: int, status: str):
+    def create(self, user_id: str, encrypted_secret: str, algorithm: str, digits: int, time_step: int, status: str):
         self.data[user_id] = TOTP2FAData(
             user_id=user_id,
             encrypted_secret=encrypted_secret,
@@ -134,16 +132,14 @@ class MockEncryption:
 # TOTP Generation Tests
 # =============================================================================
 
+
 class TestTOTPSecretGeneration(unittest.TestCase):
     """Test TOTP secret generation security requirements."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def test_default_secret_length_is_256_bits(self):
         """SECURITY: Default secret length must be 32 bytes (256 bits)."""
@@ -179,6 +175,7 @@ class TestTOTPSecretGeneration(unittest.TestCase):
 # =============================================================================
 # Encryption Requirement Tests
 # =============================================================================
+
 
 class TestEncryptionRequirements(unittest.TestCase):
     """Test that encryption is mandatory for secret storage."""
@@ -226,16 +223,14 @@ class TestEncryptionRequirements(unittest.TestCase):
 # TOTP Verification Tests
 # =============================================================================
 
+
 class TestTOTPVerification(unittest.TestCase):
     """Test TOTP code verification."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def _setup_enabled_totp(self, user_id: str = "user123") -> str:
         """Helper to set up enabled TOTP and return the secret."""
@@ -305,16 +300,14 @@ class TestTOTPVerification(unittest.TestCase):
 # Replay Attack Prevention Tests
 # =============================================================================
 
+
 class TestReplayAttackPrevention(unittest.TestCase):
     """Test replay attack prevention mechanisms."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def _setup_enabled_totp(self, user_id: str = "user123") -> str:
         result = self.service.setup_totp(user_id=user_id, account_name="test@example.com")
@@ -351,16 +344,14 @@ class TestReplayAttackPrevention(unittest.TestCase):
 # Rate Limiting Tests
 # =============================================================================
 
+
 class TestRateLimiting(unittest.TestCase):
     """Test rate limiting and account lockout."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def _setup_enabled_totp(self, user_id: str = "user123") -> str:
         result = self.service.setup_totp(user_id=user_id, account_name="test@example.com")
@@ -421,16 +412,14 @@ class TestRateLimiting(unittest.TestCase):
 # Backup Code Tests
 # =============================================================================
 
+
 class TestBackupCodes(unittest.TestCase):
     """Test backup code functionality."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def _setup_enabled_totp(self, user_id: str = "user123"):
         result = self.service.setup_totp(user_id=user_id, account_name="test@example.com")
@@ -486,10 +475,8 @@ class TestBackupCodes(unittest.TestCase):
         result = self.service.verify(
             user_id="user123",
             code=self.service.generate_code(
-                self.encryption.decrypt(
-                    self.store.get_by_user_id("user123").encrypted_secret
-                )
-            )
+                self.encryption.decrypt(self.store.get_by_user_id("user123").encrypted_secret)
+            ),
         )
         self.assertEqual(result.backup_codes_remaining, initial_count - 1)
 
@@ -523,16 +510,14 @@ class TestBackupCodes(unittest.TestCase):
 # Setup Flow Tests
 # =============================================================================
 
+
 class TestSetupFlow(unittest.TestCase):
     """Test TOTP setup workflow."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def test_setup_returns_required_data(self):
         """Setup should return secret, URI, and backup codes."""
@@ -578,11 +563,7 @@ class TestSetupFlow(unittest.TestCase):
 
     def test_provisioning_uri_format(self):
         """Provisioning URI should follow otpauth format."""
-        result = self.service.setup_totp(
-            user_id="user123",
-            account_name="test@example.com",
-            issuer="TestApp"
-        )
+        result = self.service.setup_totp(user_id="user123", account_name="test@example.com", issuer="TestApp")
 
         uri = result.provisioning_uri
         self.assertTrue(uri.startswith("otpauth://totp/"))
@@ -594,16 +575,14 @@ class TestSetupFlow(unittest.TestCase):
 # Disable TOTP Tests
 # =============================================================================
 
+
 class TestDisableTOTP(unittest.TestCase):
     """Test TOTP disable functionality."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def _setup_enabled_totp(self, user_id: str = "user123"):
         result = self.service.setup_totp(user_id=user_id, account_name="test@example.com")
@@ -629,6 +608,7 @@ class TestDisableTOTP(unittest.TestCase):
 # Exception Tests
 # =============================================================================
 
+
 class TestExceptions(unittest.TestCase):
     """Test exception classes and error handling."""
 
@@ -643,8 +623,8 @@ class TestExceptions(unittest.TestCase):
         error = TOTPInvalidCodeError("Invalid code provided")
         error_dict = error.to_dict()
 
-        self.assertIn('error', error_dict)
-        self.assertIn('message', error_dict)
+        self.assertIn("error", error_dict)
+        self.assertIn("message", error_dict)
 
     def test_specific_error_codes(self):
         """Each exception should have correct error code."""
@@ -658,12 +638,13 @@ class TestExceptions(unittest.TestCase):
 # Constants and Configuration Tests
 # =============================================================================
 
+
 class TestConstants(unittest.TestCase):
     """Test TOTP constants and defaults."""
 
     def test_default_secret_length_is_256_bits(self):
         """SECURITY: Default secret length must be 32 bytes."""
-        self.assertEqual(DEFAULTS['TOTP_SECRET_LENGTH'], 32)
+        self.assertEqual(DEFAULTS["TOTP_SECRET_LENGTH"], 32)
 
     def test_supported_algorithms(self):
         """Should support standard TOTP algorithms."""
@@ -682,16 +663,14 @@ class TestConstants(unittest.TestCase):
 # Input Validation Tests
 # =============================================================================
 
+
 class TestInputValidation(unittest.TestCase):
     """Test input validation for security."""
 
     def setUp(self):
         self.store = MockTOTPStore()
         self.encryption = MockEncryption()
-        self.service = TOTPService(
-            store=self.store,
-            encryption_service=self.encryption
-        )
+        self.service = TOTPService(store=self.store, encryption_service=self.encryption)
 
     def test_code_length_validation(self):
         """Code should be validated for proper length."""
@@ -722,5 +701,5 @@ class TestInputValidation(unittest.TestCase):
             self.service.setup_totp(user_id="", account_name="test@example.com")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

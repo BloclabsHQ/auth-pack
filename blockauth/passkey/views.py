@@ -6,22 +6,22 @@ Provides passwordless authentication using WebAuthn/FIDO2 standard.
 Supports Face ID, Touch ID, Windows Hello, and hardware security keys.
 """
 
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from drf_spectacular.utils import extend_schema
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from blockauth.jwt.token_manager import jwt_manager
-from blockauth.notification import emit_passkey_event, NotificationEvent
-from blockauth.utils.logger import blockauth_logger
+from blockauth.notification import NotificationEvent, emit_passkey_event
 from blockauth.utils.config import get_block_auth_user_model
-from blockauth.utils.rate_limiter import EnhancedThrottle
 from blockauth.utils.generics import sanitize_log_context
+from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.rate_limiter import EnhancedThrottle
 
-from .services.passkey_service import PasskeyService
-from .exceptions import PasskeyError, PasskeyNotEnabledError, MaxCredentialsReachedError, CredentialNotFoundError
 from . import is_enabled
+from .exceptions import CredentialNotFoundError, MaxCredentialsReachedError, PasskeyError, PasskeyNotEnabledError
+from .services.passkey_service import PasskeyService
 
 
 # Passkey rate limiting subjects
@@ -36,6 +36,7 @@ class PasskeySubject:
 # Throttle configurations
 class PasskeyThrottles:
     """Centralized passkey throttle configurations."""
+
     # Challenge generation: 10/min, 50/day
     REGISTER_OPTIONS = EnhancedThrottle(rate=(10, 60), daily_limit=50)
     # Registration: 5/min, 10/day (creates credentials)
@@ -54,14 +55,14 @@ GENERIC_PASSKEY_ERROR = {"error_code": "PASSKEY_ERROR", "message": "An error occ
 
 # Import documentation from separate docs module
 from .docs import (
-    passkey_registration_options_docs,
-    passkey_registration_verify_docs,
     passkey_authentication_options_docs,
     passkey_authentication_verify_docs,
-    passkey_credentials_list_docs,
+    passkey_credential_delete_docs,
     passkey_credential_detail_docs,
     passkey_credential_update_docs,
-    passkey_credential_delete_docs,
+    passkey_credentials_list_docs,
+    passkey_registration_options_docs,
+    passkey_registration_verify_docs,
 )
 
 
@@ -79,6 +80,7 @@ class PasskeyRegistrationOptionsView(APIView):
     Requires authentication. Returns options that should be passed
     to navigator.credentials.create() on the frontend.
     """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(**passkey_registration_options_docs)
@@ -87,28 +89,33 @@ class PasskeyRegistrationOptionsView(APIView):
         if not throttle.allow_request(request, PasskeySubject.REGISTER_OPTIONS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
-            display_name = request.data.get('display_name')
+            display_name = request.data.get("display_name")
 
             # Build human-readable username (user.name in WebAuthn spec)
             # Priority: email > wallet address (truncated) > user ID prefix
             user = request.user
             username = (
                 user.email
-                or (f"{user.wallet_address[:10]}..." if getattr(user, 'wallet_address', None) else None)
+                or (f"{user.wallet_address[:10]}..." if getattr(user, "wallet_address", None) else None)
                 or f"User {str(user.id)[:8]}"
             )
 
             # Auto-resolve display_name from profile if client didn't provide one
             if not display_name:
-                full_name = ' '.join(filter(None, [
-                    getattr(user, 'first_name', None),
-                    getattr(user, 'last_name', None),
-                ]))
+                full_name = " ".join(
+                    filter(
+                        None,
+                        [
+                            getattr(user, "first_name", None),
+                            getattr(user, "last_name", None),
+                        ],
+                    )
+                )
                 display_name = full_name or None
 
             options = service.generate_registration_options(
@@ -117,15 +124,14 @@ class PasskeyRegistrationOptionsView(APIView):
                 display_name=display_name,
             )
 
-            blockauth_logger.info(
-                "Passkey registration options generated",
-                {"user_id": str(request.user.id)}
-            )
+            blockauth_logger.info("Passkey registration options generated", {"user_id": str(request.user.id)})
 
             return Response(options)
 
         except MaxCredentialsReachedError:
-            blockauth_logger.warning("Passkey max credentials reached", sanitize_log_context({"user_id": str(request.user.id)}))
+            blockauth_logger.warning(
+                "Passkey max credentials reached", sanitize_log_context({"user_id": str(request.user.id)})
+            )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except PasskeyError as e:
             blockauth_logger.error("Passkey registration options error", sanitize_log_context({"error": str(e)}))
@@ -142,6 +148,7 @@ class PasskeyRegistrationVerifyView(APIView):
     Requires authentication. Verifies the credential created by the
     authenticator and stores it for future authentication.
     """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(**passkey_registration_verify_docs)
@@ -150,12 +157,12 @@ class PasskeyRegistrationVerifyView(APIView):
         if not throttle.allow_request(request, PasskeySubject.REGISTER_VERIFY):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
-            credential_name = request.data.get('name', '')
+            credential_name = request.data.get("name", "")
 
             credential = service.verify_registration(
                 credential_data=request.data,
@@ -165,31 +172,36 @@ class PasskeyRegistrationVerifyView(APIView):
 
             # Record success and emit event
             throttle.record_success(request, PasskeySubject.REGISTER_VERIFY)
-            emit_passkey_event(NotificationEvent.PASSKEY_REGISTERED, {
-                "user_id": str(request.user.id),
-                "credential_id": str(credential.id),
-            })
-
-            blockauth_logger.success(
-                "Passkey registered successfully",
-                {"user_id": str(request.user.id), "credential_id": credential.id}
+            emit_passkey_event(
+                NotificationEvent.PASSKEY_REGISTERED,
+                {
+                    "user_id": str(request.user.id),
+                    "credential_id": str(credential.id),
+                },
             )
 
-            return Response({
-                'id': credential.id,
-                'credential_id': credential.credential_id,
-                'name': credential.name,
-                'created_at': credential.created_at.isoformat() if credential.created_at else None,
-                'authenticator_attachment': credential.authenticator_attachment,
-                'transports': credential.transports,
-                'backup_eligible': credential.backup_eligible,
-            }, status=status.HTTP_201_CREATED)
+            blockauth_logger.success(
+                "Passkey registered successfully", {"user_id": str(request.user.id), "credential_id": credential.id}
+            )
+
+            return Response(
+                {
+                    "id": credential.id,
+                    "credential_id": credential.credential_id,
+                    "name": credential.name,
+                    "created_at": credential.created_at.isoformat() if credential.created_at else None,
+                    "authenticator_attachment": credential.authenticator_attachment,
+                    "transports": credential.transports,
+                    "backup_eligible": credential.backup_eligible,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         except PasskeyError as e:
             throttle.record_failure(request, PasskeySubject.REGISTER_VERIFY)
             blockauth_logger.error(
                 "Passkey registration verification failed",
-                sanitize_log_context({"error": str(e), "user_id": str(request.user.id)})
+                sanitize_log_context({"error": str(e), "user_id": str(request.user.id)}),
             )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -205,6 +217,7 @@ class PasskeyAuthenticationOptionsView(APIView):
     Public endpoint. Returns options that should be passed to
     navigator.credentials.get() on the frontend.
     """
+
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -214,12 +227,12 @@ class PasskeyAuthenticationOptionsView(APIView):
         if not throttle.allow_request(request, PasskeySubject.AUTH_OPTIONS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
-            username = request.data.get('username')
+            username = request.data.get("username")
             user_id = None
 
             # If username provided, look up user
@@ -237,10 +250,7 @@ class PasskeyAuthenticationOptionsView(APIView):
                 username=username,
             )
 
-            blockauth_logger.info(
-                "Passkey authentication options generated",
-                {"username": username or "discoverable"}
-            )
+            blockauth_logger.info("Passkey authentication options generated", {"username": username or "discoverable"})
 
             return Response(options)
 
@@ -259,6 +269,7 @@ class PasskeyAuthenticationVerifyView(APIView):
     Public endpoint. Verifies the signature from the authenticator
     and returns JWT tokens on success.
     """
+
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -268,7 +279,7 @@ class PasskeyAuthenticationVerifyView(APIView):
         if not throttle.allow_request(request, PasskeySubject.AUTH_VERIFY):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
@@ -287,36 +298,39 @@ class PasskeyAuthenticationVerifyView(APIView):
 
             # Record success and emit event
             throttle.record_success(request, PasskeySubject.AUTH_VERIFY)
-            emit_passkey_event(NotificationEvent.PASSKEY_AUTHENTICATED, {
-                "user_id": str(result.user_id),
-                "credential_id": result.credential_id[:20] if result.credential_id else None,
-            })
+            emit_passkey_event(
+                NotificationEvent.PASSKEY_AUTHENTICATED,
+                {
+                    "user_id": str(result.user_id),
+                    "credential_id": result.credential_id[:20] if result.credential_id else None,
+                },
+            )
 
             # Get credential info for response
             credentials = service.get_credentials_for_user(result.user_id)
-            credential_info = next(
-                (c for c in credentials if c.credential_id == result.credential_id),
-                None
-            )
+            credential_info = next((c for c in credentials if c.credential_id == result.credential_id), None)
 
-            blockauth_logger.success(
-                "Passkey authentication successful",
-                {"user_id": str(result.user_id)}
-            )
+            blockauth_logger.success("Passkey authentication successful", {"user_id": str(result.user_id)})
 
-            return Response({
-                'access': tokens['access'],
-                'refresh': tokens['refresh'],
-                'user': {
-                    'id': str(user.id),
-                    'email': user.email,
-                },
-                'credential': {
-                    'id': credential_info.id if credential_info else None,
-                    'name': credential_info.name if credential_info else None,
-                    'last_used_at': credential_info.last_used_at.isoformat() if credential_info and credential_info.last_used_at else None,
-                },
-            })
+            return Response(
+                {
+                    "access": tokens["access"],
+                    "refresh": tokens["refresh"],
+                    "user": {
+                        "id": str(user.id),
+                        "email": user.email,
+                    },
+                    "credential": {
+                        "id": credential_info.id if credential_info else None,
+                        "name": credential_info.name if credential_info else None,
+                        "last_used_at": (
+                            credential_info.last_used_at.isoformat()
+                            if credential_info and credential_info.last_used_at
+                            else None
+                        ),
+                    },
+                }
+            )
 
         except CredentialNotFoundError as e:
             throttle.record_failure(request, PasskeySubject.AUTH_VERIFY)
@@ -338,6 +352,7 @@ class PasskeyCredentialListView(APIView):
 
     Requires authentication.
     """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(**passkey_credentials_list_docs)
@@ -346,31 +361,33 @@ class PasskeyCredentialListView(APIView):
         if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
             credentials = service.get_credentials_for_user(request.user.id)
 
-            return Response({
-                'count': len(credentials),
-                'credentials': [
-                    {
-                        'id': c.id,
-                        'credential_id': c.credential_id,
-                        'name': c.name,
-                        'created_at': c.created_at.isoformat() if c.created_at else None,
-                        'last_used_at': c.last_used_at.isoformat() if c.last_used_at else None,
-                        'authenticator_attachment': c.authenticator_attachment,
-                        'transports': c.transports,
-                        'backup_eligible': c.backup_eligible,
-                        'backup_state': c.backup_state,
-                        'is_active': c.is_active,
-                    }
-                    for c in credentials
-                ]
-            })
+            return Response(
+                {
+                    "count": len(credentials),
+                    "credentials": [
+                        {
+                            "id": c.id,
+                            "credential_id": c.credential_id,
+                            "name": c.name,
+                            "created_at": c.created_at.isoformat() if c.created_at else None,
+                            "last_used_at": c.last_used_at.isoformat() if c.last_used_at else None,
+                            "authenticator_attachment": c.authenticator_attachment,
+                            "transports": c.transports,
+                            "backup_eligible": c.backup_eligible,
+                            "backup_state": c.backup_state,
+                            "is_active": c.is_active,
+                        }
+                        for c in credentials
+                    ],
+                }
+            )
 
         except PasskeyError as e:
             blockauth_logger.error("Passkey credentials list error", sanitize_log_context({"error": str(e)}))
@@ -386,6 +403,7 @@ class PasskeyCredentialDetailView(APIView):
 
     Requires authentication. Supports GET, PATCH (update name), and DELETE.
     """
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(**passkey_credential_detail_docs)
@@ -394,35 +412,36 @@ class PasskeyCredentialDetailView(APIView):
         if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
             credentials = service.get_credentials_for_user(request.user.id)
-            credential = next(
-                (c for c in credentials if c.id == str(credential_id)),
-                None
-            )
+            credential = next((c for c in credentials if c.id == str(credential_id)), None)
 
             if not credential:
                 raise CredentialNotFoundError()
 
-            return Response({
-                'id': credential.id,
-                'credential_id': credential.credential_id,
-                'name': credential.name,
-                'created_at': credential.created_at.isoformat() if credential.created_at else None,
-                'last_used_at': credential.last_used_at.isoformat() if credential.last_used_at else None,
-                'authenticator_attachment': credential.authenticator_attachment,
-                'transports': credential.transports,
-                'backup_eligible': credential.backup_eligible,
-                'backup_state': credential.backup_state,
-                'is_active': credential.is_active,
-            })
+            return Response(
+                {
+                    "id": credential.id,
+                    "credential_id": credential.credential_id,
+                    "name": credential.name,
+                    "created_at": credential.created_at.isoformat() if credential.created_at else None,
+                    "last_used_at": credential.last_used_at.isoformat() if credential.last_used_at else None,
+                    "authenticator_attachment": credential.authenticator_attachment,
+                    "transports": credential.transports,
+                    "backup_eligible": credential.backup_eligible,
+                    "backup_state": credential.backup_state,
+                    "is_active": credential.is_active,
+                }
+            )
 
         except CredentialNotFoundError as e:
-            blockauth_logger.warning("Passkey credential not found", sanitize_log_context({"credential_id": str(credential_id)}))
+            blockauth_logger.warning(
+                "Passkey credential not found", sanitize_log_context({"credential_id": str(credential_id)})
+            )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
             blockauth_logger.error("Passkey credential detail error", sanitize_log_context({"error": str(e)}))
@@ -434,25 +453,22 @@ class PasskeyCredentialDetailView(APIView):
         if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
             service = get_passkey_service()
-            name = request.data.get('name')
+            name = request.data.get("name")
 
             if not name:
                 return Response(
                     {"error_code": "VALIDATION_ERROR", "message": "Name is required"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Verify ownership
             credentials = service.get_credentials_for_user(request.user.id)
-            credential = next(
-                (c for c in credentials if c.id == str(credential_id)),
-                None
-            )
+            credential = next((c for c in credentials if c.id == str(credential_id)), None)
 
             if not credential:
                 raise CredentialNotFoundError()
@@ -462,31 +478,31 @@ class PasskeyCredentialDetailView(APIView):
 
             # Get updated credential
             credentials = service.get_credentials_for_user(request.user.id)
-            updated = next(
-                (c for c in credentials if c.id == str(credential_id)),
-                None
-            )
+            updated = next((c for c in credentials if c.id == str(credential_id)), None)
 
             blockauth_logger.info(
-                "Passkey credential updated",
-                {"user_id": str(request.user.id), "credential_id": str(credential_id)}
+                "Passkey credential updated", {"user_id": str(request.user.id), "credential_id": str(credential_id)}
             )
 
-            return Response({
-                'id': updated.id,
-                'credential_id': updated.credential_id,
-                'name': updated.name,
-                'created_at': updated.created_at.isoformat() if updated.created_at else None,
-                'last_used_at': updated.last_used_at.isoformat() if updated.last_used_at else None,
-                'authenticator_attachment': updated.authenticator_attachment,
-                'transports': updated.transports,
-                'backup_eligible': updated.backup_eligible,
-                'backup_state': updated.backup_state,
-                'is_active': updated.is_active,
-            })
+            return Response(
+                {
+                    "id": updated.id,
+                    "credential_id": updated.credential_id,
+                    "name": updated.name,
+                    "created_at": updated.created_at.isoformat() if updated.created_at else None,
+                    "last_used_at": updated.last_used_at.isoformat() if updated.last_used_at else None,
+                    "authenticator_attachment": updated.authenticator_attachment,
+                    "transports": updated.transports,
+                    "backup_eligible": updated.backup_eligible,
+                    "backup_state": updated.backup_state,
+                    "is_active": updated.is_active,
+                }
+            )
 
         except CredentialNotFoundError as e:
-            blockauth_logger.warning("Passkey credential not found for update", sanitize_log_context({"credential_id": str(credential_id)}))
+            blockauth_logger.warning(
+                "Passkey credential not found for update", sanitize_log_context({"credential_id": str(credential_id)})
+            )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
             blockauth_logger.error("Passkey credential update error", sanitize_log_context({"error": str(e)}))
@@ -498,7 +514,7 @@ class PasskeyCredentialDetailView(APIView):
         if not throttle.allow_request(request, PasskeySubject.CREDENTIALS):
             return Response(
                 {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
         try:
@@ -506,10 +522,7 @@ class PasskeyCredentialDetailView(APIView):
 
             # Verify ownership
             credentials = service.get_credentials_for_user(request.user.id)
-            credential = next(
-                (c for c in credentials if c.id == str(credential_id)),
-                None
-            )
+            credential = next((c for c in credentials if c.id == str(credential_id)), None)
 
             if not credential:
                 raise CredentialNotFoundError()
@@ -518,14 +531,15 @@ class PasskeyCredentialDetailView(APIView):
             service.delete_credential(credential.credential_id)
 
             blockauth_logger.info(
-                "Passkey credential deleted",
-                {"user_id": str(request.user.id), "credential_id": str(credential_id)}
+                "Passkey credential deleted", {"user_id": str(request.user.id), "credential_id": str(credential_id)}
             )
 
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         except CredentialNotFoundError as e:
-            blockauth_logger.warning("Passkey credential not found for delete", sanitize_log_context({"credential_id": str(credential_id)}))
+            blockauth_logger.warning(
+                "Passkey credential not found for delete", sanitize_log_context({"credential_id": str(credential_id)})
+            )
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_404_NOT_FOUND)
         except PasskeyError as e:
             blockauth_logger.error("Passkey credential delete error", sanitize_log_context({"error": str(e)}))

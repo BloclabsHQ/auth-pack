@@ -5,18 +5,16 @@ Handles generation, storage, and validation of WebAuthn challenges.
 Challenges must be cryptographically random, single-use, and short-lived.
 """
 
-from typing import Optional, Any
 from datetime import timedelta
+from typing import Any, Optional
+
 from django.utils import timezone
 
 from ..config import get_passkey_config
-from ..models import PasskeyChallenge
 from ..constants import ChallengeType
-from ..utils import generate_challenge, base64url_encode, base64url_decode
-from ..exceptions import (
-    ChallengeExpiredError,
-    ChallengeAlreadyUsedError,
-)
+from ..exceptions import ChallengeAlreadyUsedError, ChallengeExpiredError
+from ..models import PasskeyChallenge
+from ..utils import base64url_encode, generate_challenge
 
 
 class ChallengeService:
@@ -33,10 +31,7 @@ class ChallengeService:
         self._config = get_passkey_config()
 
     def generate(
-        self,
-        challenge_type: ChallengeType,
-        user_id: Optional[Any] = None,
-        metadata: Optional[dict] = None
+        self, challenge_type: ChallengeType, user_id: Optional[Any] = None, metadata: Optional[dict] = None
     ) -> str:
         """
         Generate a new challenge.
@@ -72,7 +67,7 @@ class ChallengeService:
         challenge: str,
         expected_type: Optional[ChallengeType] = None,
         user_id: Optional[Any] = None,
-        consume: bool = True
+        consume: bool = True,
     ) -> bool:
         """
         Validate a challenge.
@@ -188,13 +183,13 @@ class ChallengeService:
         try:
             challenge_obj = PasskeyChallenge.objects.get(challenge=challenge)
             return {
-                'challenge': challenge_obj.challenge,
-                'user_id': challenge_obj.user_id,
-                'challenge_type': challenge_obj.challenge_type,
-                'expires_at': challenge_obj.expires_at,
-                'is_used': challenge_obj.is_used,
-                'metadata': challenge_obj.metadata,
-                'created_at': challenge_obj.created_at,
+                "challenge": challenge_obj.challenge,
+                "user_id": challenge_obj.user_id,
+                "challenge_type": challenge_obj.challenge_type,
+                "expires_at": challenge_obj.expires_at,
+                "is_used": challenge_obj.is_used,
+                "metadata": challenge_obj.metadata,
+                "created_at": challenge_obj.created_at,
             }
         except PasskeyChallenge.DoesNotExist:
             return None

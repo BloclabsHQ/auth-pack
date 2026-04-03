@@ -71,73 +71,69 @@ Usage:
 from .constants import (
     PASSKEY_CONFIG_KEY,
     PASSKEY_FEATURE_FLAG,
-    PasskeyConfigKeys,
     AttestationConveyance,
     AuthenticatorAttachment,
+    AuthenticatorTransport,
+    COSEAlgorithm,
+    PasskeyConfigKeys,
+    PasskeyErrorCodes,
+    PasskeyFeatureFlags,
     ResidentKeyRequirement,
     UserVerificationRequirement,
-    COSEAlgorithm,
-    AuthenticatorTransport,
-    PasskeyFeatureFlags,
-    PasskeyErrorCodes,
 )
-
 from .exceptions import (
-    PasskeyError,
-    PasskeyNotEnabledError,
-    ChallengeExpiredError,
+    AttestationVerificationError,
     ChallengeAlreadyUsedError,
-    InvalidOriginError,
-    InvalidRpIdError,
+    ChallengeExpiredError,
+    ConfigurationError,
+    CounterRegressionError,
     CredentialNotFoundError,
     CredentialRevokedError,
-    CounterRegressionError,
-    SignatureVerificationError,
-    MaxCredentialsReachedError,
-    AttestationVerificationError,
-    RateLimitExceededError,
     InvalidCredentialDataError,
-    ConfigurationError,
+    InvalidOriginError,
+    InvalidRpIdError,
+    MaxCredentialsReachedError,
+    PasskeyError,
+    PasskeyNotEnabledError,
+    RateLimitExceededError,
+    SignatureVerificationError,
 )
 
 __all__ = [
     # Public API
-    'is_enabled',
-    'get_passkey_service',
-    'get_passkey_config',
-    'get_credential_store',
-
+    "is_enabled",
+    "get_passkey_service",
+    "get_passkey_config",
+    "get_credential_store",
     # Configuration keys
-    'PASSKEY_CONFIG_KEY',
-    'PASSKEY_FEATURE_FLAG',
-    'PasskeyConfigKeys',
-
+    "PASSKEY_CONFIG_KEY",
+    "PASSKEY_FEATURE_FLAG",
+    "PasskeyConfigKeys",
     # Constants
-    'AttestationConveyance',
-    'AuthenticatorAttachment',
-    'ResidentKeyRequirement',
-    'UserVerificationRequirement',
-    'COSEAlgorithm',
-    'AuthenticatorTransport',
-    'PasskeyFeatureFlags',
-    'PasskeyErrorCodes',
-
+    "AttestationConveyance",
+    "AuthenticatorAttachment",
+    "ResidentKeyRequirement",
+    "UserVerificationRequirement",
+    "COSEAlgorithm",
+    "AuthenticatorTransport",
+    "PasskeyFeatureFlags",
+    "PasskeyErrorCodes",
     # Exceptions
-    'PasskeyError',
-    'PasskeyNotEnabledError',
-    'ChallengeExpiredError',
-    'ChallengeAlreadyUsedError',
-    'InvalidOriginError',
-    'InvalidRpIdError',
-    'CredentialNotFoundError',
-    'CredentialRevokedError',
-    'CounterRegressionError',
-    'SignatureVerificationError',
-    'MaxCredentialsReachedError',
-    'AttestationVerificationError',
-    'RateLimitExceededError',
-    'InvalidCredentialDataError',
-    'ConfigurationError',
+    "PasskeyError",
+    "PasskeyNotEnabledError",
+    "ChallengeExpiredError",
+    "ChallengeAlreadyUsedError",
+    "InvalidOriginError",
+    "InvalidRpIdError",
+    "CredentialNotFoundError",
+    "CredentialRevokedError",
+    "CounterRegressionError",
+    "SignatureVerificationError",
+    "MaxCredentialsReachedError",
+    "AttestationVerificationError",
+    "RateLimitExceededError",
+    "InvalidCredentialDataError",
+    "ConfigurationError",
 ]
 
 
@@ -151,8 +147,9 @@ def is_enabled() -> bool:
         bool: True if PASSKEY_AUTH is enabled in settings
     """
     try:
-        from blockauth.utils.config import get_config
         from blockauth.constants import ConfigKeys
+        from blockauth.utils.config import get_config
+
         features = get_config(ConfigKeys.FEATURES)
         return features.get(PASSKEY_FEATURE_FLAG, False)
     except (ImportError, AttributeError):
@@ -175,6 +172,7 @@ def get_passkey_config():
         raise PasskeyNotEnabledError()
 
     from .config import get_passkey_config as _get_config
+
     return _get_config()
 
 
@@ -192,6 +190,7 @@ def get_passkey_service():
         raise PasskeyNotEnabledError()
 
     from .services.passkey_service import PasskeyService
+
     return PasskeyService()
 
 
@@ -209,13 +208,16 @@ def get_credential_store():
         raise PasskeyNotEnabledError()
 
     from .config import get_passkey_config
+
     config = get_passkey_config()
 
-    if config.storage_backend == 'memory':
+    if config.storage_backend == "memory":
         from .storage.memory_storage import MemoryCredentialStore
+
         return MemoryCredentialStore()
     else:
         from .storage.django_storage import DjangoCredentialStore
+
         return DjangoCredentialStore()
 
 
@@ -233,4 +235,5 @@ def get_challenge_service():
         raise PasskeyNotEnabledError()
 
     from .services.challenge_service import ChallengeService
+
     return ChallengeService()

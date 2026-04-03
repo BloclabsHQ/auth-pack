@@ -6,19 +6,19 @@ Handles loading and validating passkey configuration from BLOCK_AUTH_SETTINGS.
 Configuration is read from BLOCK_AUTH_SETTINGS["PASSKEY_CONFIG"].
 """
 
-from typing import Any, List, Optional
 from dataclasses import dataclass, field
+from typing import Any, List, Optional
 
 from .constants import (
     PASSKEY_CONFIG_KEY,
-    PasskeyConfigKeys,
     PASSKEY_DEFAULTS,
     AttestationConveyance,
     AuthenticatorAttachment,
+    COSEAlgorithm,
+    PasskeyConfigKeys,
+    PasskeyFeatureFlags,
     ResidentKeyRequirement,
     UserVerificationRequirement,
-    COSEAlgorithm,
-    PasskeyFeatureFlags,
 )
 from .exceptions import ConfigurationError
 
@@ -30,6 +30,7 @@ class PasskeyConfiguration:
 
     Holds all configuration values with validation.
     """
+
     # Relying Party
     rp_id: str
     rp_name: str
@@ -99,7 +100,7 @@ class PasskeyConfigManager:
     a validated PasskeyConfiguration object.
     """
 
-    _instance: Optional['PasskeyConfigManager'] = None
+    _instance: Optional["PasskeyConfigManager"] = None
     _config: Optional[PasskeyConfiguration] = None
 
     def __new__(cls):
@@ -111,7 +112,8 @@ class PasskeyConfigManager:
         """Get the PASSKEY_CONFIG dict from settings"""
         try:
             from django.conf import settings
-            block_auth_settings = getattr(settings, 'BLOCK_AUTH_SETTINGS', {})
+
+            block_auth_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {})
             return block_auth_settings.get(PASSKEY_CONFIG_KEY, {})
         except ImportError:
             return {}
@@ -149,9 +151,7 @@ class PasskeyConfigManager:
         # Get RP ID (required)
         rp_id = self._get_with_default(PasskeyConfigKeys.RP_ID, passkey_config)
         if not rp_id:
-            raise ConfigurationError(
-                "PASSKEY_CONFIG.RP_ID is required. Set it to your domain (e.g., 'example.com')"
-            )
+            raise ConfigurationError("PASSKEY_CONFIG.RP_ID is required. Set it to your domain (e.g., 'example.com')")
 
         # Get RP name
         rp_name = self._get_with_default(PasskeyConfigKeys.RP_NAME, passkey_config)
@@ -160,28 +160,23 @@ class PasskeyConfigManager:
         allowed_origins = self._get_with_default(PasskeyConfigKeys.ALLOWED_ORIGINS, passkey_config)
         if not allowed_origins:
             # Auto-generate from RP ID if not set
-            allowed_origins = [f'https://{rp_id}']
+            allowed_origins = [f"https://{rp_id}"]
 
         # Validate allowed origins format
         for origin in allowed_origins:
-            if not origin.startswith(('http://', 'https://')):
-                raise ConfigurationError(
-                    f"Invalid origin '{origin}'. Origins must start with http:// or https://"
-                )
+            if not origin.startswith(("http://", "https://")):
+                raise ConfigurationError(f"Invalid origin '{origin}'. Origins must start with http:// or https://")
 
         # Get and validate attestation
         attestation = self._get_with_default(PasskeyConfigKeys.ATTESTATION, passkey_config)
         valid_attestations = [a.value for a in AttestationConveyance]
         if attestation not in valid_attestations:
             raise ConfigurationError(
-                f"Invalid PASSKEY_CONFIG.ATTESTATION '{attestation}'. "
-                f"Valid values: {valid_attestations}"
+                f"Invalid PASSKEY_CONFIG.ATTESTATION '{attestation}'. " f"Valid values: {valid_attestations}"
             )
 
         # Get authenticator attachment (can be None)
-        authenticator_attachment = self._get_with_default(
-            PasskeyConfigKeys.AUTHENTICATOR_ATTACHMENT, passkey_config
-        )
+        authenticator_attachment = self._get_with_default(PasskeyConfigKeys.AUTHENTICATOR_ATTACHMENT, passkey_config)
         if authenticator_attachment is not None:
             valid_attachments = [a.value for a in AuthenticatorAttachment]
             if authenticator_attachment not in valid_attachments:
@@ -195,8 +190,7 @@ class PasskeyConfigManager:
         valid_resident_keys = [r.value for r in ResidentKeyRequirement]
         if resident_key not in valid_resident_keys:
             raise ConfigurationError(
-                f"Invalid PASSKEY_CONFIG.RESIDENT_KEY '{resident_key}'. "
-                f"Valid values: {valid_resident_keys}"
+                f"Invalid PASSKEY_CONFIG.RESIDENT_KEY '{resident_key}'. " f"Valid values: {valid_resident_keys}"
             )
 
         # Get and validate user verification
@@ -243,11 +237,10 @@ class PasskeyConfigManager:
 
         # Get storage backend
         storage_backend = self._get_with_default(PasskeyConfigKeys.STORAGE_BACKEND, passkey_config)
-        valid_backends = ['django', 'memory']
+        valid_backends = ["django", "memory"]
         if storage_backend not in valid_backends:
             raise ConfigurationError(
-                f"Invalid PASSKEY_CONFIG.STORAGE_BACKEND '{storage_backend}'. "
-                f"Valid values: {valid_backends}"
+                f"Invalid PASSKEY_CONFIG.STORAGE_BACKEND '{storage_backend}'. " f"Valid values: {valid_backends}"
             )
 
         # Get rate limits

@@ -6,6 +6,7 @@ errors when importing them before Django apps are fully loaded.
 
 They are compatible with Django's TextChoices/IntegerChoices for use in model fields.
 """
+
 from enum import Enum
 
 
@@ -26,23 +27,24 @@ class AuthenticationType(str, Enum):
         if auth_type == AuthenticationType.EMAIL:
             ...
     """
-    EMAIL = 'EMAIL'
-    WALLET = 'WALLET'
-    GOOGLE = 'GOOGLE'
-    FACEBOOK = 'FACEBOOK'
-    LINKEDIN = 'LINKEDIN'
-    PASSWORDLESS = 'PASSWORDLESS'
+
+    EMAIL = "EMAIL"
+    WALLET = "WALLET"
+    GOOGLE = "GOOGLE"
+    FACEBOOK = "FACEBOOK"
+    LINKEDIN = "LINKEDIN"
+    PASSWORDLESS = "PASSWORDLESS"
 
     @property
     def label(self) -> str:
         """Human-readable label for the authentication type."""
         labels = {
-            'EMAIL': 'Email',
-            'WALLET': 'Wallet',
-            'GOOGLE': 'Google',
-            'FACEBOOK': 'Facebook',
-            'LINKEDIN': 'LinkedIn',
-            'PASSWORDLESS': 'Passwordless',
+            "EMAIL": "Email",
+            "WALLET": "Wallet",
+            "GOOGLE": "Google",
+            "FACEBOOK": "Facebook",
+            "LINKEDIN": "LinkedIn",
+            "PASSWORDLESS": "Passwordless",
         }
         return labels.get(self.value, self.value)
 

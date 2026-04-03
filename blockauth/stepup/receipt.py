@@ -49,12 +49,12 @@ class ReceiptValidationError(Exception):
 class ReceiptClaims:
     """Decoded and validated receipt claims."""
 
-    subject: str       # sub — user/consumer ID
-    audience: str      # aud — intended consuming service
-    scope: str         # scope — operation class (e.g., "mpc")
-    issued_at: int     # iat — Unix timestamp
-    expires_at: int    # exp — Unix timestamp
-    jti: str           # jti — unique receipt ID
+    subject: str  # sub — user/consumer ID
+    audience: str  # aud — intended consuming service
+    scope: str  # scope — operation class (e.g., "mpc")
+    issued_at: int  # iat — Unix timestamp
+    expires_at: int  # exp — Unix timestamp
+    jti: str  # jti — unique receipt ID
     issuer: Optional[str] = None  # iss — issuing service (optional)
 
 

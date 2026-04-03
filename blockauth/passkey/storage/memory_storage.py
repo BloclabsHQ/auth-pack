@@ -8,13 +8,14 @@ WARNING: This storage is NOT persistent. All data is lost when the
 application restarts. Use only for testing purposes.
 """
 
-from uuid6 import uuid7
-from typing import Optional, List, Any, Dict
 from datetime import datetime
 from threading import Lock
+from typing import Any, Dict, List, Optional
 
-from .base import ICredentialStore, CredentialData
+from uuid6 import uuid7
+
 from ..exceptions import CredentialAlreadyExistsError, CredentialNotFoundError
+from .base import CredentialData, ICredentialStore
 
 
 class MemoryCredentialStore(ICredentialStore):
@@ -31,7 +32,7 @@ class MemoryCredentialStore(ICredentialStore):
         store.clear()
     """
 
-    _instance: Optional['MemoryCredentialStore'] = None
+    _instance: Optional["MemoryCredentialStore"] = None
     _lock = Lock()
 
     def __new__(cls):
@@ -145,7 +146,7 @@ class MemoryCredentialStore(ICredentialStore):
                 raise CredentialNotFoundError(f"Credential not found: {credential_id[:20]}...")
             self._credentials[internal_id].name = name
 
-    def revoke(self, credential_id: str, reason: str = '') -> None:
+    def revoke(self, credential_id: str, reason: str = "") -> None:
         """Revoke a credential"""
         with self._lock:
             internal_id = self._by_credential_id.get(credential_id)

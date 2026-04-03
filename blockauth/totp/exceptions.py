@@ -4,6 +4,7 @@ TOTP 2FA Custom Exceptions.
 Provides specific exception types for TOTP operations
 with error codes for API responses.
 """
+
 from typing import Optional
 
 from .constants import ERROR_MESSAGES, TOTPErrorCodes

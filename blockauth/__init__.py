@@ -25,7 +25,7 @@ Static utilities (no storage needed):
     backup_codes = TOTPService.generate_backup_codes()
 """
 
-default_app_config = 'blockauth.apps.BlockAuthConfig'
+default_app_config = "blockauth.apps.BlockAuthConfig"
 
 # =============================================================================
 # Direct imports (Django-independent, no AppRegistryNotReady errors)
@@ -39,29 +39,26 @@ from blockauth.enums import AuthenticationType
 
 __all__ = [
     # Enums (Django-independent)
-    'AuthenticationType',
-
+    "AuthenticationType",
     # TOTP
-    'TOTPService',
-    'ISecretEncryption',
-    'ITOTP2FAStore',
-    'TOTP2FAData',
-    'TOTPSetupResult',
-    'TOTPVerifyResult',
-
+    "TOTPService",
+    "ISecretEncryption",
+    "ITOTP2FAStore",
+    "TOTP2FAData",
+    "TOTPSetupResult",
+    "TOTPVerifyResult",
     # Passkey
-    'PasskeyService',
-    'ICredentialStore',
-    'CredentialData',
-    'PasskeyRegistrationResult',
-    'PasskeyAuthenticationResult',
-    'ChallengeService',
-
+    "PasskeyService",
+    "ICredentialStore",
+    "CredentialData",
+    "PasskeyRegistrationResult",
+    "PasskeyAuthenticationResult",
+    "ChallengeService",
     # Step-Up Authentication (RFC 9470)
-    'ReceiptIssuer',
-    'ReceiptValidator',
-    'ReceiptClaims',
-    'ReceiptValidationError',
+    "ReceiptIssuer",
+    "ReceiptValidator",
+    "ReceiptClaims",
+    "ReceiptValidationError",
 ]
 
 
@@ -72,57 +69,73 @@ def __getattr__(name):
     This allows 'from blockauth import TOTPService' to work after Django apps are loaded.
     """
     # TOTP components
-    if name == 'TOTPService':
+    if name == "TOTPService":
         from .totp.services.totp_service import TOTPService
+
         return TOTPService
-    if name == 'ISecretEncryption':
+    if name == "ISecretEncryption":
         from .totp.services.totp_service import ISecretEncryption
+
         return ISecretEncryption
-    if name == 'TOTPSetupResult':
+    if name == "TOTPSetupResult":
         from .totp.services.totp_service import SetupResult
+
         return SetupResult
-    if name == 'TOTPVerifyResult':
+    if name == "TOTPVerifyResult":
         from .totp.services.totp_service import VerifyResult
+
         return VerifyResult
-    if name == 'ITOTP2FAStore':
+    if name == "ITOTP2FAStore":
         from .totp.storage.base import ITOTP2FAStore
+
         return ITOTP2FAStore
-    if name == 'TOTP2FAData':
+    if name == "TOTP2FAData":
         from .totp.storage.base import TOTP2FAData
+
         return TOTP2FAData
 
     # Passkey components
-    if name == 'PasskeyService':
+    if name == "PasskeyService":
         from .passkey.services.passkey_service import PasskeyService
+
         return PasskeyService
-    if name == 'PasskeyRegistrationResult':
+    if name == "PasskeyRegistrationResult":
         from .passkey.services.passkey_service import RegistrationResult
+
         return RegistrationResult
-    if name == 'PasskeyAuthenticationResult':
+    if name == "PasskeyAuthenticationResult":
         from .passkey.services.passkey_service import AuthenticationResult
+
         return AuthenticationResult
-    if name == 'ICredentialStore':
+    if name == "ICredentialStore":
         from .passkey.storage.base import ICredentialStore
+
         return ICredentialStore
-    if name == 'CredentialData':
+    if name == "CredentialData":
         from .passkey.storage.base import CredentialData
+
         return CredentialData
-    if name == 'ChallengeService':
+    if name == "ChallengeService":
         from .passkey.services.challenge_service import ChallengeService
+
         return ChallengeService
 
     # Step-Up Authentication components (Django-independent — no lazy loading needed)
-    if name == 'ReceiptIssuer':
+    if name == "ReceiptIssuer":
         from .stepup.receipt import ReceiptIssuer
+
         return ReceiptIssuer
-    if name == 'ReceiptValidator':
+    if name == "ReceiptValidator":
         from .stepup.receipt import ReceiptValidator
+
         return ReceiptValidator
-    if name == 'ReceiptClaims':
+    if name == "ReceiptClaims":
         from .stepup.receipt import ReceiptClaims
+
         return ReceiptClaims
-    if name == 'ReceiptValidationError':
+    if name == "ReceiptValidationError":
         from .stepup.receipt import ReceiptValidationError
+
         return ReceiptValidationError
 
     raise AttributeError(f"module 'blockauth' has no attribute '{name}'")

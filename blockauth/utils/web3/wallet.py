@@ -13,17 +13,18 @@ Author: BlockAuth Team
 License: All Rights Reserved
 """
 
+from eth_account.messages import encode_defunct
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
-from eth_account.messages import encode_defunct
+
 
 class WalletAuthenticator:
     """
     Ethereum Wallet Signature Authenticator
-    
+
     This class provides methods to verify Ethereum wallet signatures.
     It supports standard Ethereum signature verification using the Web3 library.
-    
+
     Example:
         authenticator = WalletAuthenticator()
         is_valid = authenticator.verify_signature(
@@ -32,6 +33,7 @@ class WalletAuthenticator:
             signature="0x1234567890abcdef1234567890abcdef1234567890abcd..."
         )
     """
+
     def __init__(self):
         # Initialize Web3 instance and inject POA middleware for compatibility
         self.w3 = Web3()
@@ -62,7 +64,5 @@ class WalletAuthenticator:
         except ValueError:
             raise Exception("Invalid hex in signature")
         message_encoded = encode_defunct(text=message)
-        recovered_address = self.w3.eth.account.recover_message(
-            message_encoded, signature=signature_bytes
-        )
-        return recovered_address.lower() == address.lower() 
+        recovered_address = self.w3.eth.account.recover_message(message_encoded, signature=signature_bytes)
+        return recovered_address.lower() == address.lower()

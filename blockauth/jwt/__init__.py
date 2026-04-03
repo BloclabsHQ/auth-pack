@@ -8,4 +8,4 @@ through a provider interface system.
 from .interfaces import CustomClaimsProvider
 from .token_manager import JWTTokenManager, jwt_manager
 
-__all__ = ['CustomClaimsProvider', 'JWTTokenManager', 'jwt_manager']
+__all__ = ["CustomClaimsProvider", "JWTTokenManager", "jwt_manager"]

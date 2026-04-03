@@ -9,7 +9,7 @@ from .django_storage import DjangoCredentialStore
 from .memory_storage import MemoryCredentialStore
 
 __all__ = [
-    'ICredentialStore',
-    'DjangoCredentialStore',
-    'MemoryCredentialStore',
+    "ICredentialStore",
+    "DjangoCredentialStore",
+    "MemoryCredentialStore",
 ]

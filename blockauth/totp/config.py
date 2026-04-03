@@ -6,16 +6,12 @@ with Django settings integration.
 
 Configuration is read from BLOCK_AUTH_SETTINGS["TOTP_CONFIG"].
 """
+
 from dataclasses import dataclass, field
 from typing import Optional
 
 from ..settings import blockauth_settings
-from .constants import (
-    DEFAULTS,
-    TOTP_CONFIG_KEY,
-    TOTPAlgorithm,
-    TOTPConfigKeys,
-)
+from .constants import DEFAULTS, TOTP_CONFIG_KEY, TOTPAlgorithm, TOTPConfigKeys
 
 
 @dataclass
@@ -127,9 +123,7 @@ def _load_config_from_settings() -> TOTPConfiguration:
             TOTPConfigKeys.BACKUP_CODE_LENGTH, DEFAULTS[TOTPConfigKeys.BACKUP_CODE_LENGTH]
         ),
         max_attempts=totp_config.get(TOTPConfigKeys.MAX_ATTEMPTS, DEFAULTS[TOTPConfigKeys.MAX_ATTEMPTS]),
-        lockout_duration=totp_config.get(
-            TOTPConfigKeys.LOCKOUT_DURATION, DEFAULTS[TOTPConfigKeys.LOCKOUT_DURATION]
-        ),
+        lockout_duration=totp_config.get(TOTPConfigKeys.LOCKOUT_DURATION, DEFAULTS[TOTPConfigKeys.LOCKOUT_DURATION]),
         require_confirmation=totp_config.get(
             TOTPConfigKeys.REQUIRE_CONFIRMATION, DEFAULTS[TOTPConfigKeys.REQUIRE_CONFIRMATION]
         ),

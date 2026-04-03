@@ -54,24 +54,20 @@ Usage:
 from .constants import KDFFeatures
 
 # Only expose constants and utility functions
-__all__ = [
-    'KDFFeatures',
-    'is_enabled',
-    'get_kdf_manager',
-    'get_multiple_wallet_service'
-]
+__all__ = ["KDFFeatures", "is_enabled", "get_kdf_manager", "get_multiple_wallet_service"]
 
 
 def is_enabled():
     """
     Check if KDF is enabled in the current project
-    
+
     Returns:
         bool: True if KDF is enabled, False otherwise
     """
     try:
         from django.conf import settings
-        return getattr(settings, 'BLOCK_AUTH_SETTINGS', {}).get('KDF_ENABLED', False)
+
+        return getattr(settings, "BLOCK_AUTH_SETTINGS", {}).get("KDF_ENABLED", False)
     except ImportError:
         # Not in Django context
         return False
@@ -80,40 +76,40 @@ def is_enabled():
 def get_kdf_manager():
     """
     Get the main KDF manager (RECOMMENDED)
-    
+
     Returns:
         KDFManager: Configured KDF manager with dual encryption
-        
+
     Raises:
         ImportError: If KDF is not enabled
     """
     if not is_enabled():
         raise ImportError(
-            "KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS "
-            "to use KDF functionality."
+            "KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS " "to use KDF functionality."
         )
-    
+
     # Lazy import to avoid loading when not needed
     from .services import KDFManager
+
     return KDFManager()
 
 
 def get_multiple_wallet_service():
     """
     Get the multiple wallet service (for multiple wallets per user)
-    
+
     Returns:
         MultipleWalletService: Configured service for multiple wallet management
-        
+
     Raises:
         ImportError: If KDF is not enabled
     """
     if not is_enabled():
         raise ImportError(
-            "KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS "
-            "to use KDF functionality."
+            "KDF is not enabled. Set KDF_ENABLED=True in BLOCK_AUTH_SETTINGS " "to use KDF functionality."
         )
-    
+
     # Lazy import to avoid loading when not needed
     from .services import MultipleWalletService
+
     return MultipleWalletService()

@@ -14,6 +14,7 @@ Configuration:
         }
     }
 """
+
 import base64
 import logging
 from typing import Optional
@@ -23,6 +24,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from blockauth.utils.logger import blockauth_logger
+
 from .totp_service import ISecretEncryption
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class FernetSecretEncryption(ISecretEncryption):
     """
 
     # Salt for key derivation (static but adds entropy)
-    _SALT = b'blockauth-totp-encryption-v1'
+    _SALT = b"blockauth-totp-encryption-v1"
 
     def __init__(self, master_key: str):
         """
@@ -117,13 +119,10 @@ class FernetSecretEncryption(ISecretEncryption):
             raise ValueError("Cannot encrypt empty secret")
 
         try:
-            encrypted_bytes = self._fernet.encrypt(plaintext.encode('utf-8'))
-            return encrypted_bytes.decode('utf-8')
+            encrypted_bytes = self._fernet.encrypt(plaintext.encode("utf-8"))
+            return encrypted_bytes.decode("utf-8")
         except Exception as e:
-            blockauth_logger.error(
-                "TOTP secret encryption failed",
-                {"error": str(e)[:100]}
-            )
+            blockauth_logger.error("TOTP secret encryption failed", {"error": str(e)[:100]})
             raise ValueError(f"Encryption failed: {e}")
 
     def decrypt(self, ciphertext: str) -> str:
@@ -143,18 +142,13 @@ class FernetSecretEncryption(ISecretEncryption):
             raise ValueError("Cannot decrypt empty ciphertext")
 
         try:
-            decrypted_bytes = self._fernet.decrypt(ciphertext.encode('utf-8'))
-            return decrypted_bytes.decode('utf-8')
+            decrypted_bytes = self._fernet.decrypt(ciphertext.encode("utf-8"))
+            return decrypted_bytes.decode("utf-8")
         except InvalidToken:
-            blockauth_logger.error(
-                "TOTP secret decryption failed - invalid token (wrong key or corrupted data)"
-            )
+            blockauth_logger.error("TOTP secret decryption failed - invalid token (wrong key or corrupted data)")
             raise ValueError("Decryption failed: invalid token")
         except Exception as e:
-            blockauth_logger.error(
-                "TOTP secret decryption failed",
-                {"error": str(e)[:100]}
-            )
+            blockauth_logger.error("TOTP secret decryption failed", {"error": str(e)[:100]})
             raise ValueError(f"Decryption failed: {e}")
 
 
@@ -193,6 +187,7 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
         ValueError: If key is configured but invalid
     """
     from blockauth.settings import blockauth_settings
+
     from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
 
     # Get TOTP_CONFIG object
@@ -201,9 +196,7 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
 
     if not encryption_key:
         if raise_if_missing:
-            blockauth_logger.error(
-                "SECURITY: TOTP_CONFIG.ENCRYPTION_KEY not configured - TOTP cannot be used safely"
-            )
+            blockauth_logger.error("SECURITY: TOTP_CONFIG.ENCRYPTION_KEY not configured - TOTP cannot be used safely")
             raise TOTPEncryptionNotConfiguredError()
         return None
 
@@ -230,8 +223,9 @@ def validate_totp_encryption_config() -> bool:
                 from blockauth.totp.services.encryption import validate_totp_encryption_config
                 validate_totp_encryption_config()
     """
-    from blockauth.totp import is_enabled
     from blockauth.settings import blockauth_settings
+    from blockauth.totp import is_enabled
+
     from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
 
     # Check if TOTP is enabled (via FEATURES["TOTP_2FA"])

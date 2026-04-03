@@ -39,7 +39,6 @@ from typing import List
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
-
 # =============================================================================
 # PASSWORD VALIDATION CONSTANTS
 # =============================================================================
@@ -58,6 +57,7 @@ PASSWORD_VALIDATION_ERROR = (
 # =============================================================================
 # PASSWORD VALIDATION FUNCTIONS
 # =============================================================================
+
 
 def validate_password(password: str) -> List[str]:
     """
@@ -114,6 +114,7 @@ def is_valid_password(password: str) -> bool:
 # DJANGO PASSWORD VALIDATOR CLASS
 # =============================================================================
 
+
 class FabricBlocPasswordValidator:
     """
     Django password validator implementing FabricBloc requirements.
@@ -164,6 +165,7 @@ PASSWORD_REGEX_PATTERN = (
 # PHONE NUMBER VALIDATION
 # =============================================================================
 
+
 def is_valid_phone_number(phone: str) -> bool:
     """
     Validate international phone number format.
@@ -189,5 +191,3 @@ def is_valid_phone_number(phone: str) -> bool:
 
     # Only international phone numbers are allowed
     return phone.startswith("+") and 11 <= len(phone) <= 15
-
-

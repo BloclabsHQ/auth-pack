@@ -17,8 +17,8 @@ Configuration Pattern:
         },
     }
 """
-from enum import Enum
 
+from enum import Enum
 
 # Feature flag name (in FEATURES dict)
 TOTP_FEATURE_FLAG = "TOTP_2FA"
@@ -111,7 +111,7 @@ class TOTPStatus(str, Enum):
 class TOTPAlgorithm(str, Enum):
     """Supported TOTP hash algorithms (RFC 6238)."""
 
-    SHA1 = "sha1"      # Default, most compatible
+    SHA1 = "sha1"  # Default, most compatible
     SHA256 = "sha256"  # More secure, less compatible
     SHA512 = "sha512"  # Most secure, least compatible
 

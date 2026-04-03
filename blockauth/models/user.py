@@ -1,13 +1,9 @@
-import json
-
-from uuid6 import uuid7
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.db import models
-from django.core.serializers.json import DjangoJSONEncoder
+from uuid6 import uuid7
 
 # Import from enums module (Django-independent) for backwards compatibility
-from blockauth.enums import AuthenticationType
 
 
 class BlockUser(AbstractBaseUser):
@@ -19,19 +15,22 @@ class BlockUser(AbstractBaseUser):
     Inherit this model in your project's User model to become compitable
     with this app functionalities.
     """
+
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     email = models.EmailField(unique=True, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
-    wallet_address = models.CharField(max_length=42, blank=True, null=True, unique=True, help_text="Ethereum wallet address")
+    wallet_address = models.CharField(
+        max_length=42, blank=True, null=True, unique=True, help_text="Ethereum wallet address"
+    )
     is_verified = models.BooleanField(default=False)
     authentication_types = models.JSONField(
-        default=list, 
+        default=list,
         blank=True,
-        help_text="List of authentication methods used by this user (e.g., ['EMAIL', 'WALLET'])"
+        help_text="List of authentication methods used by this user (e.g., ['EMAIL', 'WALLET'])",
     )
     username = None
 
-    USERNAME_FIELD = 'id'
+    USERNAME_FIELD = "id"
     REQUIRED_FIELDS = []
 
     class Meta:
@@ -45,10 +44,10 @@ class BlockUser(AbstractBaseUser):
         """
         if not isinstance(self.authentication_types, list):
             self.authentication_types = []
-        
+
         if auth_type not in self.authentication_types:
             self.authentication_types.append(auth_type)
-            self.save(update_fields=['authentication_types'])
+            self.save(update_fields=["authentication_types"])
 
     def remove_authentication_type(self, auth_type: str):
         """
@@ -56,7 +55,7 @@ class BlockUser(AbstractBaseUser):
         """
         if isinstance(self.authentication_types, list) and auth_type in self.authentication_types:
             self.authentication_types.remove(auth_type)
-            self.save(update_fields=['authentication_types'])
+            self.save(update_fields=["authentication_types"])
 
     def has_authentication_type(self, auth_type: str) -> bool:
         """

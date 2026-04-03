@@ -11,47 +11,40 @@ This module tests all Passkey functionality including:
 """
 
 import unittest
-from unittest.mock import patch, MagicMock, PropertyMock
-from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, RequestFactory, override_settings
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase
 from rest_framework import status
-from rest_framework.test import APITestCase
 
 from ..constants import (
-    PasskeyConfigKeys,
     AttestationConveyance,
     AuthenticatorAttachment,
+    AuthenticatorTransport,
+    COSEAlgorithm,
+    PasskeyConfigKeys,
+    PasskeyErrorCodes,
     ResidentKeyRequirement,
     UserVerificationRequirement,
-    COSEAlgorithm,
-    AuthenticatorTransport,
-    PasskeyFeatureFlags,
-    PasskeyErrorCodes,
 )
 from ..exceptions import (
-    PasskeyError,
-    PasskeyNotEnabledError,
-    ChallengeExpiredError,
+    AttestationVerificationError,
     ChallengeAlreadyUsedError,
-    InvalidOriginError,
-    InvalidRpIdError,
+    ChallengeExpiredError,
+    ConfigurationError,
+    CounterRegressionError,
     CredentialNotFoundError,
     CredentialRevokedError,
-    CounterRegressionError,
-    SignatureVerificationError,
-    MaxCredentialsReachedError,
-    AttestationVerificationError,
-    RateLimitExceededError,
     InvalidCredentialDataError,
-    ConfigurationError,
+    InvalidOriginError,
+    InvalidRpIdError,
+    MaxCredentialsReachedError,
+    PasskeyError,
+    PasskeyNotEnabledError,
+    RateLimitExceededError,
+    SignatureVerificationError,
 )
-from ..views import (
-    PasskeySubject,
-    GENERIC_AUTH_ERROR,
-    GENERIC_PASSKEY_ERROR,
-)
+from ..views import GENERIC_AUTH_ERROR, GENERIC_PASSKEY_ERROR, PasskeySubject
 
 
 class TestPasskeyConstants(unittest.TestCase):
@@ -59,35 +52,35 @@ class TestPasskeyConstants(unittest.TestCase):
 
     def test_config_keys_exist(self):
         """Test that all config keys are defined"""
-        self.assertEqual(PasskeyConfigKeys.RP_ID, 'PASSKEY_RP_ID')
-        self.assertEqual(PasskeyConfigKeys.RP_NAME, 'PASSKEY_RP_NAME')
-        self.assertEqual(PasskeyConfigKeys.ALLOWED_ORIGINS, 'PASSKEY_ALLOWED_ORIGINS')
-        self.assertEqual(PasskeyConfigKeys.ATTESTATION, 'PASSKEY_ATTESTATION')
-        self.assertEqual(PasskeyConfigKeys.USER_VERIFICATION, 'PASSKEY_USER_VERIFICATION')
+        self.assertEqual(PasskeyConfigKeys.RP_ID, "PASSKEY_RP_ID")
+        self.assertEqual(PasskeyConfigKeys.RP_NAME, "PASSKEY_RP_NAME")
+        self.assertEqual(PasskeyConfigKeys.ALLOWED_ORIGINS, "PASSKEY_ALLOWED_ORIGINS")
+        self.assertEqual(PasskeyConfigKeys.ATTESTATION, "PASSKEY_ATTESTATION")
+        self.assertEqual(PasskeyConfigKeys.USER_VERIFICATION, "PASSKEY_USER_VERIFICATION")
 
     def test_attestation_conveyance_values(self):
         """Test attestation conveyance enum values"""
-        self.assertEqual(AttestationConveyance.NONE, 'none')
-        self.assertEqual(AttestationConveyance.INDIRECT, 'indirect')
-        self.assertEqual(AttestationConveyance.DIRECT, 'direct')
-        self.assertEqual(AttestationConveyance.ENTERPRISE, 'enterprise')
+        self.assertEqual(AttestationConveyance.NONE, "none")
+        self.assertEqual(AttestationConveyance.INDIRECT, "indirect")
+        self.assertEqual(AttestationConveyance.DIRECT, "direct")
+        self.assertEqual(AttestationConveyance.ENTERPRISE, "enterprise")
 
     def test_authenticator_attachment_values(self):
         """Test authenticator attachment enum values"""
-        self.assertEqual(AuthenticatorAttachment.PLATFORM, 'platform')
-        self.assertEqual(AuthenticatorAttachment.CROSS_PLATFORM, 'cross-platform')
+        self.assertEqual(AuthenticatorAttachment.PLATFORM, "platform")
+        self.assertEqual(AuthenticatorAttachment.CROSS_PLATFORM, "cross-platform")
 
     def test_resident_key_requirement_values(self):
         """Test resident key requirement enum values"""
-        self.assertEqual(ResidentKeyRequirement.DISCOURAGED, 'discouraged')
-        self.assertEqual(ResidentKeyRequirement.PREFERRED, 'preferred')
-        self.assertEqual(ResidentKeyRequirement.REQUIRED, 'required')
+        self.assertEqual(ResidentKeyRequirement.DISCOURAGED, "discouraged")
+        self.assertEqual(ResidentKeyRequirement.PREFERRED, "preferred")
+        self.assertEqual(ResidentKeyRequirement.REQUIRED, "required")
 
     def test_user_verification_requirement_values(self):
         """Test user verification requirement enum values"""
-        self.assertEqual(UserVerificationRequirement.DISCOURAGED, 'discouraged')
-        self.assertEqual(UserVerificationRequirement.PREFERRED, 'preferred')
-        self.assertEqual(UserVerificationRequirement.REQUIRED, 'required')
+        self.assertEqual(UserVerificationRequirement.DISCOURAGED, "discouraged")
+        self.assertEqual(UserVerificationRequirement.PREFERRED, "preferred")
+        self.assertEqual(UserVerificationRequirement.REQUIRED, "required")
 
     def test_cose_algorithm_values(self):
         """Test COSE algorithm values"""
@@ -96,11 +89,11 @@ class TestPasskeyConstants(unittest.TestCase):
 
     def test_authenticator_transport_values(self):
         """Test authenticator transport enum values"""
-        self.assertEqual(AuthenticatorTransport.USB, 'usb')
-        self.assertEqual(AuthenticatorTransport.NFC, 'nfc')
-        self.assertEqual(AuthenticatorTransport.BLE, 'ble')
-        self.assertEqual(AuthenticatorTransport.INTERNAL, 'internal')
-        self.assertEqual(AuthenticatorTransport.HYBRID, 'hybrid')
+        self.assertEqual(AuthenticatorTransport.USB, "usb")
+        self.assertEqual(AuthenticatorTransport.NFC, "nfc")
+        self.assertEqual(AuthenticatorTransport.BLE, "ble")
+        self.assertEqual(AuthenticatorTransport.INTERNAL, "internal")
+        self.assertEqual(AuthenticatorTransport.HYBRID, "hybrid")
 
     def test_error_codes_exist(self):
         """Test that error codes are defined"""
@@ -117,52 +110,52 @@ class TestPasskeyExceptions(unittest.TestCase):
     def test_base_passkey_error(self):
         """Test base PasskeyError class"""
         error = PasskeyError()
-        self.assertEqual(error.error_code, 'PASSKEY_000')
-        self.assertEqual(error.message, 'An error occurred during passkey operation')
+        self.assertEqual(error.error_code, "PASSKEY_000")
+        self.assertEqual(error.message, "An error occurred during passkey operation")
         self.assertEqual(error.details, {})
 
     def test_passkey_error_custom_message(self):
         """Test PasskeyError with custom message"""
-        error = PasskeyError(message='Custom error message')
-        self.assertEqual(error.message, 'Custom error message')
+        error = PasskeyError(message="Custom error message")
+        self.assertEqual(error.message, "Custom error message")
 
     def test_passkey_error_with_details(self):
         """Test PasskeyError with details"""
-        error = PasskeyError(details={'key': 'value'})
-        self.assertEqual(error.details, {'key': 'value'})
+        error = PasskeyError(details={"key": "value"})
+        self.assertEqual(error.details, {"key": "value"})
 
     def test_passkey_error_to_dict(self):
         """Test PasskeyError to_dict method"""
-        error = PasskeyError(message='Test error', details={'foo': 'bar'})
+        error = PasskeyError(message="Test error", details={"foo": "bar"})
         result = error.to_dict()
 
-        self.assertEqual(result['error_code'], 'PASSKEY_000')
-        self.assertEqual(result['message'], 'Test error')
-        self.assertEqual(result['details'], {'foo': 'bar'})
+        self.assertEqual(result["error_code"], "PASSKEY_000")
+        self.assertEqual(result["message"], "Test error")
+        self.assertEqual(result["details"], {"foo": "bar"})
 
     def test_passkey_not_enabled_error(self):
         """Test PasskeyNotEnabledError"""
         error = PasskeyNotEnabledError()
         self.assertEqual(error.error_code, PasskeyErrorCodes.NOT_ENABLED)
-        self.assertIn('FEATURES.PASSKEY_AUTH', error.default_message)
+        self.assertIn("FEATURES.PASSKEY_AUTH", error.default_message)
 
     def test_challenge_expired_error(self):
         """Test ChallengeExpiredError"""
         error = ChallengeExpiredError()
         self.assertEqual(error.error_code, PasskeyErrorCodes.CHALLENGE_EXPIRED)
-        self.assertIn('expired', error.message.lower())
+        self.assertIn("expired", error.message.lower())
 
     def test_challenge_already_used_error(self):
         """Test ChallengeAlreadyUsedError"""
         error = ChallengeAlreadyUsedError()
         self.assertEqual(error.error_code, PasskeyErrorCodes.CHALLENGE_ALREADY_USED)
-        self.assertIn('already', error.message.lower())
+        self.assertIn("already", error.message.lower())
 
     def test_invalid_origin_error(self):
         """Test InvalidOriginError"""
         error = InvalidOriginError()
         self.assertEqual(error.error_code, PasskeyErrorCodes.INVALID_ORIGIN)
-        self.assertIn('origin', error.message.lower())
+        self.assertIn("origin", error.message.lower())
 
     def test_invalid_rp_id_error(self):
         """Test InvalidRpIdError"""
@@ -183,7 +176,7 @@ class TestPasskeyExceptions(unittest.TestCase):
         """Test CounterRegressionError"""
         error = CounterRegressionError()
         self.assertEqual(error.error_code, PasskeyErrorCodes.COUNTER_REGRESSION)
-        self.assertIn('counter', error.message.lower())
+        self.assertIn("counter", error.message.lower())
 
     def test_signature_verification_error(self):
         """Test SignatureVerificationError"""
@@ -213,7 +206,7 @@ class TestPasskeyExceptions(unittest.TestCase):
     def test_configuration_error(self):
         """Test ConfigurationError"""
         error = ConfigurationError()
-        self.assertEqual(error.error_code, 'PASSKEY_CONFIG')
+        self.assertEqual(error.error_code, "PASSKEY_CONFIG")
 
 
 class TestPasskeySubjects(unittest.TestCase):
@@ -221,11 +214,11 @@ class TestPasskeySubjects(unittest.TestCase):
 
     def test_all_subjects_defined(self):
         """Test that all rate limiting subjects are defined"""
-        self.assertEqual(PasskeySubject.REGISTER_OPTIONS, 'passkey_register_options')
-        self.assertEqual(PasskeySubject.REGISTER_VERIFY, 'passkey_register_verify')
-        self.assertEqual(PasskeySubject.AUTH_OPTIONS, 'passkey_auth_options')
-        self.assertEqual(PasskeySubject.AUTH_VERIFY, 'passkey_auth_verify')
-        self.assertEqual(PasskeySubject.CREDENTIALS, 'passkey_credentials')
+        self.assertEqual(PasskeySubject.REGISTER_OPTIONS, "passkey_register_options")
+        self.assertEqual(PasskeySubject.REGISTER_VERIFY, "passkey_register_verify")
+        self.assertEqual(PasskeySubject.AUTH_OPTIONS, "passkey_auth_options")
+        self.assertEqual(PasskeySubject.AUTH_VERIFY, "passkey_auth_verify")
+        self.assertEqual(PasskeySubject.CREDENTIALS, "passkey_credentials")
 
 
 class TestGenericErrorMessages(unittest.TestCase):
@@ -233,39 +226,39 @@ class TestGenericErrorMessages(unittest.TestCase):
 
     def test_generic_auth_error(self):
         """Test generic authentication error message"""
-        self.assertEqual(GENERIC_AUTH_ERROR['error_code'], 'AUTH_FAILED')
-        self.assertEqual(GENERIC_AUTH_ERROR['message'], 'Authentication failed.')
+        self.assertEqual(GENERIC_AUTH_ERROR["error_code"], "AUTH_FAILED")
+        self.assertEqual(GENERIC_AUTH_ERROR["message"], "Authentication failed.")
 
     def test_generic_passkey_error(self):
         """Test generic passkey error message"""
-        self.assertEqual(GENERIC_PASSKEY_ERROR['error_code'], 'PASSKEY_ERROR')
-        self.assertEqual(GENERIC_PASSKEY_ERROR['message'], 'An error occurred. Please try again.')
+        self.assertEqual(GENERIC_PASSKEY_ERROR["error_code"], "PASSKEY_ERROR")
+        self.assertEqual(GENERIC_PASSKEY_ERROR["message"], "An error occurred. Please try again.")
 
 
 class TestIsEnabled(unittest.TestCase):
     """Test is_enabled() function"""
 
-    @patch('blockauth.passkey.get_config')
+    @patch("blockauth.passkey.get_config")
     def test_is_enabled_when_true(self, mock_get_config):
         """Test is_enabled returns True when feature is enabled"""
         from blockauth.passkey import is_enabled
 
-        mock_get_config.return_value = {'PASSKEY_AUTH': True}
+        mock_get_config.return_value = {"PASSKEY_AUTH": True}
 
         result = is_enabled()
         self.assertTrue(result)
 
-    @patch('blockauth.passkey.get_config')
+    @patch("blockauth.passkey.get_config")
     def test_is_enabled_when_false(self, mock_get_config):
         """Test is_enabled returns False when feature is disabled"""
         from blockauth.passkey import is_enabled
 
-        mock_get_config.return_value = {'PASSKEY_AUTH': False}
+        mock_get_config.return_value = {"PASSKEY_AUTH": False}
 
         result = is_enabled()
         self.assertFalse(result)
 
-    @patch('blockauth.passkey.get_config')
+    @patch("blockauth.passkey.get_config")
     def test_is_enabled_when_not_set(self, mock_get_config):
         """Test is_enabled returns False when feature is not set"""
         from blockauth.passkey import is_enabled
@@ -279,7 +272,7 @@ class TestIsEnabled(unittest.TestCase):
         """Test is_enabled returns False on import error"""
         from blockauth.passkey import is_enabled
 
-        with patch('blockauth.passkey.get_config', side_effect=ImportError):
+        with patch("blockauth.passkey.get_config", side_effect=ImportError):
             result = is_enabled()
             self.assertFalse(result)
 
@@ -291,13 +284,10 @@ class TestPasskeyViews(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="test@example.com", password="testpass123")
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_registration_options_requires_auth(self, mock_service, mock_is_enabled):
         """Test that registration options endpoint requires authentication"""
         from ..views import PasskeyRegistrationOptionsView
@@ -305,14 +295,14 @@ class TestPasskeyViews(TestCase):
         mock_is_enabled.return_value = True
 
         view = PasskeyRegistrationOptionsView.as_view()
-        request = self.factory.post('/auth/passkey/register/options/')
+        request = self.factory.post("/auth/passkey/register/options/")
         request.user = MagicMock(is_authenticated=False)
 
         # Without authentication, should return 401 or 403
         response = view(request)
         self.assertIn(response.status_code, [401, 403])
 
-    @patch('blockauth.passkey.views.is_enabled')
+    @patch("blockauth.passkey.views.is_enabled")
     def test_passkey_not_enabled_error(self, mock_is_enabled):
         """Test error when passkey is not enabled"""
         from ..views import PasskeyRegistrationOptionsView
@@ -320,18 +310,18 @@ class TestPasskeyViews(TestCase):
         mock_is_enabled.return_value = False
 
         view = PasskeyRegistrationOptionsView.as_view()
-        request = self.factory.post('/auth/passkey/register/options/')
+        request = self.factory.post("/auth/passkey/register/options/")
         request.user = self.user
         request.data = {}
-        request.META = {'REMOTE_ADDR': '127.0.0.1'}
+        request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
         response = view(request)
 
         # Should return error when passkey not enabled
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_auth_options_is_public(self, mock_service_class, mock_is_enabled):
         """Test that authentication options endpoint is public"""
         from ..views import PasskeyAuthenticationOptionsView
@@ -339,21 +329,17 @@ class TestPasskeyViews(TestCase):
         mock_is_enabled.return_value = True
         mock_service = MagicMock()
         mock_service.generate_authentication_options.return_value = {
-            'challenge': 'test_challenge',
-            'rpId': 'localhost',
-            'allowCredentials': [],
-            'userVerification': 'required',
+            "challenge": "test_challenge",
+            "rpId": "localhost",
+            "allowCredentials": [],
+            "userVerification": "required",
         }
         mock_service_class.return_value = mock_service
 
         view = PasskeyAuthenticationOptionsView.as_view()
-        request = self.factory.post(
-            '/auth/passkey/auth/options/',
-            data={},
-            content_type='application/json'
-        )
+        request = self.factory.post("/auth/passkey/auth/options/", data={}, content_type="application/json")
         request.data = {}
-        request.META = {'REMOTE_ADDR': '127.0.0.1'}
+        request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
         response = view(request)
 
@@ -368,36 +354,33 @@ class TestRateLimiting(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='ratelimit@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="ratelimit@example.com", password="testpass123")
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_rate_limit_handler_exists(self, mock_service, mock_is_enabled):
         """Test that rate limit handler is defined on views"""
         from ..views import (
-            PasskeyRegistrationOptionsView,
-            PasskeyRegistrationVerifyView,
             PasskeyAuthenticationOptionsView,
             PasskeyAuthenticationVerifyView,
-            PasskeyCredentialListView,
             PasskeyCredentialDetailView,
+            PasskeyCredentialListView,
+            PasskeyRegistrationOptionsView,
+            PasskeyRegistrationVerifyView,
         )
 
         # All views should have rate_limit_handler
-        self.assertTrue(hasattr(PasskeyRegistrationOptionsView, 'rate_limit_handler'))
-        self.assertTrue(hasattr(PasskeyRegistrationVerifyView, 'rate_limit_handler'))
-        self.assertTrue(hasattr(PasskeyAuthenticationOptionsView, 'rate_limit_handler'))
-        self.assertTrue(hasattr(PasskeyAuthenticationVerifyView, 'rate_limit_handler'))
-        self.assertTrue(hasattr(PasskeyCredentialListView, 'rate_limit_handler'))
-        self.assertTrue(hasattr(PasskeyCredentialDetailView, 'rate_limit_handler'))
+        self.assertTrue(hasattr(PasskeyRegistrationOptionsView, "rate_limit_handler"))
+        self.assertTrue(hasattr(PasskeyRegistrationVerifyView, "rate_limit_handler"))
+        self.assertTrue(hasattr(PasskeyAuthenticationOptionsView, "rate_limit_handler"))
+        self.assertTrue(hasattr(PasskeyAuthenticationVerifyView, "rate_limit_handler"))
+        self.assertTrue(hasattr(PasskeyCredentialListView, "rate_limit_handler"))
+        self.assertTrue(hasattr(PasskeyCredentialDetailView, "rate_limit_handler"))
 
     def test_rate_limit_response_format(self):
         """Test rate limit response format"""
         # Rate limit response should have specific format
-        expected_error_code = 'RATE_LIMIT'
+        expected_error_code = "RATE_LIMIT"
         expected_status = status.HTTP_429_TOO_MANY_REQUESTS
 
         # Verify the status code constant
@@ -411,13 +394,10 @@ class TestViewErrorHandling(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='error@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="error@example.com", password="testpass123")
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_max_credentials_returns_generic_error(self, mock_service_class, mock_is_enabled):
         """Test that MaxCredentialsReachedError returns generic error"""
         from ..views import PasskeyRegistrationOptionsView
@@ -428,20 +408,20 @@ class TestViewErrorHandling(TestCase):
         mock_service_class.return_value = mock_service
 
         view = PasskeyRegistrationOptionsView.as_view()
-        request = self.factory.post('/auth/passkey/register/options/')
+        request = self.factory.post("/auth/passkey/register/options/")
         request.user = self.user
         request.data = {}
-        request.META = {'REMOTE_ADDR': '127.0.0.1'}
+        request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
         response = view(request)
 
         # Should return generic error, not specific error
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error_code'], 'PASSKEY_ERROR')
-        self.assertNotIn('max', response.data['message'].lower())
+        self.assertEqual(response.data["error_code"], "PASSKEY_ERROR")
+        self.assertNotIn("max", response.data["message"].lower())
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_credential_not_found_returns_generic_auth_error(self, mock_service_class, mock_is_enabled):
         """Test that CredentialNotFoundError returns generic auth error"""
         from ..views import PasskeyAuthenticationVerifyView
@@ -452,16 +432,16 @@ class TestViewErrorHandling(TestCase):
         mock_service_class.return_value = mock_service
 
         view = PasskeyAuthenticationVerifyView.as_view()
-        request = self.factory.post('/auth/passkey/auth/verify/')
-        request.data = {'id': 'test', 'rawId': 'test', 'type': 'public-key', 'response': {}}
-        request.META = {'REMOTE_ADDR': '127.0.0.1'}
+        request = self.factory.post("/auth/passkey/auth/verify/")
+        request.data = {"id": "test", "rawId": "test", "type": "public-key", "response": {}}
+        request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
         response = view(request)
 
         # Should return generic auth error to prevent enumeration
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data['error_code'], 'AUTH_FAILED')
-        self.assertEqual(response.data['message'], 'Authentication failed.')
+        self.assertEqual(response.data["error_code"], "AUTH_FAILED")
+        self.assertEqual(response.data["message"], "Authentication failed.")
 
 
 class TestCredentialManagement(TestCase):
@@ -471,13 +451,10 @@ class TestCredentialManagement(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(
-            email='cred@example.com',
-            password='testpass123'
-        )
+        self.user = User.objects.create_user(email="cred@example.com", password="testpass123")
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_list_credentials_requires_auth(self, mock_service, mock_is_enabled):
         """Test that listing credentials requires authentication"""
         from ..views import PasskeyCredentialListView
@@ -485,14 +462,14 @@ class TestCredentialManagement(TestCase):
         mock_is_enabled.return_value = True
 
         view = PasskeyCredentialListView.as_view()
-        request = self.factory.get('/auth/passkey/credentials/')
+        request = self.factory.get("/auth/passkey/credentials/")
         request.user = MagicMock(is_authenticated=False)
 
         response = view(request)
         self.assertIn(response.status_code, [401, 403])
 
-    @patch('blockauth.passkey.views.is_enabled')
-    @patch('blockauth.passkey.views.PasskeyService')
+    @patch("blockauth.passkey.views.is_enabled")
+    @patch("blockauth.passkey.views.PasskeyService")
     def test_delete_credential_requires_auth(self, mock_service, mock_is_enabled):
         """Test that deleting credentials requires authentication"""
         from ..views import PasskeyCredentialDetailView
@@ -500,12 +477,12 @@ class TestCredentialManagement(TestCase):
         mock_is_enabled.return_value = True
 
         view = PasskeyCredentialDetailView.as_view()
-        request = self.factory.delete('/auth/passkey/credentials/123/')
+        request = self.factory.delete("/auth/passkey/credentials/123/")
         request.user = MagicMock(is_authenticated=False)
 
-        response = view(request, credential_id='123')
+        response = view(request, credential_id="123")
         self.assertIn(response.status_code, [401, 403])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

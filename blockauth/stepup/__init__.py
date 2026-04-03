@@ -38,7 +38,7 @@ Usage (consumer side — e.g., wallet service, any language):
     # Go / other languages: standard HS256 JWT validation with claims check.
 """
 
-from .receipt import ReceiptIssuer, ReceiptValidator, ReceiptClaims, ReceiptValidationError
+from .receipt import ReceiptClaims, ReceiptIssuer, ReceiptValidationError, ReceiptValidator
 
 __all__ = [
     "ReceiptIssuer",

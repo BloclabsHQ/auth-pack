@@ -61,16 +61,9 @@ Startup Validation (recommended in Django AppConfig):
     from blockauth.totp.services import validate_totp_encryption_config
     validate_totp_encryption_config()  # Raises if misconfigured
 """
-from typing import Optional
 
-from .constants import (
-    DEFAULTS,
-    TOTP_CONFIG_KEY,
-    TOTP_FEATURE_FLAG,
-    TOTPAlgorithm,
-    TOTPConfigKeys,
-    TOTPStatus,
-)
+
+from .constants import DEFAULTS, TOTP_CONFIG_KEY, TOTP_FEATURE_FLAG, TOTPAlgorithm, TOTPConfigKeys, TOTPStatus
 
 
 def is_enabled() -> bool:
@@ -83,8 +76,8 @@ def is_enabled() -> bool:
         True if TOTP module is enabled, False otherwise
     """
     try:
-        from blockauth.utils.config import get_config
         from blockauth.constants import ConfigKeys
+        from blockauth.utils.config import get_config
 
         features = get_config(ConfigKeys.FEATURES)
         return features.get(TOTP_FEATURE_FLAG, False)
@@ -101,10 +94,11 @@ def get_totp_config():
         TOTPConfiguration: Configuration object with all settings
     """
     from .config import get_totp_config as _get_config
+
     return _get_config()
 
 
-def get_totp_service(encryption_service=None) -> 'TOTPService':
+def get_totp_service(encryption_service=None) -> "TOTPService":
     """
     Get a configured TOTP service instance.
 
@@ -132,26 +126,20 @@ def get_totp_service(encryption_service=None) -> 'TOTPService':
     if encryption_service is None:
         encryption_service = get_encryption_service()
 
-    return TOTPService(
-        store=store,
-        config=config,
-        encryption_service=encryption_service
-    )
+    return TOTPService(store=store, config=config, encryption_service=encryption_service)
 
 
 __all__ = [
     # Module functions
-    'is_enabled',
-    'get_totp_service',
-    'get_totp_config',
-
+    "is_enabled",
+    "get_totp_service",
+    "get_totp_config",
     # Configuration
-    'TOTPConfigKeys',
-    'TOTP_CONFIG_KEY',
-    'TOTP_FEATURE_FLAG',
-    'DEFAULTS',
-
+    "TOTPConfigKeys",
+    "TOTP_CONFIG_KEY",
+    "TOTP_FEATURE_FLAG",
+    "DEFAULTS",
     # Constants
-    'TOTPStatus',
-    'TOTPAlgorithm',
+    "TOTPStatus",
+    "TOTPAlgorithm",
 ]

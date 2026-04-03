@@ -5,8 +5,8 @@ Helper functions for base64url encoding/decoding and other utilities.
 """
 
 import base64
-import secrets
 import hashlib
+import secrets
 from typing import Union
 
 
@@ -24,7 +24,7 @@ def base64url_encode(data: Union[bytes, bytearray]) -> str:
     """
     if isinstance(data, bytearray):
         data = bytes(data)
-    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
 def base64url_decode(data: str) -> bytes:
@@ -42,7 +42,7 @@ def base64url_decode(data: str) -> bytes:
     # Add padding if needed
     padding = 4 - len(data) % 4
     if padding != 4:
-        data += '=' * padding
+        data += "=" * padding
     return base64.urlsafe_b64decode(data)
 
 
@@ -107,51 +107,51 @@ def parse_authenticator_data(auth_data: bytes) -> dict:
 
     rp_id_hash = auth_data[:32]
     flags = auth_data[32]
-    sign_count = int.from_bytes(auth_data[33:37], 'big')
+    sign_count = int.from_bytes(auth_data[33:37], "big")
 
     # Parse flags
-    user_present = bool(flags & 0x01)        # Bit 0: UP
-    user_verified = bool(flags & 0x04)       # Bit 2: UV
-    backup_eligible = bool(flags & 0x08)     # Bit 3: BE
-    backup_state = bool(flags & 0x10)        # Bit 4: BS
+    user_present = bool(flags & 0x01)  # Bit 0: UP
+    user_verified = bool(flags & 0x04)  # Bit 2: UV
+    backup_eligible = bool(flags & 0x08)  # Bit 3: BE
+    backup_state = bool(flags & 0x10)  # Bit 4: BS
     attested_credential_data = bool(flags & 0x40)  # Bit 6: AT
-    extension_data = bool(flags & 0x80)      # Bit 7: ED
+    extension_data = bool(flags & 0x80)  # Bit 7: ED
 
     result = {
-        'rp_id_hash': rp_id_hash,
-        'flags': flags,
-        'flags_parsed': {
-            'user_present': user_present,
-            'user_verified': user_verified,
-            'backup_eligible': backup_eligible,
-            'backup_state': backup_state,
-            'attested_credential_data': attested_credential_data,
-            'extension_data': extension_data,
+        "rp_id_hash": rp_id_hash,
+        "flags": flags,
+        "flags_parsed": {
+            "user_present": user_present,
+            "user_verified": user_verified,
+            "backup_eligible": backup_eligible,
+            "backup_state": backup_state,
+            "attested_credential_data": attested_credential_data,
+            "extension_data": extension_data,
         },
-        'sign_count': sign_count,
+        "sign_count": sign_count,
     }
 
     offset = 37
 
     # Parse attested credential data if present
     if attested_credential_data and len(auth_data) > offset:
-        aaguid = auth_data[offset:offset + 16]
+        aaguid = auth_data[offset : offset + 16]
         offset += 16
 
-        cred_id_len = int.from_bytes(auth_data[offset:offset + 2], 'big')
+        cred_id_len = int.from_bytes(auth_data[offset : offset + 2], "big")
         offset += 2
 
-        credential_id = auth_data[offset:offset + cred_id_len]
+        credential_id = auth_data[offset : offset + cred_id_len]
         offset += cred_id_len
 
         # The rest is the COSE public key (CBOR encoded)
         # We'll let py-webauthn handle the CBOR parsing
         credential_public_key = auth_data[offset:]
 
-        result['attested_credential_data'] = {
-            'aaguid': aaguid,
-            'credential_id': credential_id,
-            'credential_public_key_raw': credential_public_key,
+        result["attested_credential_data"] = {
+            "aaguid": aaguid,
+            "credential_id": credential_id,
+            "credential_public_key_raw": credential_public_key,
         }
 
     return result
@@ -168,7 +168,7 @@ def format_aaguid(aaguid: bytes) -> str:
         UUID formatted string (e.g., "00000000-0000-0000-0000-000000000000")
     """
     if len(aaguid) != 16:
-        return ''
+        return ""
 
     hex_str = aaguid.hex()
     return f"{hex_str[:8]}-{hex_str[8:12]}-{hex_str[12:16]}-{hex_str[16:20]}-{hex_str[20:]}"
@@ -201,13 +201,13 @@ def validate_rp_id(rp_id: str, origin: str) -> bool:
         return True
 
     # Suffix match (e.g., app.example.com matches example.com)
-    if hostname.endswith('.' + rp_id):
+    if hostname.endswith("." + rp_id):
         return True
 
     return False
 
 
-def bytes_to_int(data: bytes, byteorder: str = 'big') -> int:
+def bytes_to_int(data: bytes, byteorder: str = "big") -> int:
     """
     Convert bytes to integer.
 
@@ -221,7 +221,7 @@ def bytes_to_int(data: bytes, byteorder: str = 'big') -> int:
     return int.from_bytes(data, byteorder)
 
 
-def int_to_bytes(value: int, length: int, byteorder: str = 'big') -> bytes:
+def int_to_bytes(value: int, length: int, byteorder: str = "big") -> bytes:
     """
     Convert integer to bytes.
 
