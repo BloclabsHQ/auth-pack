@@ -431,7 +431,7 @@ class AuthRefreshTokenView(APIView):
                 "Refresh token validation failed", sanitize_log_context(request.data, {"errors": serializer.errors})
             )
             raise ValidationErrorWithCode(detail=serializer.errors)
-        refresh_token = serializer.validated_data.get("refresh")
+        refresh_token = serializer.validated_data.get("refresh_token")
         token = AUTH_TOKEN_CLASS()
         payload = token.decode_token(refresh_token)
         try:

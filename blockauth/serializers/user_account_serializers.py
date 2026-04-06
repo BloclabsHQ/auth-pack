@@ -255,4 +255,4 @@ class EmailChangeConfirmationSerializer(serializers.Serializer):
 
 
 class RefreshTokenSerializer(serializers.Serializer):
-    refresh = serializers.CharField(help_text="Refresh token to get new access token", required=True)
+    refresh_token = serializers.CharField(help_text="Refresh token to get new access token", required=True)

@@ -60,7 +60,7 @@ token_invalid_signature = OpenApiExample(
 )
 
 empty_refresh_token = OpenApiExample(
-    name="empty_refresh_token", summary="Empty refresh token", value={"refresh": ["This field is required."]}
+    name="empty_refresh_token", summary="Empty refresh token", value={"refresh_token": ["This field is required."]}
 )
 
 empty_authorization_header = OpenApiExample(
