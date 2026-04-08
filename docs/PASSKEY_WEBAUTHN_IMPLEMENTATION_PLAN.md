@@ -1,5 +1,9 @@
 # Passkey/WebAuthn Implementation Plan for BlockAuth
 
+> **HISTORICAL DOCUMENT** — This was the original implementation plan. The actual
+> implementation diverged from this plan (simpler structure, fewer files). See
+> `blockauth/passkey/` for the current implementation. Kept for architectural context.
+
 **Document Version:** 1.0
 **Created:** 2025-12-17
 **Updated:** 2025-12-17
