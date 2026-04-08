@@ -66,7 +66,7 @@ class ReceiptIssuer:
         secret: HS256 signing key (shared with consuming service).
                 Must be >= 32 bytes. Use ``secrets.token_hex(32)`` to generate.
         issuer: Optional ``iss`` claim (e.g., "fabric-auth").
-        default_audience: Default ``aud`` claim (e.g., "fabric-wallet").
+        default_audience: Default ``aud`` claim (e.g., "my-wallet-service").
         default_scope: Default ``scope`` claim (e.g., "mpc").
         default_ttl_seconds: Default receipt lifetime. 120s recommended.
     """
@@ -76,7 +76,7 @@ class ReceiptIssuer:
         secret: str,
         *,
         issuer: Optional[str] = None,
-        default_audience: str = "fabric-wallet",
+        default_audience: str = "default",
         default_scope: str = "mpc",
         default_ttl_seconds: int = 120,
     ):
@@ -138,7 +138,7 @@ class ReceiptValidator:
 
     Args:
         secret: HS256 signing key (shared with issuing service).
-        expected_audience: Required ``aud`` value (e.g., "fabric-wallet").
+        expected_audience: Required ``aud`` value (e.g., "my-wallet-service").
         expected_scope: Required ``scope`` value (e.g., "mpc").
     """
 
@@ -146,7 +146,7 @@ class ReceiptValidator:
         self,
         secret: str,
         *,
-        expected_audience: str = "fabric-wallet",
+        expected_audience: str = "default",
         expected_scope: str = "mpc",
     ):
         if not secret or len(secret) < 32:

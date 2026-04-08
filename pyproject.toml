@@ -1,19 +1,19 @@
 [tool.poetry]
 name = "blockauth"
 version = "0.2.0"
-description = "Auth package for internal usage"
-authors = ["darkprinx <rctushar07@gmail.com>"]
-license = "All Rights Reserved"
+description = "Comprehensive Python authentication package bridging Web2 and Web3"
+authors = ["BloclabsHQ <eng@bloclabs.com>"]
+license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-django = "5.1.4"
-pyjwt = "2.12.1"
-requests = "2.33.0"
-djangorestframework = "3.15.2"
-django-ratelimit = "^4.1.0"
-drf-spectacular = "0.28.0"
+django = ">=5.0,<6.0"
+pyjwt = ">=2.8,<3.0"
+requests = ">=2.31,<3.0"
+djangorestframework = ">=3.14,<4.0"
+django-ratelimit = ">=4.1,<5.0"
+drf-spectacular = ">=0.27,<1.0"
 web3 = "^6.20.1"
 eth-account = "^0.11.0"
 cryptography = "^46.0.5"

@@ -8,13 +8,13 @@ from rest_framework.exceptions import ValidationError
 from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import get_password_help_text
-from blockauth.utils.validators import FabricBlocPasswordValidator, is_valid_phone_number
+from blockauth.utils.validators import BlockAuthPasswordValidator, is_valid_phone_number
 
 _User = get_block_auth_user_model()
 logger = logging.getLogger(__name__)
 
 # Single instance of password validator to avoid duplicate error messages
-_password_validator = FabricBlocPasswordValidator()
+_password_validator = BlockAuthPasswordValidator()
 
 """account basic auth related serializers"""
 
