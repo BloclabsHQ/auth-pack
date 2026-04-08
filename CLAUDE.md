@@ -1,6 +1,6 @@
 # BlockAuth Package - AI Assistant Context
 
-## ⚠️ CRITICAL SECURITY NOTICE
+## CRITICAL SECURITY NOTICE
 
 **MANDATORY: ALL code MUST comply with [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md)**
 
@@ -8,397 +8,331 @@ Before writing ANY code, review the security standards. NO EXCEPTIONS.
 
 ## Package Overview
 
-**BlockAuth** is a comprehensive Python authentication package that bridges Web2 and Web3, providing JWT authentication, OAuth integration, passwordless login, Web3 wallet authentication, and a revolutionary KDF system that enables blockchain access without crypto knowledge.
+**BlockAuth** is a comprehensive Python authentication package that bridges Web2 and Web3, providing JWT authentication, OAuth integration, passwordless login, Web3 wallet authentication, and a KDF system that enables blockchain access without crypto knowledge.
 
-## 🎯 Critical Features
+## Critical Features
 
-- **JWT Authentication**: Customizable claims providers, refresh tokens, revocation
-- **OAuth Integration**: Google, Facebook, LinkedIn, GitHub providers
+- **JWT Authentication**: Customizable claims providers, refresh tokens, HS256/RS256/ES256
+- **OAuth Integration**: Google, Facebook, LinkedIn providers
 - **Web3 Authentication**: Ethereum wallet signature verification
-- **KDF System**: Email/password → blockchain wallet generation
-- **Custom Claims**: Pluggable JWT claims architecture
+- **KDF System**: Email/password to blockchain wallet generation (PBKDF2, Argon2)
+- **Custom Claims**: Pluggable JWT claims architecture via `CustomClaimsProvider`
 - **Passwordless**: OTP-based authentication
-- **Rate Limiting**: DDoS protection, configurable throttling
-- **MFA Support**: TOTP, SMS, email verification
+- **Rate Limiting**: DDoS protection, configurable throttling (per-request + OTP-specific)
+- **TOTP/2FA**: Time-based one-time passwords with pluggable storage
+- **Passkey/WebAuthn**: FIDO2 passwordless authentication (Face ID, Touch ID, Windows Hello)
 - **Step-Up Authentication**: RFC 9470 receipt-based step-up auth (`blockauth.stepup`). Django-independent.
 
 ## Package Architecture
 
 ```
 blockauth/
-├── models/              # Django models
-│   ├── user.py         # BlockUser base model
-│   ├── session.py      # Session management
-│   └── wallet.py       # Web3 wallet models
-├── views/              # API views
-│   ├── basic_auth.py   # Email/password authentication
-│   ├── oauth_views.py  # OAuth provider views
-│   ├── wallet_auth.py  # Web3 wallet authentication
-│   └── passwordless.py # OTP-based authentication
-├── serializers/        # DRF serializers
-│   ├── auth.py        # Authentication serializers
-│   ├── user.py        # User data serializers
-│   └── token.py       # Token serializers
-├── utils/              # Core utilities
-│   ├── token.py       # JWT token generation
-│   ├── kdf.py         # Key derivation functions
-│   ├── crypto.py      # Cryptographic operations
-│   └── validators.py  # Input validation
-├── jwt/                # JWT management
-│   ├── token_manager.py # JWT manager with claims
-│   └── claims.py      # Claims provider base
-├── middleware/         # Django middleware
-├── permissions/        # Permission classes
-├── stepup/            # Step-up authentication receipts (RFC 9470)
-│   ├── __init__.py   # Exports: ReceiptIssuer, ReceiptValidator, ReceiptClaims, ReceiptValidationError
-│   └── receipt.py    # Django-independent HS256 JWT receipt issue/validate
-└── tests/             # Comprehensive test suite
+├── __init__.py              # Lazy imports, __all__ exports
+├── apps.py                  # Django AppConfig
+├── authentication.py        # DRF authentication backend
+├── conf.py                  # Settings (BLOCK_AUTH_SETTINGS defaults)
+├── enums.py                 # AuthenticationType enum
+├── notification.py          # Notification system (NotificationEvent, send_otp)
+├── triggers.py              # Event triggers (BaseTrigger, Dummy* triggers)
+├── urls.py                  # Feature-flag-driven URL generation
+├── settings.py              # Django settings module
+├── constants/               # Constants sub-package
+│   ├── core.py             # Features, URLNames, SocialProviders, ConfigKeys
+│   └── sensitive_fields.py # Fields to exclude from logs
+├── models/                  # Django models
+│   ├── user.py             # BlockUser abstract base model
+│   └── otp.py              # OTP model + OTPSubject enum
+├── views/                   # API views (DRF APIView)
+│   ├── basic_auth_views.py # Signup, login, password reset/change, email change, refresh
+│   ├── wallet_auth_views.py # Web3 wallet login + email add
+│   ├── google_auth_views.py # Google OAuth
+│   ├── facebook_auth_views.py # Facebook OAuth
+│   └── linkedin_auth_views.py # LinkedIn OAuth
+├── serializers/             # DRF serializers
+│   ├── otp_serializers.py  # OTP validation
+│   ├── user_account_serializers.py # Auth flow serializers
+│   └── wallet_serializers.py # Wallet auth serializers
+├── jwt/                     # JWT management
+│   ├── interfaces.py       # CustomClaimsProvider ABC
+│   └── token_manager.py    # JWTTokenManager + jwt_manager singleton
+├── utils/                   # Core utilities
+│   ├── token.py            # Token class, generate_auth_token, _resolve_keys
+│   ├── config.py           # get_config, get_block_auth_user_model
+│   ├── validators.py       # BlockAuthPasswordValidator, phone validation
+│   ├── permissions.py      # DRF permission classes
+│   ├── rate_limiter.py     # RequestThrottle, OTPThrottle
+│   ├── logger.py           # blockauth_logger
+│   ├── generics.py         # model_to_json, sanitize_log_context
+│   ├── audit.py            # Audit utilities
+│   ├── custom_exception.py # ValidationErrorWithCode
+│   ├── feature_flags.py    # is_feature_enabled
+│   ├── social.py           # OAuth helpers
+│   └── web3/
+│       └── wallet.py       # Web3 wallet utilities
+├── kdf/                     # Key Derivation sub-package
+│   ├── __init__.py         # Exports (PBKDF2Service, Argon2Service, etc.)
+│   ├── constants.py        # SecurityConstants, ErrorMessages, KDFAlgorithms
+│   ├── services.py         # PBKDF2Service, Argon2Service, KeyDerivationService, KDFManager
+│   └── tests.py            # KDF tests
+├── totp/                    # TOTP/2FA sub-package
+│   ├── config.py           # TOTP configuration
+│   ├── constants.py        # TOTP constants
+│   ├── exceptions.py       # TOTP exceptions
+│   ├── models.py           # TOTP Django models
+│   ├── serializers.py      # TOTP serializers
+│   ├── urls.py             # TOTP URL patterns
+│   ├── views.py            # TOTP API views
+│   ├── services/
+│   │   ├── totp_service.py # TOTPService (generate, verify, setup)
+│   │   └── encryption.py   # Secret encryption service
+│   ├── storage/
+│   │   ├── base.py         # ITOTP2FAStore ABC, TOTP2FAData DTO
+│   │   ├── django_storage.py # Django model storage
+│   │   └── memory_storage.py # In-memory storage (testing)
+│   └── tests/              # TOTP tests
+├── passkey/                 # WebAuthn/Passkey sub-package
+│   ├── config.py           # Passkey configuration
+│   ├── constants.py        # Passkey constants
+│   ├── exceptions.py       # Passkey exceptions
+│   ├── models.py           # Credential Django model
+│   ├── views.py            # Registration + Authentication views
+│   ├── utils.py            # WebAuthn utilities
+│   ├── services/
+│   │   ├── passkey_service.py # PasskeyService (register, authenticate)
+│   │   ├── challenge_service.py # Challenge generation
+│   │   └── cleanup_service.py # Credential cleanup
+│   ├── storage/
+│   │   ├── base.py         # ICredentialStore ABC, CredentialData
+│   │   ├── django_storage.py # Django model storage
+│   │   └── memory_storage.py # In-memory storage (testing)
+│   └── tests/              # Passkey tests
+├── stepup/                  # Step-up authentication (RFC 9470)
+│   ├── __init__.py         # Exports: ReceiptIssuer, ReceiptValidator, ReceiptClaims
+│   └── receipt.py          # Django-independent HS256 JWT receipt issue/validate
+├── schemas/                 # API documentation schemas
+│   ├── factory.py          # Schema factory
+│   └── examples/           # Request/response examples
+├── docs/                    # Internal API documentation helpers
+│   ├── auth_docs.py        # Auth endpoint docs
+│   ├── social_auth_docs.py # OAuth endpoint docs
+│   └── wallet_auth_docs.py # Wallet endpoint docs
+└── migrations/              # Django migrations
 ```
+
+## API Endpoints
+
+All endpoints are feature-flag controlled via `BLOCK_AUTH_SETTINGS['FEATURES']`.
+
+### Authentication
+| Method | Path | Feature Flag | Description |
+|--------|------|-------------|-------------|
+| POST | `signup/` | SIGNUP | Register with email/phone + password |
+| POST | `signup/otp/resend/` | SIGNUP | Resend signup OTP |
+| POST | `signup/confirm/` | SIGNUP | Confirm signup with OTP |
+| POST | `login/basic/` | BASIC_LOGIN | Email/password login |
+| POST | `login/passwordless/` | PASSWORDLESS_LOGIN | Request passwordless OTP |
+| POST | `login/passwordless/confirm/` | PASSWORDLESS_LOGIN | Confirm passwordless login |
+| POST | `login/wallet/` | WALLET_LOGIN | Web3 wallet signature auth |
+| POST | `token/refresh/` | TOKEN_REFRESH | Refresh JWT tokens |
+
+### Password Management
+| Method | Path | Feature Flag | Description |
+|--------|------|-------------|-------------|
+| POST | `password/reset/` | PASSWORD_RESET | Request password reset OTP |
+| POST | `password/reset/confirm/` | PASSWORD_RESET | Confirm password reset |
+| POST | `password/change/` | PASSWORD_CHANGE | Change password (authenticated) |
+
+### Email & Wallet
+| Method | Path | Feature Flag | Description |
+|--------|------|-------------|-------------|
+| POST | `email/change/` | EMAIL_CHANGE | Request email change OTP |
+| POST | `email/change/confirm/` | EMAIL_CHANGE | Confirm email change |
+| POST | `wallet/email/add/` | WALLET_EMAIL_ADD | Add email to wallet account |
+
+### OAuth (requires provider configuration)
+| Method | Path | Provider | Description |
+|--------|------|----------|-------------|
+| GET | `google/` | Google | Initiate Google OAuth |
+| GET | `google/callback/` | Google | Google OAuth callback |
+| GET | `facebook/` | Facebook | Initiate Facebook OAuth |
+| GET | `facebook/callback/` | Facebook | Facebook OAuth callback |
+| GET | `linkedin/` | LinkedIn | Initiate LinkedIn OAuth |
+| GET | `linkedin/callback/` | LinkedIn | LinkedIn OAuth callback |
+
+### Passkey/WebAuthn
+| Method | Path | Feature Flag | Description |
+|--------|------|-------------|-------------|
+| POST | `passkey/register/options/` | PASSKEY_AUTH | Get registration options |
+| POST | `passkey/register/verify/` | PASSKEY_AUTH | Verify registration |
+| POST | `passkey/auth/options/` | PASSKEY_AUTH | Get authentication options |
+| POST | `passkey/auth/verify/` | PASSKEY_AUTH | Verify authentication |
+| GET | `passkey/credentials/` | PASSKEY_AUTH | List credentials |
+| DELETE | `passkey/credentials/<uuid>/` | PASSKEY_AUTH | Delete credential |
 
 ## Installation & Setup
 
-```bash
-# Install package
-pip install blockauth
-
+```python
 # Django settings
 INSTALLED_APPS = [
     'blockauth',
-    # ...
 ]
 
-# Configure BlockAuth
 BLOCK_AUTH_SETTINGS = {
-    'JWT_SECRET_KEY': 'your-secret-key',
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'KDF_ENABLED': True,
-    'KDF_ITERATIONS': 100000,
-    # ... more settings
+    'SECRET_KEY': 'your-jwt-secret',           # Falls back to Django SECRET_KEY
+    'ALGORITHM': 'HS256',                       # HS256, RS256, or ES256
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'OTP_VALIDITY': timedelta(minutes=1),
+    'OTP_LENGTH': 6,
+    'BLOCK_AUTH_USER_MODEL': 'myapp.User',      # Your user model
+    'FEATURES': {
+        'SIGNUP': True,
+        'BASIC_LOGIN': True,
+        'PASSWORDLESS_LOGIN': True,
+        'WALLET_LOGIN': True,
+        'TOKEN_REFRESH': True,
+        'PASSWORD_RESET': True,
+        'PASSWORD_CHANGE': True,
+        'EMAIL_CHANGE': True,
+        'WALLET_EMAIL_ADD': True,
+        'SOCIAL_AUTH': True,
+        'PASSKEY_AUTH': True,
+    },
 }
 
-# Add URLs
+# URLs
 urlpatterns = [
     path('auth/', include('blockauth.urls')),
 ]
 ```
 
-## 🔐 Custom JWT Claims
-
-### Creating a Claims Provider
+## Custom JWT Claims
 
 ```python
 # myapp/jwt_claims.py
-class MyAppClaimsProvider:
-    def __init__(self):
-        self.name = "myapp"
+from blockauth.jwt.interfaces import CustomClaimsProvider
 
+class MyAppClaimsProvider(CustomClaimsProvider):
     def get_custom_claims(self, user):
-        """Add custom claims to JWT."""
         return {
-            "user_id": str(user.id),
             "role": user.role,
-            "organization_id": str(user.organization_id),
-            "is_verified": user.is_verified,
+            "org_id": str(user.organization_id),
         }
 
-# Register in Django app
+    def validate_custom_claims(self, claims):
+        return "role" in claims
+
+# Register in Django app's ready()
 from blockauth.jwt.token_manager import jwt_manager
 jwt_manager.register_claims_provider(MyAppClaimsProvider())
 ```
 
-### Token Structure
+## KDF System
 
-```json
-{
-  "user_id": "uuid",
-  "role": "admin",
-  "organization_id": "org-uuid",
-  "is_verified": true,
-  "exp": 1234567890,
-  "iat": 1234567800,
-  "type": "access"
-}
-```
-
-## 🚀 KDF System (Key Derivation)
-
-The KDF system enables Web2 users to have blockchain wallets without managing keys:
+KDF services live in `blockauth.kdf.services`:
 
 ```python
-# Enable KDF
+from blockauth.kdf.services import PBKDF2Service, KeyDerivationService, KDFManager
+
+# Direct PBKDF2 derivation
+service = PBKDF2Service(iterations=100000)
+private_key = service.derive_key(email, password, salt)
+
+# Full key derivation with wallet generation
+kds = KeyDerivationService()
+private_key = kds.derive_private_key(email, password, salt)
+address = kds.get_wallet_address(email, password, salt)
+
+# KDFManager — dual encryption (user + platform keys)
+manager = KDFManager(master_key, platform_salt)
+```
+
+## Trigger System
+
+BlockAuth fires triggers at key authentication events. Configure trigger classes in settings:
+
+```python
 BLOCK_AUTH_SETTINGS = {
-    'KDF_ENABLED': True,
-    'KDF_ITERATIONS': 100000,  # Security level
-    'KDF_MASTER_SALT': 'master-salt',
-    'MASTER_ENCRYPTION_KEY': '0x' + '64-hex-chars',
-    'PLATFORM_MASTER_SALT': 'platform-salt',
-}
-
-# Usage
-from blockauth.utils.kdf import derive_key
-
-# Generate blockchain wallet from email/password
-private_key = derive_key(email, password)
-wallet_address = generate_wallet_address(private_key)
-```
-
-## 🔄 Authentication Flows
-
-### Basic Authentication
-```python
-# Login endpoint
-POST /auth/login/
-{
-    "email": "user@example.com",
-    "password": "secure-password"
-}
-
-# Response
-{
-    "access": "jwt-access-token",
-    "refresh": "jwt-refresh-token"
+    'PRE_SIGNUP_TRIGGER': 'myapp.triggers.MyPreSignupTrigger',
+    'POST_SIGNUP_TRIGGER': 'myapp.triggers.MyPostSignupTrigger',
+    'POST_LOGIN_TRIGGER': 'myapp.triggers.MyPostLoginTrigger',
+    'POST_PASSWORD_CHANGE_TRIGGER': 'myapp.triggers.MyPasswordChangeTrigger',
+    'POST_PASSWORD_RESET_TRIGGER': 'myapp.triggers.MyPasswordResetTrigger',
 }
 ```
 
-### OAuth Flow
-```python
-# Redirect to provider
-GET /auth/google/login/
+Trigger context includes `user_id`, `username`, `email`, `trigger_type`, `timestamp`. **Plaintext passwords are never included.**
 
-# Handle callback
-GET /auth/google/callback/?code=...
+## Security Requirements
 
-# Automatic user creation and JWT generation
-```
+See [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md) for full details.
 
-### Web3 Authentication
-```python
-# Wallet login
-POST /auth/wallet/login/
-{
-    "wallet_address": "0x...",
-    "message": "Sign this message",
-    "signature": "0x..."
-}
-```
+Key rules:
+- Passwords hashed with Django's `set_password()` (bcrypt recommended)
+- JWT tokens use `algorithms=[...]` pinning on decode (no algorithm confusion)
+- KDF comparisons use `hmac.compare_digest()` (timing-safe)
+- OTP uses `secrets.choice()` (crypto-secure random)
+- Rate limiting on all auth endpoints
+- No sensitive data in logs (passwords, tokens, keys)
+- No `traceback.print_exc()` in production code
 
-## 🛡️ MANDATORY SECURITY IMPLEMENTATION
-
-### ⚠️ Security Standards Compliance
-**EVERY line of code MUST comply with [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md)**
-
-### Critical Security Requirements
-
-#### Password Security (MANDATORY)
-```python
-# MINIMUM Requirements - NO EXCEPTIONS
-BCRYPT_ROUNDS = 14  # NEVER less than 14
-PASSWORD_MIN_LENGTH = 12  # NEVER less than 12
-PBKDF2_ITERATIONS = 600_000  # NIST 2024 minimum
-
-# MANDATORY password hashing
-import bcrypt
-hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(14))
-```
-
-#### JWT Security (MANDATORY)
-```python
-JWT_SETTINGS = {
-    'SECRET_KEY': secrets.token_hex(32),  # MINIMUM 256 bits
-    'ALGORITHM': 'HS256',  # ONLY HS256 allowed
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # MAXIMUM 15 minutes
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,  # MANDATORY
-    'BLACKLIST_AFTER_ROTATION': True,  # MANDATORY
-}
-```
-
-#### Rate Limiting (MANDATORY)
-```python
-RATE_LIMITS = {
-    'login': '5/minute',  # MAXIMUM
-    'register': '3/hour',
-    'password_reset': '3/hour',
-    'wallet_creation': '3/hour',
-    'kdf_derivation': '10/hour',
-}
-```
-
-#### KDF Security (MANDATORY)
-```python
-KDF_SETTINGS = {
-    'ITERATIONS': 600_000,  # NIST 2024 MINIMUM
-    'KEY_LENGTH': 32,  # 256 bits MINIMUM
-    'SALT_LENGTH': 32,  # MINIMUM
-    'DUAL_ENCRYPTION': True,  # User + Platform keys
-}
-```
-
-#### Web3 Security (MANDATORY)
-- **Never store plain private keys**
-- **Always validate signatures**
-- **Prevent zero address**
-- **Check signature malleability**
-- **Validate message size (max 10KB)**
-
-### Security Checklist (MUST PASS)
-- [ ] No hardcoded secrets
-- [ ] No sensitive data in logs
-- [ ] Passwords hashed with bcrypt(14+)
-- [ ] JWT tokens < 15 minutes
-- [ ] Rate limiting enabled
-- [ ] Input validation on all endpoints
-- [ ] SQL injection prevention
-- [ ] XSS protection
-- [ ] CSRF tokens
-- [ ] Security headers configured
-
-## 📊 Testing
+## Testing
 
 ```bash
-# Run all tests
-pytest
+# Run all tests via poetry
+poetry run pytest
 
-# Run specific test module
-pytest blockauth/tests/test_jwt.py
+# Specific test modules
+poetry run pytest blockauth/kdf/tests.py
+poetry run pytest blockauth/totp/tests/
+poetry run pytest blockauth/passkey/tests/
+poetry run pytest blockauth/utils/tests/
 
-# Coverage report
-pytest --cov=blockauth --cov-report=html
-
-# Security tests
-pytest -m security
+# Format + lint
+poetry run black blockauth/
+poetry run isort blockauth/
+poetry run flake8 blockauth/
 ```
 
-## 🔧 Development Commands
-
-```bash
-# Format code
-black blockauth/
-isort blockauth/
-
-# Lint
-flake8 blockauth/
-pylint blockauth/
-
-# Security scan
-bandit -r blockauth/
-safety check
-
-# Type checking
-mypy blockauth/
-```
-
-## 📚 Documentation
+## Documentation
 
 - **README.md**: Quick start and overview
 - **docs/CUSTOM_JWT_CLAIMS.md**: JWT customization guide
-- **docs/KDF_SYSTEM.md**: Key derivation documentation
-- **docs/API_REFERENCE.md**: Complete API docs
-- **docs/SECURITY.md**: Security best practices
+- **docs/JWT_EXTENSION_GUIDE.md**: Extending JWT functionality
+- **docs/TOKEN_USAGE_GUIDE.md**: Token class usage
+- **docs/WEBAUTHN_PASSKEY_DPIA.md**: Data protection impact assessment
 
-## ⚠️ Common Issues
+## Common Issues
 
 ### fabric-auth Not Picking Up auth-pack Changes
 
 **Symptom**: `ModuleNotFoundError` in fabric-auth CI for modules that exist in auth-pack.
 
-**Cause**: `fabric-auth/poetry.lock` pins blockauth to a specific git commit. Pushing
-to auth-pack does NOT auto-update the lock file.
+**Cause**: `fabric-auth/poetry.lock` pins blockauth to a specific git commit.
 
-**Fix**: After pushing auth-pack changes, update fabric-auth:
+**Fix**: After pushing auth-pack changes:
 ```bash
 cd services/fabric-auth
 poetry update blockauth
 git add poetry.lock && git commit -m "chore: update blockauth to latest dev"
 ```
 
-See `fabric-auth/CLAUDE.md` → "Updating blockauth" section for full details.
-
 ### JWT Claims Not Appearing
-- Ensure claims provider is registered in Django app's `ready()` method
-- Method must be named `get_custom_claims` (not `get_claims`)
-- Check user object is being passed correctly
+- Register claims provider in Django app's `ready()` method
+- Method must be named `get_custom_claims` (from `CustomClaimsProvider` interface in `jwt/interfaces.py`)
+- User object is fetched by `user_id` from `get_block_auth_user_model()`
 
 ### OAuth Redirect Issues
 - Verify redirect URIs match provider configuration
 - Check ALLOWED_HOSTS includes callback domain
 - Ensure HTTPS in production
 
-### KDF Performance
-- High iteration count impacts performance
-- Consider async processing for wallet generation
-- Cache derived keys securely
-
-## 🎯 Best Practices
-
-### Security
-- **Never log sensitive data** (passwords, tokens, keys)
-- **Always use HTTPS** in production
-- **Implement rate limiting** on all auth endpoints
-- **Rotate secrets** regularly
-- **Audit dependencies** for vulnerabilities
-
-### Performance
-- **Cache JWT claims** for expensive calculations
-- **Use database indexes** on frequently queried fields
-- **Implement connection pooling**
-- **Optimize token validation**
-
-### Code Quality
-- **Write tests** for all authentication flows
-- **Document API changes**
-- **Use type hints**
-- **Follow PEP 8**
-- **Security-focused code reviews**
-
-## 🚀 Advanced Features
-
-### Multi-Factor Authentication
-```python
-BLOCK_AUTH_SETTINGS = {
-    'MFA_ENABLED': True,
-    'MFA_METHODS': ['totp', 'sms', 'email'],
-}
-```
-
-### Session Management
-```python
-# Concurrent session limiting
-BLOCK_AUTH_SETTINGS = {
-    'MAX_SESSIONS_PER_USER': 3,
-    'SESSION_TIMEOUT': timedelta(hours=24),
-}
-```
-
-### Webhook Events
-```python
-# Authentication events
-BLOCK_AUTH_SETTINGS = {
-    'WEBHOOKS': {
-        'user.login': 'https://api.example.com/webhooks/login',
-        'user.register': 'https://api.example.com/webhooks/register',
-    }
-}
-```
-
-## 🆘 Support Resources
-
-- **Package Location**: `/services/auth-pack/`
-- **Documentation**: `/services/auth-pack/docs/`
-- **Examples**: `/services/auth-pack/blockauth-demo/`
-- **Tests**: `/services/auth-pack/blockauth/tests/`
-- **Claude Agents**: `/.claude/agents/`
-- **Hooks**: `/.claude/hooks/`
-
 ## Platform Integration
 
-BlockAuth is designed to work seamlessly with the FabricBloc platform:
+BlockAuth is the authentication package for the FabricBloc platform:
 - Used by `fabric-auth` service for authentication
-- Provides JWT tokens for Kong Gateway
+- Provides JWT tokens consumed by Kong Gateway
 - Supports platform-wide custom claims
 - Enables Web3 features for all services
 
----
-
-**Note**: This is the authentication package used across the FabricBloc platform. For service-specific authentication implementation, see `/services/fabric-auth/`.
+For service-specific authentication implementation, see `fabric-auth`.

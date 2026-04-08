@@ -89,8 +89,8 @@ from blockauth.stepup import ReceiptIssuer
 
 issuer = ReceiptIssuer(
     secret="your-shared-secret-min-32-chars",
-    issuer="fabric-auth",
-    default_audience="fabric-wallet",
+    issuer="my-auth-service",
+    default_audience="my-wallet-service",
     default_scope="mpc",
     default_ttl_seconds=120,
 )
@@ -107,7 +107,7 @@ from blockauth.stepup import ReceiptValidator, ReceiptValidationError
 
 validator = ReceiptValidator(
     secret="your-shared-secret-min-32-chars",
-    expected_audience="fabric-wallet",
+    expected_audience="my-wallet-service",
     expected_scope="mpc",
 )
 
@@ -129,12 +129,12 @@ except ReceiptValidationError as e:
 {
   "sub": "user-uuid",
   "type": "stepup_receipt",
-  "aud": "fabric-wallet",
+  "aud": "my-wallet-service",
   "scope": "mpc",
   "iat": 1740000000,
   "exp": 1740000120,
   "jti": "random-hex-16-bytes",
-  "iss": "fabric-auth"
+  "iss": "my-auth-service"
 }
 ```
 
