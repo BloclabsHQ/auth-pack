@@ -8,14 +8,11 @@ like MetaMask, ensuring the authenticity of wallet-based authentication.
 Dependencies:
     - web3: Ethereum Web3 library for blockchain interactions
     - eth_account: Ethereum account utilities for signature verification
-
-Author: BlockAuth Team
-License: All Rights Reserved
 """
 
 from eth_account.messages import encode_defunct
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+from web3.middleware import ExtraDataToPOAMiddleware
 
 
 class WalletAuthenticator:
@@ -37,7 +34,7 @@ class WalletAuthenticator:
     def __init__(self):
         # Initialize Web3 instance and inject POA middleware for compatibility
         self.w3 = Web3()
-        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
     def verify_signature(self, address, message, signature):
         """

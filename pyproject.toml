@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "blockauth"
-version = "0.2.0"
+version = "0.3.0"
 description = "Comprehensive Python authentication package bridging Web2 and Web3"
 authors = ["BloclabsHQ <eng@bloclabs.com>"]
 license = "MIT"
@@ -29,8 +29,8 @@ requests = ">=2.31,<3.0"
 djangorestframework = ">=3.14,<4.0"
 django-ratelimit = ">=4.1,<5.0"
 drf-spectacular = ">=0.27,<1.0"
-web3 = "^6.20.1"
-eth-account = "^0.11.0"
+web3 = "^7.6.0"
+eth-account = ">=0.13.0"
 cryptography = "^46.0.5"
 argon2-cffi = "^23.0.0"
 webauthn = "^2.0.0"
