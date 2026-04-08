@@ -1,6 +1,8 @@
 # blockauth/utils/config.py
 import importlib
 
+from django.core.exceptions import ImproperlyConfigured
+
 from blockauth.conf import auth_settings
 
 # if the following settings are not provided, the social auth provider is considered not configured

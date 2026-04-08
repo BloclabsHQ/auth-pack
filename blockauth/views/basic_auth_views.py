@@ -559,7 +559,6 @@ class PasswordResetConfirmView(APIView):
                     "user_id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "new_password": data["new_password"],
                     "trigger_type": "password_reset",
                     "timestamp": timezone.now().isoformat(),
                 }
@@ -615,9 +614,6 @@ class PasswordChangeView(APIView):
             data = serializer.validated_data
             user = request.user
 
-            # Store old password for KDF wallet handling
-            old_password = data.get("old_password")
-
             # Change user password
             user.set_password(data["new_password"])
             user.save()
@@ -629,8 +625,6 @@ class PasswordChangeView(APIView):
                     "user_id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "old_password": old_password,
-                    "new_password": data["new_password"],
                     "trigger_type": "password_change",
                     "timestamp": timezone.now().isoformat(),
                 }

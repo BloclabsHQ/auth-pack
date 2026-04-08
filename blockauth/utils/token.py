@@ -40,6 +40,7 @@ from datetime import timedelta
 from typing import Any, Dict, Tuple
 
 import jwt
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -314,36 +315,16 @@ def generate_auth_token_with_custom_claims(
             "refresh": refresh_token
         }
     """
-    # Try to use enhanced JWT manager if available
-    logger.info("🔍 Attempting to use enhanced JWT system...")
-
     try:
-        logger.info("🔍 Importing JWT manager...")
         from blockauth.jwt.token_manager import jwt_manager
-
-        logger.info("✅ Successfully imported JWT manager")
-
-        logger.info("🔍 Importing user model...")
         from blockauth.utils.config import get_block_auth_user_model
 
-        logger.info("✅ Successfully imported user model")
-
-        # Get the user object from user_id
+        # Verify user exists before generating custom-claims tokens
         user_model = get_block_auth_user_model()
-        try:
-            user = user_model.objects.get(id=user_id)
-            logger.info(f"✅ Found user: {user.email}")
-        except user_model.DoesNotExist:
-            logger.warning(f"User with id {user_id} not found, using fallback implementation")
+        if not user_model.objects.filter(id=user_id).exists():
+            logger.warning("User %s not found, falling back to basic token generation", user_id)
             return generate_auth_token(token_class, user_id, user_data)
 
-        # Check if claims providers are registered
-        logger.info(f"✅ JWT manager has {len(jwt_manager._claims_providers)} claims providers registered")
-        for i, provider in enumerate(jwt_manager._claims_providers):
-            logger.info(f"  Provider {i}: {provider.__class__.__name__}")
-
-        # Generate access token with custom claims
-        logger.info("✅ Generating access token with custom claims...")
         access_token = jwt_manager.generate_token(
             user_id=user_id,
             token_type="access",
@@ -351,30 +332,17 @@ def generate_auth_token_with_custom_claims(
             user_data=user_data,
         )
 
-        # Generate refresh token with longer lifetime (minimal payload, no custom claims)
-        logger.info("✅ Generating refresh token...")
         refresh_token = jwt_manager.generate_token(
             user_id=user_id, token_type="refresh", token_lifetime=get_config("REFRESH_TOKEN_LIFETIME")
         )
 
-        logger.info("✅ Successfully generated tokens with custom claims")
         return access_token, refresh_token
 
-    except ImportError as e:
-        # Fall back to original implementation if enhanced system is not available
-        logger.error(f"❌ ImportError in enhanced JWT system: {e}")
-        logger.error(f"❌ ImportError type: {type(e)}")
-        import traceback
-
-        traceback.print_exc()
-        logger.warning("⚠️ Falling back to original implementation due to ImportError")
+    except ImproperlyConfigured:
+        raise
+    except ImportError:
+        logger.warning("Enhanced JWT system not available, using fallback")
         return generate_auth_token(token_class, user_id, user_data)
     except Exception as e:
-        # Fall back to original implementation if there's any other error
-        logger.error(f"❌ Exception in enhanced JWT system: {e}")
-        logger.error(f"❌ Exception type: {type(e)}")
-        import traceback
-
-        traceback.print_exc()
-        logger.warning("⚠️ Falling back to original implementation due to Exception")
+        logger.exception("Enhanced JWT token generation failed: %s", e)
         return generate_auth_token(token_class, user_id, user_data)

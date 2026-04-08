@@ -17,6 +17,7 @@ Key Features:
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -37,8 +38,6 @@ from blockauth.utils.logger import blockauth_logger
 from .constants import ErrorMessages, KDFAlgorithms, SecurityConstants, SecurityLevels
 
 # Web3 imports
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -180,7 +179,7 @@ class PBKDF2Service(BaseKDFService):
         """Verify if credentials produce expected key"""
         try:
             derived_key = self.derive_key(email, password, salt, **kwargs)
-            return derived_key.lower() == expected_key.lower()
+            return hmac.compare_digest(derived_key.lower(), expected_key.lower())
         except Exception:
             return False
 
@@ -247,7 +246,7 @@ class Argon2Service(BaseKDFService):
         """Verify if credentials produce expected key"""
         try:
             derived_key = self.derive_key(email, password, salt, **kwargs)
-            return derived_key.lower() == expected_key.lower()
+            return hmac.compare_digest(derived_key.lower(), expected_key.lower())
         except Exception:
             return False
 
@@ -494,7 +493,7 @@ class KeyDerivationService:
             del private_key
 
             # Compare addresses (case-insensitive)
-            return derived_address.lower() == stored_address.lower()
+            return hmac.compare_digest(derived_address.lower(), stored_address.lower())
 
         except Exception as e:
             logger.error(f"Password verification failed: {e}")
@@ -931,7 +930,7 @@ class KDFManager:
             del private_key
 
             # Compare addresses
-            return derived_address.lower() == wallet_address.lower()
+            return hmac.compare_digest(derived_address.lower(), wallet_address.lower())
 
         except Exception as e:
             logger.error(f"Wallet ownership verification failed: {e}")
