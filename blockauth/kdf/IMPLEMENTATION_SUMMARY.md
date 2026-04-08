@@ -144,7 +144,7 @@ business_wallet = create_wallet(email, password, "business")  # Salt C
 ## 🚀 **Next Steps**
 
 1. **Test the system** with the provided examples
-2. **Integrate into fabric-auth** for smart contract functionality
+2. **Integrate into your service** for smart contract functionality
 3. **Deploy to production** with proper security measures
 4. **Monitor and maintain** the system
 

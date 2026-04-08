@@ -52,9 +52,9 @@ The `JWTTokenManager` class provides:
 - Token validation with custom claims verification
 - Backward compatibility with existing token system
 
-### 3. Example Claims Provider (fabric-auth)
+### 3. Example Claims Provider (consuming service)
 
-**File**: `fabric_auth/blockchain/jwt_claims.py`
+**File**: `myapp/jwt_claims.py` (example — implement in your own service)
 
 ```python
 class SmartAccountClaimsProvider(CustomClaimsProvider):

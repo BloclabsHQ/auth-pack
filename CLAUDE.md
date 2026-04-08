@@ -173,7 +173,7 @@ All endpoints are feature-flag controlled via `BLOCK_AUTH_SETTINGS['FEATURES']`.
 
 ```bash
 # Install from GitHub Releases
-pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl
 
 # Or from git
 pip install git+https://github.com/BloclabsHQ/auth-pack.git@dev
@@ -295,8 +295,8 @@ To release:
 # 1. Bump version in both files
 # 2. Commit and push to dev
 # 3. Tag and push
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 The `publish.yml` workflow validates the tag matches `pyproject.toml`, builds the package, and creates a GitHub Release with sdist + wheel artifacts.
