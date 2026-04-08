@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "blockauth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Auth package for internal usage"
 authors = ["darkprinx <rctushar07@gmail.com>"]
 license = "All Rights Reserved"
@@ -9,20 +9,20 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.12"
 django = "5.1.4"
-pyjwt = "2.9.0"
+pyjwt = "2.12.1"
 requests = "2.32.3"
 djangorestframework = "3.15.2"
 django-ratelimit = "^4.1.0"
 drf-spectacular = "0.28.0"
 web3 = "^6.20.1"
 eth-account = "^0.11.0"
-cryptography = "^43.0.0"
+cryptography = "^46.0.5"
 argon2-cffi = "^23.0.0"
 webauthn = "^2.0.0"
 uuid6 = "^2024.7.10"
 
 [tool.poetry.group.dev.dependencies]
-black = "^24.0.0"
+black = "^26.3.0"
 isort = "^5.13.0"
 flake8 = "^7.0.0"
 autoflake = "^2.3.0"
