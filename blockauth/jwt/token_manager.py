@@ -74,20 +74,24 @@ class JWTTokenManager:
         # Collect custom claims from all registered providers
         custom_claims = {}
 
-        for provider in self._claims_providers:
-            try:
-                # Get user object for custom claims
-                user_model = get_block_auth_user_model()
-                user = user_model.objects.get(id=user_id)
+        # Resolve user once outside the loop
+        try:
+            user_model = get_block_auth_user_model()
+            user = user_model.objects.get(id=user_id)
+        except Exception:
+            logger.warning("User %s not found, skipping all claims providers", user_id)
+            user = None
 
+        for provider in self._claims_providers:
+            if user is None:
+                break
+            try:
                 provider_claims = provider.get_custom_claims(user)
 
                 if provider_claims:
                     custom_claims.update(provider_claims)
-            except user_model.DoesNotExist:
-                logger.warning("User %s not found, skipping claims provider %s", user_id, provider.__class__.__name__)
             except Exception as e:
-                logger.error("Error getting custom claims from %s: %s", provider.__class__.__name__, e)
+                logger.exception("Error getting custom claims from %s: %s", provider.__class__.__name__, e)
 
         # Merge all claims: extra_claims < custom_claims < base_claims (base always wins)
         all_claims = {**extra_claims, **custom_claims, **base_claims}

@@ -40,6 +40,7 @@ from datetime import timedelta
 from typing import Any, Dict, Tuple
 
 import jwt
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -320,9 +321,7 @@ def generate_auth_token_with_custom_claims(
 
         # Verify user exists before generating custom-claims tokens
         user_model = get_block_auth_user_model()
-        try:
-            user_model.objects.get(id=user_id)
-        except user_model.DoesNotExist:
+        if not user_model.objects.filter(id=user_id).exists():
             logger.warning("User %s not found, falling back to basic token generation", user_id)
             return generate_auth_token(token_class, user_id, user_data)
 
@@ -339,9 +338,11 @@ def generate_auth_token_with_custom_claims(
 
         return access_token, refresh_token
 
+    except ImproperlyConfigured:
+        raise
     except ImportError:
         logger.warning("Enhanced JWT system not available, using fallback")
         return generate_auth_token(token_class, user_id, user_data)
     except Exception as e:
-        logger.error("Enhanced JWT token generation failed: %s", e)
+        logger.exception("Enhanced JWT token generation failed: %s", e)
         return generate_auth_token(token_class, user_id, user_data)
