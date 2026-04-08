@@ -49,7 +49,6 @@ class AuthenticationType(str, Enum):
         return labels.get(self.value, self.value)
 
     @classmethod
-    @property
     def choices(cls) -> list:
         """Django-compatible choices tuple list."""
         return [(e.value, e.label) for e in cls]

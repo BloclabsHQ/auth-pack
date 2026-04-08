@@ -42,9 +42,7 @@ class TOTP2FAData:
         """Check if account is locked."""
         if self.locked_until is None:
             return False
-        from django.utils import timezone
-
-        return timezone.now() < self.locked_until
+        return datetime.now(tz=self.locked_until.tzinfo) < self.locked_until
 
 
 class ITOTP2FAStore(ABC):

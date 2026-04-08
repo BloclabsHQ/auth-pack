@@ -109,7 +109,7 @@ def get_available_authentication_types() -> List[Dict[str, str]]:
     Returns:
         List of dictionaries with 'code' and 'label' keys
     """
-    return [{"code": choice[0], "label": choice[1]} for choice in AuthenticationType.choices]
+    return [{"code": choice[0], "label": choice[1]} for choice in AuthenticationType.choices()]
 
 
 def get_password_help_text():
