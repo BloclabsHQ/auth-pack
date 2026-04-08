@@ -1,5 +1,6 @@
 import logging
 
+import jwt as pyjwt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -67,8 +68,9 @@ class JWTAuthentication(BaseAuthentication):
         if self.jwt_manager:
             try:
                 payload = self.jwt_manager.decode_token(validated_token)
-            except Exception as e:
-                # Fall back to original token class if enhanced system fails
+            except (pyjwt.InvalidTokenError, AuthenticationFailed):
+                raise
+            except Exception:
                 payload = self._TOKEN_CLASS().decode_token(validated_token)
         else:
             payload = self._TOKEN_CLASS().decode_token(validated_token)
