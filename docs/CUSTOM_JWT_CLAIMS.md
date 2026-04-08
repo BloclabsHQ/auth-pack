@@ -29,28 +29,30 @@ User Login → JWT Manager → Claims Provider 1 → Claims Provider 2 → ... �
 
 ### Step 1: Define Your Claims Provider Class
 
-Create a class with a `get_custom_claims` method that accepts a user object and returns a dictionary of claims:
+Create a class that inherits from `CustomClaimsProvider` and implements both `get_custom_claims` and `validate_custom_claims`:
 
 ```python
 # myapp/jwt_claims.py
 import logging
 from typing import Dict, Any
 
+from blockauth.jwt.interfaces import CustomClaimsProvider
+
 logger = logging.getLogger(__name__)
 
 
-class MyCustomClaimsProvider:
+class MyCustomClaimsProvider(CustomClaimsProvider):
     """
-    Custom JWT claims provider for MyApp
-    """
+    Custom JWT claims provider for MyApp.
 
-    def __init__(self):
-        self.name = "myapp"  # Provider name for identification
-        self.description = "Custom claims for MyApp"
+    Must implement:
+    - get_custom_claims(user) -> Dict[str, Any]
+    - validate_custom_claims(claims) -> bool
+    """
 
     def get_custom_claims(self, user) -> Dict[str, Any]:
         """
-        Generate custom claims for a user
+        Generate custom claims for a user.
 
         Args:
             user: User object (Django User model instance)
@@ -95,6 +97,16 @@ class MyCustomClaimsProvider:
         if hasattr(user, 'subscription'):
             return user.subscription.tier
         return "free"
+
+    def validate_custom_claims(self, claims: Dict[str, Any]) -> bool:
+        """
+        Validate custom claims during token verification.
+
+        Called by JWTTokenManager.decode_token() for each provider.
+        Return False to reject the token.
+        """
+        # Example: ensure role claim is present
+        return "role" in claims
 ```
 
 ### Step 2: Create a Registration Function
