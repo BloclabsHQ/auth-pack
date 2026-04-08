@@ -5,6 +5,21 @@ description = "Comprehensive Python authentication package bridging Web2 and Web
 authors = ["BloclabsHQ <eng@bloclabs.com>"]
 license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/BloclabsHQ/auth-pack"
+repository = "https://github.com/BloclabsHQ/auth-pack"
+packages = [{include = "blockauth"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 
 [tool.poetry.dependencies]
 python = "^3.12"
