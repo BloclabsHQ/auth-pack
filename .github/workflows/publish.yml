@@ -1,0 +1,51 @@
+name: Publish to GitHub Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "1.8.5"
+
+      - name: Validate tag matches pyproject.toml and __version__
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PYPROJECT_VERSION=$(poetry version -s)
+          INIT_VERSION=$(python -c "import re; print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('blockauth/__init__.py').read()).group(1))")
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) != pyproject.toml ($PYPROJECT_VERSION)"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$INIT_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) != __init__.py ($INIT_VERSION)"
+            exit 1
+          fi
+
+      - name: Build package
+        run: poetry build
+
+      - name: Create GitHub Release with package artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.whl
+          generate_release_notes: true

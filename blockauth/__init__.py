@@ -1,6 +1,9 @@
 """
 BlockAuth - Reusable Authentication Components.
 
+:copyright: (c) BloclabsHQ
+:license: MIT
+
 Quick usage for B2B2C (custom storage):
     from blockauth import TOTPService, ITOTP2FAStore, TOTP2FAData, ISecretEncryption
 
@@ -24,6 +27,8 @@ Static utilities (no storage needed):
     is_valid, counter = TOTPService.verify_totp(secret, user_code)
     backup_codes = TOTPService.generate_backup_codes()
 """
+
+__version__ = "0.2.0"
 
 # =============================================================================
 # Direct imports (Django-independent, no AppRegistryNotReady errors)

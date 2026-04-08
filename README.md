@@ -1,11 +1,6 @@
-# Blockauth
+# BlockAuth
 
-[//]: # ([![PyPI version]&#40;https://badge.fury.io/py/block-inter-auth.svg&#41;]&#40;https://badge.fury.io/py/block-inter-auth&#41;)
-[//]: # ([![PyPI - Python Version]&#40;https://img.shields.io/pypi/pyversions/block-inter-auth&#41;]&#40;https://pypi.org/project/block-inter-auth/&#41;)
-
-Blockauth is an authentication package for Python REST APIs, designed for internal use. It provides JWT-based authentication mechanisms, including login and token refresh functionalities. It also supports Social login using OAuth2.
-
-_Disclaimer: This package is currently at initiative state so you can expect frequent changes based on the teams requirements._
+Comprehensive Python authentication package bridging Web2 and Web3. Provides JWT authentication, OAuth integration, passwordless login, Web3 wallet authentication, TOTP/2FA, WebAuthn passkeys, and a KDF system that enables blockchain access without crypto knowledge.
 
 ## Table of Contents
 - [Features](#features)
@@ -259,33 +254,32 @@ BLOCK_AUTH_SETTINGS = {
 
 ## Installation
 
-#### Direct Installation
-To install the package, we prefer poetry. It's recommended to install the package in a virtual environment. Also make sure to add ssh to your github account.
-With Poetry add dependency like below in `pyproject.toml` file:
-```
+#### From GitHub Releases (recommended)
+
+Add to your `pyproject.toml`:
+```toml
 [tool.poetry.dependencies]
-...
-blockauth = { git = "git@github.com:BloclabsHQ/auth-pack.git", branch = "dev" }  # <---- give your prefered branch
-...
+blockauth = { url = "https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl" }
 ```
-Then run the command
-`poetry update`
 
+Or install directly:
+```bash
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl
+```
 
-#### Editable Mode
-To install the package in **editable mode**, you can clone the repository and install it in the virtual environment.
-After activating python virtual environment, go to the folder where the current repository should be  
-located and then follow the below commands:
+#### From Git (development)
+
+```toml
+[tool.poetry.dependencies]
+blockauth = { git = "https://github.com/BloclabsHQ/auth-pack.git", branch = "dev" }
+```
+
+#### Editable Mode (local development)
 
 ```sh
-git clone <repo-url>
-pip install -e <path-to-repo>
+git clone https://github.com/BloclabsHQ/auth-pack.git
+pip install -e ./auth-pack
 ```
-
-`pip install -e` is used to install a Python package in "editable" or "development"
-mode. This is helpful when you are actively developing a package and want the 
-changes made to the source code to be reflected immediately without needing to 
-reinstall the package each time.
 
 
 ## Configuration Setup
@@ -898,10 +892,10 @@ Then calls the `POST_SIGNUP_TRIGGER` class with **provider name, user data from 
 
 ## Utility Classes
 ### Communication Class
-This class is used to send message to the user. The default class is `blockauth.utils.communication.DummyNotification`. 
-Which is a dummy class and prints the message to the console. 
+This class is used to send messages to the user. The default class is `blockauth.notification.DummyNotification`, 
+which is a dummy class that prints the message to the console. 
 
-Developers have to implement their own class by inheriting the `blockauth.utils.communication.BaseCommunicationClass` and set the path in the settings.
+Developers should implement their own class by inheriting `blockauth.notification.BaseNotification` and set the path in settings via `DEFAULT_NOTIFICATION_CLASS`.
 Otherwise, the default class will be used.
 
 Currently, the communication class is integrated in the following APIs:
@@ -919,15 +913,16 @@ Currently, the communication class is integrated in the following APIs:
 from blockauth.notification import BaseNotification
 
 
-class CustomCommunication(BaseNotification):
-    def communicate(self, purpose: str, context: dict) -> None:
+class CustomNotification(BaseNotification):
+    def notify(self, method: str, event: str, context: dict) -> None:
         """
-       :param purpose: should be used to identify the purpose of the communication.
-       :param context: should contain the necessary information to send the message by developers own logic.
+       :param method: delivery method ('email', 'sms')
+       :param event: notification event (see NotificationEvent constants)
+       :param context: contains identifier and any extra data
        """
-        if purpose == 'otp_request':
+        if event == 'otp_request':
             self.send_otp(context)
-        elif purpose == 'password_change':
+        elif event == 'password_change':
             self.send_password_change_email(context)
 
     def send_otp(self, context: dict) -> None:
@@ -940,18 +935,22 @@ class CustomCommunication(BaseNotification):
         print(f"Sending password change notification to email {email}")
 ```
 
-Currently, the following **purposes** are available for communication in the package. In the future, more purposes might be added:
+The following notification events are available (see `blockauth.notification.NotificationEvent`):
 ```python
-class CommunicationPurpose:
+class NotificationEvent:
     OTP_REQUEST = "otp_request"
-    PASSWORD_CHANGE = "password_change"
+    SUCCESS_PASSWORD_RESET = "success_password_reset"
+    SUCCESS_PASSWORD_CHANGE = "success_password_change"
+    SUCCESS_EMAIL_CHANGE = "success_email_change"
 ```
 
 ### Trigger Classes
 These classes are used to perform some actions before and after the signup and login process.
-- `PreSignupTrigger`: This class is called before the signup process. The default class is `blockauth.utils.triggers.DefaultPreSignupTrigger` which is a dummy class.
-- `PostSignupTrigger`: This class is called after the signup process. The default class is `blockauth.utils.triggers.DefaultPostSignupTrigger` which is a dummy class.
-- `PostLoginTrigger`: This class is called after the login process. The default class is `blockauth.utils.triggers.DefaultPostLoginTrigger` which is a dummy class.
+- `PRE_SIGNUP_TRIGGER`: Called before signup. Default: `blockauth.triggers.DummyPreSignupTrigger`
+- `POST_SIGNUP_TRIGGER`: Called after signup. Default: `blockauth.triggers.DummyPostSignupTrigger`
+- `POST_LOGIN_TRIGGER`: Called after login. Default: `blockauth.triggers.DummyPostLoginTrigger`
+- `POST_PASSWORD_CHANGE_TRIGGER`: Called after password change. Default: `blockauth.triggers.DummyPostPasswordChangeTrigger`
+- `POST_PASSWORD_RESET_TRIGGER`: Called after password reset. Default: `blockauth.triggers.DummyPostPasswordResetTrigger`
 
 Developers have to implement their own classes by inheriting the respective base classes and set the path in the settings.
 
@@ -1129,19 +1128,17 @@ for wallet in wallets:
 
 ### Password Change Integration
 
+Password change triggers fire automatically from the `PasswordChangeView`. To handle password changes in your app, implement a custom trigger:
+
 ```python
-from blockauth.triggers import PostPasswordChangeTrigger
+from blockauth.triggers import BaseTrigger
 
-# Trigger automatically re-encrypts KDF wallets
-trigger = PostPasswordChangeTrigger()
-context = {
-    'user': user,
-    'old_password': 'OldPassword123',
-    'new_password': 'NewPassword456'
-}
-
-trigger.execute(context)
-# KDF wallets are automatically re-encrypted with new password
+class MyPasswordChangeTrigger(BaseTrigger):
+    def trigger(self, context: dict) -> None:
+        # context contains: user_id, username, email, trigger_type, timestamp
+        # NOTE: plaintext passwords are never included in the context
+        user_id = context['user_id']
+        # Perform post-password-change actions (e.g., invalidate sessions)
 ```
 
 ### KDF Configuration
