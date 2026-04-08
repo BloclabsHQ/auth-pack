@@ -73,53 +73,26 @@ class JWTTokenManager:
 
         # Collect custom claims from all registered providers
         custom_claims = {}
-        logger.info(f"🔍 Collecting custom claims from {len(self._claims_providers)} providers")
 
         for provider in self._claims_providers:
             try:
-                logger.info(f"🔍 Calling provider: {provider.__class__.__name__}")
-
-                # Try to get user object for custom claims
-                try:
-                    user_model = get_block_auth_user_model()
-                    if hasattr(user_model, "objects"):
-                        user = user_model.objects.get(id=user_id)
-                        logger.info(f"✅ Got user from database: {user.email}")
-                    else:
-                        # Handle case where user_model is not a Django model
-                        user = user_model(id=user_id, email=f"user_{user_id}@example.com")
-                        logger.info(f"✅ Created mock user: {user.email}")
-                except Exception as user_error:
-                    # If we can't get the user from database, create a mock user
-                    logger.warning(f"Could not get user from database: {user_error}")
-                    user = type("MockUser", (), {"id": user_id, "email": f"user_{user_id}@example.com"})()
-                    logger.info(f"✅ Created fallback mock user: {user.email}")
+                # Get user object for custom claims
+                user_model = get_block_auth_user_model()
+                user = user_model.objects.get(id=user_id)
 
                 provider_claims = provider.get_custom_claims(user)
-                logger.info(f"✅ Provider {provider.__class__.__name__} returned claims: {provider_claims}")
 
                 if provider_claims:
                     custom_claims.update(provider_claims)
-                    logger.info(
-                        f"✅ Added custom claims from {provider.__class__.__name__}: {list(provider_claims.keys())}"
-                    )
-                else:
-                    logger.info(f"⚠️ Provider {provider.__class__.__name__} returned no claims")
+            except user_model.DoesNotExist:
+                logger.warning("User %s not found, skipping claims provider %s", user_id, provider.__class__.__name__)
             except Exception as e:
-                # Log error but don't fail token generation
-                logger.error(f"❌ Error getting custom claims from {provider.__class__.__name__}: {e}")
-                import traceback
-
-                traceback.print_exc()
+                logger.error("Error getting custom claims from %s: %s", provider.__class__.__name__, e)
 
         # Merge all claims: extra_claims < custom_claims < base_claims (base always wins)
         all_claims = {**extra_claims, **custom_claims, **base_claims}
-        logger.info(f"✅ Final claims for token: {list(all_claims.keys())}")
 
-        # Generate token
-        token = jwt.encode(all_claims, self.signing_key, algorithm=self.algorithm)
-        logger.info(f"✅ Generated JWT token with {len(all_claims)} claims")
-        return token
+        return jwt.encode(all_claims, self.signing_key, algorithm=self.algorithm)
 
     def decode_token(self, token: str) -> Dict[str, Any]:
         """Decode and validate JWT token"""

@@ -7,8 +7,4 @@ class BlockAuthConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self):
-        import logging
-
-        logging.basicConfig(level=logging.DEBUG)
-        logger = logging.getLogger(__name__)
-        logger.debug("BlockAuth service is ready")
+        pass
