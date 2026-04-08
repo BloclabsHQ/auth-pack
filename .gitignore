@@ -7,3 +7,4 @@ main.py
 dist
 /block_inter_auth.egg-info
 identifier.sqlite
+__pycache__
