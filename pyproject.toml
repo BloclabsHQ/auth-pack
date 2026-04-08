@@ -1,22 +1,61 @@
-[tool.poetry]
+[project]
 name = "blockauth"
-version = "0.1.0"
-description = "Auth package for internal usage"
-authors = ["darkprinx <rctushar07@gmail.com>"]
-license = "All Rights Reserved"
+version = "0.3.0"
+description = "Comprehensive Python authentication package bridging Web2 and Web3"
+authors = [{name = "BloclabsHQ", email = "eng@bloclabs.com"}]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "django>=5.0,<6.0",
+    "pyjwt>=2.8,<3.0",
+    "requests>=2.31,<3.0",
+    "djangorestframework>=3.14,<4.0",
+    "django-ratelimit>=4.1,<5.0",
+    "drf-spectacular>=0.27,<1.0",
+    "web3>=7.6.0",
+    "eth-account>=0.13.0",
+    "cryptography>=46.0.5",
+    "argon2-cffi>=23.0.0",
+    "webauthn>=2.0.0",
+    "uuid6>=2024.7.10",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-django = "5.1.4"
-pyjwt = "2.9.0"
-requests = "2.32.3"
-djangorestframework = "3.15.2"
-setuptools = "^75.6.0"
-drf-spectacular="0.28.0"
-drf-spectacular-sidecar="2024.12.1"
+[project.urls]
+Homepage = "https://github.com/BloclabsHQ/auth-pack"
+Repository = "https://github.com/BloclabsHQ/auth-pack"
 
+[dependency-groups]
+dev = [
+    "black>=26.3.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "autoflake>=2.3.0",
+]
+
+[tool.uv]
+package = true
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
