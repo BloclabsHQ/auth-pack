@@ -756,7 +756,7 @@ refresh_token_docs = {
     "examples": [
         OpenApiExample(
             "Token Refresh",
-            value={"refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."},
+            value={"refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."},
             request_only=True,
             description="Refresh access token with refresh token",
         )
