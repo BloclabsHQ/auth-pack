@@ -25,8 +25,6 @@ Static utilities (no storage needed):
     backup_codes = TOTPService.generate_backup_codes()
 """
 
-default_app_config = "blockauth.apps.BlockAuthConfig"
-
 # =============================================================================
 # Direct imports (Django-independent, no AppRegistryNotReady errors)
 # =============================================================================

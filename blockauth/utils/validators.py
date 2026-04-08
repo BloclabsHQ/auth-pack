@@ -1,11 +1,11 @@
 """
-FabricBloc Validators
-=====================
-Common validation utilities for the FabricBloc platform.
+BlockAuth Validators
+====================
+Common validation utilities for BlockAuth.
 
 This module contains validators for:
 - Phone numbers
-- Passwords (FabricBloc standard)
+- Passwords
 
 Password Requirements:
 - 8-128 characters
@@ -29,7 +29,7 @@ Usage:
 Django Integration:
     # settings.py
     AUTH_PASSWORD_VALIDATORS = [
-        {'NAME': 'blockauth.utils.validators.FabricBlocPasswordValidator'},
+        {'NAME': 'blockauth.utils.validators.BlockAuthPasswordValidator'},
     ]
 """
 
@@ -61,7 +61,7 @@ PASSWORD_VALIDATION_ERROR = (
 
 def validate_password(password: str) -> List[str]:
     """
-    Validate password against FabricBloc requirements.
+    Validate password against BlockAuth requirements.
 
     Args:
         password: The password string to validate.
@@ -93,7 +93,7 @@ def validate_password(password: str) -> List[str]:
 
 def is_valid_password(password: str) -> bool:
     """
-    Quick check if password meets FabricBloc requirements.
+    Quick check if password meets BlockAuth requirements.
 
     Args:
         password: The password string to validate.
@@ -115,12 +115,12 @@ def is_valid_password(password: str) -> bool:
 # =============================================================================
 
 
-class FabricBlocPasswordValidator:
+class BlockAuthPasswordValidator:
     """
-    Django password validator implementing FabricBloc requirements.
+    Django password validator implementing BlockAuth requirements.
 
     Add to AUTH_PASSWORD_VALIDATORS in settings.py:
-        {'NAME': 'blockauth.utils.validators.FabricBlocPasswordValidator'}
+        {'NAME': 'blockauth.utils.validators.BlockAuthPasswordValidator'}
 
     Requirements:
         - 8-128 characters

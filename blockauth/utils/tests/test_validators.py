@@ -1,5 +1,5 @@
 """
-Tests for FabricBloc validators.
+Tests for BlockAuth validators.
 
 Tests the password validation functions and Django validator class.
 """
@@ -11,7 +11,7 @@ from blockauth.utils.validators import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
     PASSWORD_VALIDATION_ERROR,
-    FabricBlocPasswordValidator,
+    BlockAuthPasswordValidator,
     is_valid_password,
     is_valid_phone_number,
     validate_password,
@@ -167,12 +167,12 @@ class TestIsValidPassword:
         assert is_valid_password("password1!") is False  # missing uppercase
 
 
-class TestFabricBlocPasswordValidator:
+class TestBlockAuthPasswordValidator:
     """Test the Django password validator class."""
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.validator = FabricBlocPasswordValidator()
+        self.validator = BlockAuthPasswordValidator()
 
     def test_valid_password_does_not_raise(self):
         """Valid passwords should not raise ValidationError."""
