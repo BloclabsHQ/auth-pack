@@ -1,11 +1,6 @@
-# Blockauth
+# BlockAuth
 
-[//]: # ([![PyPI version]&#40;https://badge.fury.io/py/block-inter-auth.svg&#41;]&#40;https://badge.fury.io/py/block-inter-auth&#41;)
-[//]: # ([![PyPI - Python Version]&#40;https://img.shields.io/pypi/pyversions/block-inter-auth&#41;]&#40;https://pypi.org/project/block-inter-auth/&#41;)
-
-Blockauth is an authentication package for Python REST APIs, designed for internal use. It provides JWT-based authentication mechanisms, including login and token refresh functionalities. It also supports Social login using OAuth2.
-
-_Disclaimer: This package is currently at initiative state so you can expect frequent changes based on the teams requirements._
+Comprehensive Python authentication package bridging Web2 and Web3. Provides JWT authentication, OAuth integration, passwordless login, Web3 wallet authentication, TOTP/2FA, WebAuthn passkeys, and a KDF system that enables blockchain access without crypto knowledge.
 
 ## Table of Contents
 - [Features](#features)
@@ -259,33 +254,32 @@ BLOCK_AUTH_SETTINGS = {
 
 ## Installation
 
-#### Direct Installation
-To install the package, we prefer poetry. It's recommended to install the package in a virtual environment. Also make sure to add ssh to your github account.
-With Poetry add dependency like below in `pyproject.toml` file:
-```
+#### From GitHub Releases (recommended)
+
+Add to your `pyproject.toml`:
+```toml
 [tool.poetry.dependencies]
-...
-blockauth = { git = "git@github.com:BloclabsHQ/auth-pack.git", branch = "dev" }  # <---- give your prefered branch
-...
+blockauth = { url = "https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl" }
 ```
-Then run the command
-`poetry update`
 
+Or install directly:
+```bash
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl
+```
 
-#### Editable Mode
-To install the package in **editable mode**, you can clone the repository and install it in the virtual environment.
-After activating python virtual environment, go to the folder where the current repository should be  
-located and then follow the below commands:
+#### From Git (development)
+
+```toml
+[tool.poetry.dependencies]
+blockauth = { git = "https://github.com/BloclabsHQ/auth-pack.git", branch = "dev" }
+```
+
+#### Editable Mode (local development)
 
 ```sh
-git clone <repo-url>
-pip install -e <path-to-repo>
+git clone https://github.com/BloclabsHQ/auth-pack.git
+pip install -e ./auth-pack
 ```
-
-`pip install -e` is used to install a Python package in "editable" or "development"
-mode. This is helpful when you are actively developing a package and want the 
-changes made to the source code to be reflected immediately without needing to 
-reinstall the package each time.
 
 
 ## Configuration Setup

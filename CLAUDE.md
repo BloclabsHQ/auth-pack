@@ -171,6 +171,14 @@ All endpoints are feature-flag controlled via `BLOCK_AUTH_SETTINGS['FEATURES']`.
 
 ## Installation & Setup
 
+```bash
+# Install from GitHub Releases
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl
+
+# Or from git
+pip install git+https://github.com/BloclabsHQ/auth-pack.git@dev
+```
+
 ```python
 # Django settings
 INSTALLED_APPS = [
@@ -275,6 +283,23 @@ Key rules:
 - Rate limiting on all auth endpoints
 - No sensitive data in logs (passwords, tokens, keys)
 - No `traceback.print_exc()` in production code
+
+## Releasing
+
+Version is tracked in two places (keep in sync):
+- `pyproject.toml` → `version = "X.Y.Z"`
+- `blockauth/__init__.py` → `__version__ = "X.Y.Z"`
+
+To release:
+```bash
+# 1. Bump version in both files
+# 2. Commit and push to dev
+# 3. Tag and push
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The `publish.yml` workflow validates the tag matches `pyproject.toml`, builds the package, and creates a GitHub Release with sdist + wheel artifacts.
 
 ## Testing
 
