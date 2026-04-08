@@ -256,29 +256,26 @@ BLOCK_AUTH_SETTINGS = {
 
 #### From GitHub Releases (recommended)
 
-Add to your `pyproject.toml`:
-```toml
-[tool.poetry.dependencies]
-blockauth = { url = "https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl" }
+```bash
+uv add "blockauth @ https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl"
 ```
 
-Or install directly:
+Or with pip:
 ```bash
-pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.2.0/blockauth-0.2.0-py3-none-any.whl
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl
 ```
 
 #### From Git (development)
 
-```toml
-[tool.poetry.dependencies]
-blockauth = { git = "https://github.com/BloclabsHQ/auth-pack.git", branch = "dev" }
+```bash
+uv add "blockauth @ git+https://github.com/BloclabsHQ/auth-pack.git@dev"
 ```
 
 #### Editable Mode (local development)
 
-```sh
+```bash
 git clone https://github.com/BloclabsHQ/auth-pack.git
-pip install -e ./auth-pack
+uv pip install -e ./auth-pack
 ```
 
 
@@ -1205,7 +1202,7 @@ The rate limit can be configured in the settings.
 
 1. **Install KDF Dependencies**
 ```bash
-poetry add cryptography web3 eth-account argon2-cffi
+uv add cryptography web3 eth-account argon2-cffi
 ```
 
 2. **Configure KDF Settings**

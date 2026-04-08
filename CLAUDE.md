@@ -304,19 +304,19 @@ The `publish.yml` workflow validates the tag matches `pyproject.toml`, builds th
 ## Testing
 
 ```bash
-# Run all tests via poetry
-poetry run pytest
+# Run all tests
+uv run pytest
 
 # Specific test modules
-poetry run pytest blockauth/kdf/tests.py
-poetry run pytest blockauth/totp/tests/
-poetry run pytest blockauth/passkey/tests/
-poetry run pytest blockauth/utils/tests/
+uv run pytest blockauth/kdf/tests.py
+uv run pytest blockauth/totp/tests/
+uv run pytest blockauth/passkey/tests/
+uv run pytest blockauth/utils/tests/
 
 # Format + lint
-poetry run black blockauth/
-poetry run isort blockauth/
-poetry run flake8 blockauth/
+uv run black blockauth/
+uv run isort blockauth/
+uv run flake8 blockauth/
 ```
 
 ## Documentation
@@ -333,13 +333,13 @@ poetry run flake8 blockauth/
 
 **Symptom**: `ModuleNotFoundError` in fabric-auth CI for modules that exist in auth-pack.
 
-**Cause**: `fabric-auth/poetry.lock` pins blockauth to a specific git commit.
+**Cause**: fabric-auth's lockfile pins blockauth to a specific git commit.
 
 **Fix**: After pushing auth-pack changes:
 ```bash
 cd services/fabric-auth
-poetry update blockauth
-git add poetry.lock && git commit -m "chore: update blockauth to latest dev"
+uv lock --upgrade-package blockauth
+git add uv.lock && git commit -m "chore: update blockauth to latest dev"
 ```
 
 ### JWT Claims Not Appearing
