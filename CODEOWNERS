@@ -1,0 +1,17 @@
+# BlockAuth Code Owners
+# These owners will be automatically requested for review on PRs.
+
+# Default — all changes require review from the core team
+* @BloclabsHQ/engineering
+
+# Security-sensitive areas — require security team review
+blockauth/kdf/ @BloclabsHQ/engineering
+blockauth/stepup/ @BloclabsHQ/engineering
+blockauth/utils/token.py @BloclabsHQ/engineering
+blockauth/jwt/ @BloclabsHQ/engineering
+blockauth/authentication.py @BloclabsHQ/engineering
+blockauth/utils/web3/ @BloclabsHQ/engineering
+
+# CI/CD and release
+.github/ @BloclabsHQ/engineering
+pyproject.toml @BloclabsHQ/engineering
