@@ -892,10 +892,10 @@ Then calls the `POST_SIGNUP_TRIGGER` class with **provider name, user data from 
 
 ## Utility Classes
 ### Communication Class
-This class is used to send message to the user. The default class is `blockauth.utils.communication.DummyNotification`. 
-Which is a dummy class and prints the message to the console. 
+This class is used to send messages to the user. The default class is `blockauth.notification.DummyNotification`, 
+which is a dummy class that prints the message to the console. 
 
-Developers have to implement their own class by inheriting the `blockauth.utils.communication.BaseCommunicationClass` and set the path in the settings.
+Developers should implement their own class by inheriting `blockauth.notification.BaseNotification` and set the path in settings via `DEFAULT_NOTIFICATION_CLASS`.
 Otherwise, the default class will be used.
 
 Currently, the communication class is integrated in the following APIs:
@@ -913,15 +913,16 @@ Currently, the communication class is integrated in the following APIs:
 from blockauth.notification import BaseNotification
 
 
-class CustomCommunication(BaseNotification):
-    def communicate(self, purpose: str, context: dict) -> None:
+class CustomNotification(BaseNotification):
+    def notify(self, method: str, event: str, context: dict) -> None:
         """
-       :param purpose: should be used to identify the purpose of the communication.
-       :param context: should contain the necessary information to send the message by developers own logic.
+       :param method: delivery method ('email', 'sms')
+       :param event: notification event (see NotificationEvent constants)
+       :param context: contains identifier and any extra data
        """
-        if purpose == 'otp_request':
+        if event == 'otp_request':
             self.send_otp(context)
-        elif purpose == 'password_change':
+        elif event == 'password_change':
             self.send_password_change_email(context)
 
     def send_otp(self, context: dict) -> None:
@@ -934,18 +935,22 @@ class CustomCommunication(BaseNotification):
         print(f"Sending password change notification to email {email}")
 ```
 
-Currently, the following **purposes** are available for communication in the package. In the future, more purposes might be added:
+The following notification events are available (see `blockauth.notification.NotificationEvent`):
 ```python
-class CommunicationPurpose:
+class NotificationEvent:
     OTP_REQUEST = "otp_request"
-    PASSWORD_CHANGE = "password_change"
+    SUCCESS_PASSWORD_RESET = "success_password_reset"
+    SUCCESS_PASSWORD_CHANGE = "success_password_change"
+    SUCCESS_EMAIL_CHANGE = "success_email_change"
 ```
 
 ### Trigger Classes
 These classes are used to perform some actions before and after the signup and login process.
-- `PreSignupTrigger`: This class is called before the signup process. The default class is `blockauth.utils.triggers.DefaultPreSignupTrigger` which is a dummy class.
-- `PostSignupTrigger`: This class is called after the signup process. The default class is `blockauth.utils.triggers.DefaultPostSignupTrigger` which is a dummy class.
-- `PostLoginTrigger`: This class is called after the login process. The default class is `blockauth.utils.triggers.DefaultPostLoginTrigger` which is a dummy class.
+- `PRE_SIGNUP_TRIGGER`: Called before signup. Default: `blockauth.triggers.DummyPreSignupTrigger`
+- `POST_SIGNUP_TRIGGER`: Called after signup. Default: `blockauth.triggers.DummyPostSignupTrigger`
+- `POST_LOGIN_TRIGGER`: Called after login. Default: `blockauth.triggers.DummyPostLoginTrigger`
+- `POST_PASSWORD_CHANGE_TRIGGER`: Called after password change. Default: `blockauth.triggers.DummyPostPasswordChangeTrigger`
+- `POST_PASSWORD_RESET_TRIGGER`: Called after password reset. Default: `blockauth.triggers.DummyPostPasswordResetTrigger`
 
 Developers have to implement their own classes by inheriting the respective base classes and set the path in the settings.
 
@@ -1123,19 +1128,17 @@ for wallet in wallets:
 
 ### Password Change Integration
 
+Password change triggers fire automatically from the `PasswordChangeView`. To handle password changes in your app, implement a custom trigger:
+
 ```python
-from blockauth.triggers import PostPasswordChangeTrigger
+from blockauth.triggers import BaseTrigger
 
-# Trigger automatically re-encrypts KDF wallets
-trigger = PostPasswordChangeTrigger()
-context = {
-    'user': user,
-    'old_password': 'OldPassword123',
-    'new_password': 'NewPassword456'
-}
-
-trigger.execute(context)
-# KDF wallets are automatically re-encrypted with new password
+class MyPasswordChangeTrigger(BaseTrigger):
+    def trigger(self, context: dict) -> None:
+        # context contains: user_id, username, email, trigger_type, timestamp
+        # NOTE: plaintext passwords are never included in the context
+        user_id = context['user_id']
+        # Perform post-password-change actions (e.g., invalidate sessions)
 ```
 
 ### KDF Configuration
