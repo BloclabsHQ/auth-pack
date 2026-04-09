@@ -160,3 +160,20 @@ class TestWalletLoginSerializerInvalidAddress:
         )
         assert not s.is_valid()
         assert "wallet_address" in s.errors
+
+
+class TestWalletLoginSerializerErrorCodes:
+    def test_invalid_signature_error_code_is_string(self):
+        """verify_signature returning False yields code INVALID_SIGNATURE (not 4009)."""
+        data = {
+            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12",
+            "message": '{"nonce": "abc", "timestamp": 9999999999, "body": "Login"}',
+            "signature": "0x" + "a" * 130,
+        }
+        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
+            mock_auth.return_value.verify_signature.return_value = False
+            s = WalletLoginSerializer(data=data)
+            s.is_valid()
+            error = s.errors.get("signature", [])
+            assert len(error) > 0
+            assert error[0].code == "INVALID_SIGNATURE"

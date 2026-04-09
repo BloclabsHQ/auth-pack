@@ -45,16 +45,16 @@ class WalletLoginSerializer(serializers.Serializer):
             authenticator = WalletAuthenticator()
             if not authenticator.verify_signature(wallet_address, message, signature):
                 raise ValidationError(
-                    detail={"signature": "Invalid signature. Signature verification failed."}, code=4009
+                    detail={"signature": "Invalid signature. Signature verification failed."}, code="INVALID_SIGNATURE"
                 )
         except ValueError as e:
             # Structured validation errors from replay/timestamp/nonce checks
-            raise ValidationError(detail={"message": str(e)}, code=4009)
+            raise ValidationError(detail={"message": str(e)}, code="INVALID_SIGNATURE")
         except ValidationError:
             raise
         except Exception as e:
             logger.error(f"Signature verification error: {str(e)}")
-            raise ValidationError(detail={"signature": "Signature verification failed."}, code=4009)
+            raise ValidationError(detail={"signature": "Signature verification failed."}, code="INVALID_SIGNATURE")
 
         # Check if user exists or create new one
         # First check if wallet is already associated with another user
