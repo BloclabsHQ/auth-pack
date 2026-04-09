@@ -91,6 +91,8 @@ Key settings in `BLOCK_AUTH_SETTINGS`:
 
 ## Commands
 
+**Breaking changes** — check `.github/CONTRIBUTING.md` before opening any PR.
+
 ```bash
 uv sync            # install deps
 uv run pytest      # run tests
