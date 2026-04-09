@@ -150,9 +150,7 @@ class WalletLinkSerializer(serializers.Serializer):
 
     wallet_address = serializers.CharField(max_length=42, help_text="Ethereum wallet address (0x...)")
     message = serializers.CharField(help_text="JSON-encoded message with nonce + timestamp that was signed.")
-    signature = serializers.CharField(
-        max_length=132, help_text="Ethereum signature (0x-prefixed, 130 hex chars)"
-    )
+    signature = serializers.CharField(max_length=132, help_text="Ethereum signature (0x-prefixed, 130 hex chars)")
 
     def validate_wallet_address(self, value):
         if not value.startswith("0x") or len(value) != 42:

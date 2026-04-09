@@ -8,10 +8,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from blockauth.docs.wallet_auth_docs import wallet_email_add_docs, wallet_login_docs
+from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTPSubject
 from blockauth.notification import send_otp
-from blockauth.enums import AuthenticationType
-from blockauth.serializers.wallet_serializers import WalletEmailAddSerializer, WalletLinkSerializer, WalletLoginSerializer
+from blockauth.serializers.wallet_serializers import (
+    WalletEmailAddSerializer,
+    WalletLinkSerializer,
+    WalletLoginSerializer,
+)
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode, WalletConflictError
 from blockauth.utils.generics import model_to_json, sanitize_log_context

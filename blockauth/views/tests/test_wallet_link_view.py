@@ -9,7 +9,6 @@ import json
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
 from rest_framework import status
 from rest_framework.test import APIRequestFactory
 
@@ -24,11 +23,13 @@ VALID_ADDRESS = "0xabcdef1234567890abcdef1234567890abcdef12"
 def _make_payload(wallet_address=VALID_ADDRESS):
     return {
         "wallet_address": wallet_address,
-        "message": json.dumps({
-            "nonce": "test-nonce-0000-1111-2222",
-            "timestamp": int(time.time()),
-            "body": "Link wallet to TestApp",
-        }),
+        "message": json.dumps(
+            {
+                "nonce": "test-nonce-0000-1111-2222",
+                "timestamp": int(time.time()),
+                "body": "Link wallet to TestApp",
+            }
+        ),
         "signature": "0x" + "a" * 130,
     }
 
@@ -57,10 +58,12 @@ class TestSuccessPath:
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")
         request._force_auth_user = user
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model, \
-             patch("blockauth.views.wallet_auth_views.get_config") as mock_config, \
-             patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}):
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+            patch("blockauth.views.wallet_auth_views.get_config") as mock_config,
+            patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}),
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             mock_config.return_value.return_value = MagicMock()
@@ -75,10 +78,12 @@ class TestSuccessPath:
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")
         request._force_auth_user = user
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model, \
-             patch("blockauth.views.wallet_auth_views.get_config") as mock_config, \
-             patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}):
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+            patch("blockauth.views.wallet_auth_views.get_config") as mock_config,
+            patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}),
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             mock_config.return_value.return_value = MagicMock()
@@ -92,10 +97,12 @@ class TestSuccessPath:
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")
         request._force_auth_user = user
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model, \
-             patch("blockauth.views.wallet_auth_views.get_config") as mock_config, \
-             patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}):
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+            patch("blockauth.views.wallet_auth_views.get_config") as mock_config,
+            patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}),
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             mock_config.return_value.return_value = MagicMock()
@@ -109,10 +116,12 @@ class TestSuccessPath:
         request._force_auth_user = user
         mock_trigger = MagicMock()
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model, \
-             patch("blockauth.views.wallet_auth_views.get_config") as mock_config, \
-             patch("blockauth.views.wallet_auth_views.model_to_json", return_value={"id": "user-test-uuid-123"}):
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+            patch("blockauth.views.wallet_auth_views.get_config") as mock_config,
+            patch("blockauth.views.wallet_auth_views.model_to_json", return_value={"id": "user-test-uuid-123"}),
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             mock_config.return_value.return_value = mock_trigger
@@ -131,8 +140,10 @@ class TestErrorPaths:
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")
         request._force_auth_user = user
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             response = VIEW(request)
@@ -144,8 +155,10 @@ class TestErrorPaths:
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")
         request._force_auth_user = user
 
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = True
             response = VIEW(request)
@@ -169,7 +182,9 @@ class TestErrorPaths:
         request._force_auth_user = user
 
         with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.side_effect = ValueError("Message has expired. Please sign a new message.")
+            mock_auth.return_value.verify_signature.side_effect = ValueError(
+                "Message has expired. Please sign a new message."
+            )
             response = VIEW(request)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -187,8 +202,10 @@ class TestFeatureFlag:
     def test_wallet_link_url_present_when_feature_enabled(self):
         from blockauth.urls import build_urlpatterns
 
-        with patch("blockauth.urls.is_feature_enabled", return_value=True), \
-             patch("blockauth.urls.is_social_auth_configured", return_value=False):
+        with (
+            patch("blockauth.urls.is_feature_enabled", return_value=True),
+            patch("blockauth.urls.is_social_auth_configured", return_value=False),
+        ):
             patterns = build_urlpatterns()
             names = [p.name for p in patterns if hasattr(p, "name")]
             assert "wallet-link" in names

@@ -28,11 +28,13 @@ def _make_request(wallet_address=None):
 def _make_data(wallet_address="0xabcdef1234567890abcdef1234567890abcdef12"):
     return {
         "wallet_address": wallet_address,
-        "message": json.dumps({
-            "nonce": "test-nonce-0000-1111-2222",
-            "timestamp": int(time.time()),
-            "body": "Link wallet to TestApp",
-        }),
+        "message": json.dumps(
+            {
+                "nonce": "test-nonce-0000-1111-2222",
+                "timestamp": int(time.time()),
+                "body": "Link wallet to TestApp",
+            }
+        ),
         "signature": "0x" + "a" * 130,
     }
 
@@ -40,8 +42,10 @@ def _make_data(wallet_address="0xabcdef1234567890abcdef1234567890abcdef12"):
 class TestValidateWalletAddress:
     def test_valid_address_is_lowercased(self):
         request = _make_request()
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             s = WalletLinkSerializer(
@@ -82,7 +86,9 @@ class TestSignatureVerification:
     def test_expired_message_gives_400(self):
         request = _make_request()
         with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.side_effect = ValueError("Message has expired. Please sign a new message.")
+            mock_auth.return_value.verify_signature.side_effect = ValueError(
+                "Message has expired. Please sign a new message."
+            )
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
             assert not s.is_valid()
             assert "message" in s.errors
@@ -91,7 +97,9 @@ class TestSignatureVerification:
     def test_nonce_reused_gives_400(self):
         request = _make_request()
         with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.side_effect = ValueError("Nonce has already been used. Please sign a new message.")
+            mock_auth.return_value.verify_signature.side_effect = ValueError(
+                "Nonce has already been used. Please sign a new message."
+            )
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
             assert not s.is_valid()
             assert "message" in s.errors
@@ -100,8 +108,10 @@ class TestSignatureVerification:
 class TestBusinessRules:
     def test_wallet_in_use_by_another_user_raises_conflict(self):
         request = _make_request(wallet_address=None)
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = True
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
@@ -111,8 +121,10 @@ class TestBusinessRules:
     def test_user_already_has_wallet_gives_400(self):
         existing = "0x1111111111111111111111111111111111111111"
         request = _make_request(wallet_address=existing)
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
@@ -121,8 +133,10 @@ class TestBusinessRules:
 
     def test_valid_unlinked_user_passes_validation(self):
         request = _make_request(wallet_address=None)
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth, \
-             patch("blockauth.serializers.wallet_serializers._User") as mock_user_model:
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+        ):
             mock_auth.return_value.verify_signature.return_value = True
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
