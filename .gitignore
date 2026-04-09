@@ -39,6 +39,9 @@ htmlcov/
 .env
 .env.*
 
+# MkDocs
+site/
+
 # Legacy
 main.py
 identifier.sqlite
