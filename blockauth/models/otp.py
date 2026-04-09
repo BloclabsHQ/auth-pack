@@ -18,7 +18,7 @@ class OTPSubject(models.TextChoices):
 
 
 class OTP(models.Model):
-    identifier = models.CharField(max_length=100, help_text="Email or phone to send OTP")
+    identifier = models.CharField(max_length=100, db_index=True, help_text="Email or phone to send OTP")
     code = models.CharField(max_length=12)
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
