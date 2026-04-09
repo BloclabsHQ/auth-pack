@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 
 from blockauth.enums import AuthenticationType
 from blockauth.utils.config import get_block_auth_user_model, get_config
+from blockauth.utils.custom_exception import WalletConflictError
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 from blockauth.utils.web3.wallet import WalletAuthenticator
@@ -24,9 +25,7 @@ class WalletLoginSerializer(serializers.Serializer):
 
     def validate_wallet_address(self, value):
         if not value.startswith("0x") or len(value) != 42:
-            raise ValidationError(
-                "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
-            )
+            raise ValidationError("Invalid wallet address format. Must be a 42-character hex string starting with 0x.")
         return value.lower()
 
     def validate(self, data):
@@ -151,14 +150,10 @@ class WalletLinkSerializer(serializers.Serializer):
 
     def validate_wallet_address(self, value):
         if not value.startswith("0x") or len(value) != 42:
-            raise ValidationError(
-                "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
-            )
+            raise ValidationError("Invalid wallet address format. Must be a 42-character hex string starting with 0x.")
         return value.lower()
 
     def validate(self, data):
-        super().validate(data)
-
         wallet_address = data.get("wallet_address")
         message = data.get("message")
         signature = data.get("signature")
@@ -169,7 +164,8 @@ class WalletLinkSerializer(serializers.Serializer):
             authenticator = WalletAuthenticator()
             if not authenticator.verify_signature(wallet_address, message, signature):
                 raise ValidationError(
-                    detail={"signature": "Invalid signature. Signature verification failed."}, code="INVALID_SIGNATURE"
+                    detail={"signature": "Invalid signature. Signature verification failed."},
+                    code="INVALID_SIGNATURE",
                 )
         except ValueError as e:
             raise ValidationError(detail={"message": str(e)}, code="INVALID_SIGNATURE")
@@ -177,20 +173,21 @@ class WalletLinkSerializer(serializers.Serializer):
             raise
         except Exception as e:
             logger.error(f"Signature verification error: {str(e)}")
-            raise ValidationError(detail={"signature": "Signature verification failed."}, code="INVALID_SIGNATURE")
+            raise ValidationError(
+                detail={"signature": "Signature verification failed."},
+                code="INVALID_SIGNATURE",
+            )
 
-        # 2. Wallet must not belong to a different account
-        from blockauth.utils.custom_exception import WalletConflictError
-
-        if _User.objects.filter(wallet_address=wallet_address).exclude(pk=request.user.pk).exists():
-            raise WalletConflictError()
-
-        # 3. User must not already have a wallet linked
+        # 2. User must not already have a wallet linked (cheap — attribute access, no DB)
         if request.user.wallet_address:
             raise ValidationError(
                 detail={"wallet_address": "Your account already has a linked wallet. Unlink it first."},
                 code="WALLET_ALREADY_LINKED",
             )
+
+        # 3. Wallet must not belong to a different account (DB query — only runs if user is unlinked)
+        if _User.objects.filter(wallet_address=wallet_address).exclude(pk=request.user.pk).exists():
+            raise WalletConflictError()
 
         return data
 
@@ -206,9 +203,7 @@ class WalletEmailAddSerializer(serializers.Serializer):
         try:
             EmailValidator()(value)
         except Exception:
-            raise ValidationError(
-                "Invalid email address format. Please provide a valid email address."
-            )
+            raise ValidationError("Invalid email address format. Please provide a valid email address.")
         return value
 
     def validate(self, data):
