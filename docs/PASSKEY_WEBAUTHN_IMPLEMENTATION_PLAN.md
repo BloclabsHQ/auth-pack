@@ -1572,7 +1572,7 @@ PyJWT = "^2.8"
 ## File Structure Summary
 
 ```
-services/auth-pack/
+auth-pack/
 ├── blockauth/
 │   ├── passkey/                          # NEW MODULE
 │   │   ├── __init__.py                   # PK-1, PK-44
