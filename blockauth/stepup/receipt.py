@@ -65,7 +65,7 @@ class ReceiptIssuer:
     Args:
         secret: HS256 signing key (shared with consuming service).
                 Must be >= 32 bytes. Use ``secrets.token_hex(32)`` to generate.
-        issuer: Optional ``iss`` claim (e.g., "fabric-auth").
+        issuer: Optional ``iss`` claim (e.g., "my-auth-service").
         default_audience: Default ``aud`` claim (e.g., "my-wallet-service").
         default_scope: Default ``scope`` claim (e.g., "mpc").
         default_ttl_seconds: Default receipt lifetime. 120s recommended.

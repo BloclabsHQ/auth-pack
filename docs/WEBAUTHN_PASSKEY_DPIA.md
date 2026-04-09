@@ -61,7 +61,7 @@ This DPIA assesses the privacy impact of implementing WebAuthn/FIDO2 passkey aut
                     ════════════╪════════════  NETWORK BOUNDARY
                                 │
 ┌───────────────────────────────▼─────────────────────────────────────────┐
-│                        FABRICBLOC SERVERS                                │
+│                        BLOCKAUTH SERVERS                                │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │                    STORED DATA                                   │   │
@@ -104,7 +104,7 @@ This DPIA assesses the privacy impact of implementing WebAuthn/FIDO2 passkey aut
 | Is biometric data stored? | **NO** - never reaches servers |
 | Does Article 9 apply? | **NO** |
 
-**Conclusion**: Article 9 special category protections do **NOT** apply because FabricBloc servers never receive, process, or store biometric data.
+**Conclusion**: Article 9 special category protections do **NOT** apply because BlockAuth servers never receive, process, or store biometric data.
 
 ---
 
