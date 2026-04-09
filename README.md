@@ -33,6 +33,7 @@ Comprehensive Python authentication package bridging Web2 and Web3. Provides JWT
   - [Django Settings Configuration](#django-settings-configuration)
 - [Rate Limiting](#rate-limiting)
 - [Step-Up Authentication (TOTP Receipt)](#step-up-authentication-totp-receipt)
+- [Contributors](#contributors)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -1376,4 +1377,9 @@ MIT License. See [LICENSE](LICENSE) for details.
 - [Cryptography](https://cryptography.io/) - For AES-256-GCM encryption
 - [Web3.py](https://web3py.readthedocs.io/) - For Ethereum integration
 - [Argon2](https://github.com/P-H-C/phc-winner-argon2) - For advanced KDF algorithms
+
+## Contributors
+
+- [Pramod Kodag](https://github.com/PramodTKodag)
+- [Cris R](https://github.com/Madgeniusblink)
 
