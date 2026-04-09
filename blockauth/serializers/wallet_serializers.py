@@ -33,8 +33,6 @@ class WalletLoginSerializer(serializers.Serializer):
         Validate the wallet login data and perform signature verification.
         Handles user creation or retrieval based on wallet address.
         """
-        super().validate(data)
-
         wallet_address = data.get("wallet_address")
         message = data.get("message")
         signature = data.get("signature")
@@ -208,8 +206,6 @@ class WalletEmailAddSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Validate the email add request"""
-        super().validate(data)
-
         # Check if email is already in use by another user
         request = self.context.get("request")
         if request and request.user.is_authenticated:
