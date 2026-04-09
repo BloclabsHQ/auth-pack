@@ -65,22 +65,34 @@ All endpoints are feature-flag controlled. See the [Installation guide](https://
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `signup/` | Register with email/phone + password |
-| POST | `signup/confirm/` | Confirm signup with OTP |
-| POST | `login/basic/` | Email/password login |
-| POST | `login/passwordless/` | Request passwordless OTP |
-| POST | `login/passwordless/confirm/` | Confirm passwordless login |
-| POST | `login/wallet/` | Web3 wallet signature auth |
-| POST | `token/refresh/` | Refresh JWT tokens |
-| POST | `password/reset/` | Request password reset |
-| POST | `password/change/` | Change password (authenticated) |
-| GET | `google/` | Google OAuth |
-| GET | `facebook/` | Facebook OAuth |
-| GET | `linkedin/` | LinkedIn OAuth |
-| POST | `passkey/register/options/` | WebAuthn registration |
-| POST | `passkey/auth/verify/` | WebAuthn authentication |
+| Method | Path | Description | Feature Flag |
+|--------|------|-------------|-------------|
+| POST | `signup/` | Register with email/phone + password | SIGNUP |
+| POST | `signup/otp/resend/` | Resend signup / wallet email OTP | SIGNUP |
+| POST | `signup/confirm/` | Confirm signup with OTP | SIGNUP |
+| POST | `login/basic/` | Email/password login | BASIC_LOGIN |
+| POST | `login/passwordless/` | Request passwordless OTP | PASSWORDLESS_LOGIN |
+| POST | `login/passwordless/confirm/` | Confirm passwordless login | PASSWORDLESS_LOGIN |
+| POST | `login/wallet/` | Web3 wallet signature auth | WALLET_LOGIN |
+| POST | `token/refresh/` | Refresh JWT tokens | TOKEN_REFRESH |
+| POST | `password/reset/` | Request password reset OTP | PASSWORD_RESET |
+| POST | `password/reset/confirm/` | Confirm password reset | PASSWORD_RESET |
+| POST | `password/change/` | Change password (authenticated) | PASSWORD_CHANGE |
+| POST | `email/change/` | Request email change OTP | EMAIL_CHANGE |
+| POST | `email/change/confirm/` | Confirm email change | EMAIL_CHANGE |
+| POST | `wallet/email/add/` | Add email to wallet account | WALLET_EMAIL_ADD |
+| POST | `passkey/register/options/` | Get WebAuthn registration options | PASSKEY_AUTH |
+| POST | `passkey/register/verify/` | Verify WebAuthn registration | PASSKEY_AUTH |
+| POST | `passkey/auth/options/` | Get WebAuthn authentication options | PASSKEY_AUTH |
+| POST | `passkey/auth/verify/` | Verify WebAuthn authentication | PASSKEY_AUTH |
+| GET | `passkey/credentials/` | List user's passkeys | PASSKEY_AUTH |
+| DELETE | `passkey/credentials/<id>/` | Revoke a passkey | PASSKEY_AUTH |
+| GET | `google/` | Google OAuth login | SOCIAL_AUTH |
+| GET | `google/callback/` | Google OAuth callback | SOCIAL_AUTH |
+| GET | `facebook/` | Facebook OAuth login | SOCIAL_AUTH |
+| GET | `facebook/callback/` | Facebook OAuth callback | SOCIAL_AUTH |
+| GET | `linkedin/` | LinkedIn OAuth login | SOCIAL_AUTH |
+| GET | `linkedin/callback/` | LinkedIn OAuth callback | SOCIAL_AUTH |
 
 Full endpoint documentation: [API Endpoints](https://github.com/BloclabsHQ/auth-pack/wiki/API-Endpoints)
 

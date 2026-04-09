@@ -40,14 +40,32 @@ blockauth/
 
 | Path | View | Feature Flag |
 |------|------|-------------|
+| `signup/` | SignUpView | SIGNUP |
+| `signup/otp/resend/` | SignUpResendOTPView | SIGNUP |
+| `signup/confirm/` | SignUpConfirmView | SIGNUP |
 | `login/basic/` | BasicAuthLoginView | BASIC_LOGIN |
 | `login/passwordless/` | PasswordlessLoginView | PASSWORDLESS_LOGIN |
+| `login/passwordless/confirm/` | PasswordlessLoginConfirmView | PASSWORDLESS_LOGIN |
 | `login/wallet/` | WalletAuthLoginView | WALLET_LOGIN |
 | `token/refresh/` | AuthRefreshTokenView | TOKEN_REFRESH |
-| `signup/` | SignUpView | SIGNUP |
 | `password/reset/` | PasswordResetView | PASSWORD_RESET |
+| `password/reset/confirm/` | PasswordResetConfirmView | PASSWORD_RESET |
 | `password/change/` | PasswordChangeView | PASSWORD_CHANGE |
+| `email/change/` | EmailChangeView | EMAIL_CHANGE |
+| `email/change/confirm/` | EmailChangeConfirmView | EMAIL_CHANGE |
+| `wallet/email/add/` | WalletEmailAddView | WALLET_EMAIL_ADD |
 | `passkey/register/options/` | PasskeyRegistrationOptionsView | PASSKEY_AUTH |
+| `passkey/register/verify/` | PasskeyRegistrationVerifyView | PASSKEY_AUTH |
+| `passkey/auth/options/` | PasskeyAuthenticationOptionsView | PASSKEY_AUTH |
+| `passkey/auth/verify/` | PasskeyAuthenticationVerifyView | PASSKEY_AUTH |
+| `passkey/credentials/` | PasskeyCredentialListView | PASSKEY_AUTH |
+| `passkey/credentials/<id>/` | PasskeyCredentialDetailView | PASSKEY_AUTH |
+| `google/` | GoogleAuthLoginView | SOCIAL_AUTH |
+| `google/callback/` | GoogleAuthCallbackView | SOCIAL_AUTH |
+| `facebook/` | FacebookAuthLoginView | SOCIAL_AUTH |
+| `facebook/callback/` | FacebookAuthCallbackView | SOCIAL_AUTH |
+| `linkedin/` | LinkedInAuthLoginView | SOCIAL_AUTH |
+| `linkedin/callback/` | LinkedInAuthCallbackView | SOCIAL_AUTH |
 
 ## Settings (conf.py DEFAULTS)
 

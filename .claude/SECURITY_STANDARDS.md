@@ -673,6 +673,6 @@ No exceptions, no shortcuts, no "temporary" insecure code.
 When in doubt, choose the MORE SECURE option. Always.
 
 **See also:**
-- [SOC2_COMPLIANCE.md](SOC2_COMPLIANCE.md) - Full SOC2 implementation
-- [AUDIT_TRAIL_IMPLEMENTATION.md](AUDIT_TRAIL_IMPLEMENTATION.md) - Complete audit guide
-- [security-enforcement-hook.md](hooks/security-enforcement-hook.md) - Automatic enforcement
+- SOC2 compliance: Planned — see project roadmap
+- Audit trail implementation: Planned — see project roadmap
+- Security enforcement hooks: Planned — see project roadmap

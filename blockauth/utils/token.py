@@ -35,7 +35,7 @@ Usage:
 """
 
 import logging
-import uuid
+import secrets
 from datetime import timedelta
 from typing import Any, Dict, Tuple
 
@@ -184,7 +184,7 @@ class Token(AbstractToken):
         payload.update(
             {
                 "user_id": user_id,
-                "jti": str(uuid.uuid4()),
+                "jti": secrets.token_urlsafe(32),
                 "exp": timezone.now() + token_lifetime,
                 "iat": timezone.now(),
                 "type": token_type,

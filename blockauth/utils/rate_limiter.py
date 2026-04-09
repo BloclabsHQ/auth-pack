@@ -132,8 +132,13 @@ class RequestThrottle(BaseThrottle):
         if not identifier and request.user.id:
             identifier = str(request.user.id)
 
-        # No throttling if identifier, subject, or IP address is missing
+        # Deny request if identifier, subject, or IP address is missing —
+        # fail closed to prevent bypass via spoofed/missing headers.
         if not identifier or not subject or not ip_address:
+            blockauth_logger.warning(
+                "Rate limit: missing identifier/subject/IP — denying request",
+                sanitize_log_context({"identifier": identifier, "subject": subject, "ip_address": ip_address}),
+            )
             return None
 
         return f"auth_throttle_{identifier}_{subject}_{ip_address}"
@@ -141,7 +146,8 @@ class RequestThrottle(BaseThrottle):
     def allow_request(self, request, subject):
         self.key = self.get_cache_key(request, subject)
         if self.key is None:
-            return True
+            # Fail closed: deny requests without identifiable source
+            return False
 
         self.history = self.cache.get(self.key, [])
         self.now = self.timer()
