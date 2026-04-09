@@ -2,7 +2,7 @@
 Passkey Cleanup Service
 
 Service layer for cleaning up expired passkey data.
-Can be imported and used by consuming applications (e.g., fabric-auth management commands).
+Can be imported and used by consuming applications (e.g., Django management commands).
 
 Usage:
     from blockauth.passkey.services import cleanup_expired_challenges, cleanup_all

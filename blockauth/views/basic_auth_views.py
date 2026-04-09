@@ -223,7 +223,7 @@ class SignUpConfirmView(APIView):
 
                 user_data = model_to_json(user, remove_fields=("password",))
 
-                # Call POST_SIGNUP_TRIGGER with user data - let fabric-auth handle the complexity
+                # Call POST_SIGNUP_TRIGGER with user data
                 post_signup_trigger = get_config("POST_SIGNUP_TRIGGER")()
                 post_signup_trigger.trigger(context={"user": user, "provider_data": data})
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
