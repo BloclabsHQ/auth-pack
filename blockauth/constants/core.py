@@ -191,6 +191,8 @@ class ConfigKeys:
     POST_SIGNUP_TRIGGER = "POST_SIGNUP_TRIGGER"  # Post-signup trigger class
     PRE_SIGNUP_TRIGGER = "PRE_SIGNUP_TRIGGER"  # Pre-signup trigger class
     POST_LOGIN_TRIGGER = "POST_LOGIN_TRIGGER"  # Post-login trigger class
+    POST_PASSWORD_CHANGE_TRIGGER = "POST_PASSWORD_CHANGE_TRIGGER"  # Post-password-change trigger class
+    POST_PASSWORD_RESET_TRIGGER = "POST_PASSWORD_RESET_TRIGGER"  # Post-password-reset trigger class
 
     # Utility classes
     DEFAULT_NOTIFICATION_CLASS = "DEFAULT_NOTIFICATION_CLASS"  # Notification handler class

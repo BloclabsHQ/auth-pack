@@ -87,8 +87,7 @@ blockauth/
 │   │   └── encryption.py   # Secret encryption service
 │   ├── storage/
 │   │   ├── base.py         # ITOTP2FAStore ABC, TOTP2FAData DTO
-│   │   ├── django_storage.py # Django model storage
-│   │   └── memory_storage.py # In-memory storage (testing)
+│   │   └── django_storage.py # Django model storage
 │   └── tests/              # TOTP tests
 ├── passkey/                 # WebAuthn/Passkey sub-package
 │   ├── config.py           # Passkey configuration
@@ -173,7 +172,7 @@ All endpoints are feature-flag controlled via `BLOCK_AUTH_SETTINGS['FEATURES']`.
 
 ```bash
 # Install from GitHub Releases
-pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.4.0/blockauth-0.4.0-py3-none-any.whl
 
 # Or from git
 pip install git+https://github.com/BloclabsHQ/auth-pack.git@dev
@@ -295,8 +294,8 @@ To release:
 # 1. Bump version in both files
 # 2. Commit and push to dev
 # 3. Tag and push
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 The `publish.yml` workflow validates the tag matches `pyproject.toml`, builds the package, and creates a GitHub Release with sdist + wheel artifacts.

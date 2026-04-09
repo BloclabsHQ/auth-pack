@@ -79,8 +79,7 @@ PASSWORD_VALIDATORS = [
      'OPTIONS': {'min_length': 12}},  # MINIMUM 12 characters
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-    {'NAME': 'blockauth.validators.PasswordStrengthValidator'},
-    {'NAME': 'blockauth.validators.PwnedPasswordValidator'},  # Check breaches
+    {'NAME': 'blockauth.utils.validators.BlockAuthPasswordValidator'},
 ]
 
 # MANDATORY complexity requirements
