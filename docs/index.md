@@ -6,33 +6,19 @@ BlockAuth gives your Django application a complete auth system out of the box �
 
 ---
 
-<div class="grid cards" markdown>
+## Why BlockAuth?
 
--   :material-shield-lock:{ .lg .middle } **Security First**
-
-    ---
-
+!!! success "Security First"
     Timing-safe comparisons, progressive lockout, token rotation, replay protection, encrypted TOTP secrets. Audited and hardened.
 
--   :material-puzzle:{ .lg .middle } **Plug and Play**
-
-    ---
-
+!!! info "Plug and Play"
     Install, inherit `BlockUser`, add your URLs. Feature flags let you enable only what you need — no dead code.
 
--   :material-web:{ .lg .middle } **Web2 + Web3**
-
-    ---
-
+!!! tip "Web2 + Web3"
     Email login, OAuth (Google/Facebook/LinkedIn), passwordless OTP, Ethereum wallet auth, and KDF wallet generation — all in one package.
 
--   :material-test-tube:{ .lg .middle } **Battle Tested**
-
-    ---
-
+!!! example "Battle Tested"
     333 tests covering every endpoint. View-level tests, integration flows, and security-focused test suites.
-
-</div>
 
 ---
 
@@ -51,6 +37,8 @@ BlockAuth gives your Django application a complete auth system out of the box �
 | **Rate Limiting** | Per-endpoint throttling with progressive lockout after failed attempts |
 | **Feature Flags** | Enable/disable any auth method independently via `BLOCK_AUTH_SETTINGS` |
 | **Cleanup Command** | `blockauth_cleanup` management command for expired OTPs, challenges, logs |
+
+---
 
 ## Quick Install
 
@@ -99,6 +87,8 @@ class User(BlockUser):
 
 **[Get started in 5 minutes :material-arrow-right:](getting-started/quick-start.md)**
 
+---
+
 ## API Endpoints
 
 All endpoints are feature-flag controlled. Enable what you need, disable what you don't.
@@ -121,20 +111,24 @@ GET  /auth/linkedin/                  # LinkedIn OAuth redirect
 
 **[Full endpoint reference :material-arrow-right:](reference/api-endpoints.md)**
 
+---
+
 ## Architecture
 
 ```
 blockauth/
-├── jwt/         # Token management, custom claims
-├── views/       # DRF API views for all endpoints
+├── jwt/          # Token management, custom claims
+├── views/        # DRF API views for all endpoints
 ├── serializers/  # Request/response validation
-├── models/      # BlockUser (abstract), OTP
-├── totp/        # TOTP 2FA with pluggable storage
-├── passkey/     # WebAuthn/FIDO2 authentication
-├── stepup/      # RFC 9470 step-up auth receipts
-├── kdf/         # Key derivation (PBKDF2, Argon2)
-└── utils/       # Rate limiting, validators, crypto
+├── models/       # BlockUser (abstract), OTP
+├── totp/         # TOTP 2FA with pluggable storage
+├── passkey/      # WebAuthn/FIDO2 authentication
+├── stepup/       # RFC 9470 step-up auth receipts
+├── kdf/          # Key derivation (PBKDF2, Argon2)
+└── utils/        # Rate limiting, validators, crypto
 ```
+
+---
 
 ## License
 
