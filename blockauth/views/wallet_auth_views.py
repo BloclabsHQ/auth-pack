@@ -15,6 +15,7 @@ from blockauth.utils.config import get_block_auth_user_model
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.rate_limiter import EnhancedThrottle
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -29,9 +30,19 @@ class WalletAuthLoginView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = []
     serializer_class = WalletLoginSerializer
+    login_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
 
     @extend_schema(**wallet_login_docs)
     def post(self, request):
+        if not self.login_throttle.allow_request(request, "wallet_login"):
+            reason = self.login_throttle.get_block_reason()
+            msg = (
+                "Too many failed login attempts. Please try again later."
+                if reason == "cooldown"
+                else "Rate limit exceeded. Please try again later."
+            )
+            return Response(data={"detail": msg}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Wallet login attempt", sanitize_log_context(request.data))
 
@@ -53,6 +64,8 @@ class WalletAuthLoginView(APIView):
                     "Wallet login successful", sanitize_log_context(request.data, {"user": auth_result["user"].id})
                 )
 
+            self.login_throttle.record_success(request, "wallet_login")
+
             # Return response
             return Response(
                 data={"access": auth_result["access_token"], "refresh": auth_result["refresh_token"]},
@@ -60,11 +73,13 @@ class WalletAuthLoginView(APIView):
             )
 
         except ValidationError as e:
+            self.login_throttle.record_failure(request, "wallet_login")
             blockauth_logger.warning(
                 "Wallet login validation failed", sanitize_log_context(request.data, {"errors": e.detail})
             )
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
+            self.login_throttle.record_failure(request, "wallet_login")
             blockauth_logger.error("Wallet login failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Wallet login request failed: {e}", exc_info=True)
             raise APIException()
