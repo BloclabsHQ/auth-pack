@@ -54,6 +54,7 @@ blockauth/
 | `email/change/` | EmailChangeView | EMAIL_CHANGE |
 | `email/change/confirm/` | EmailChangeConfirmView | EMAIL_CHANGE |
 | `wallet/email/add/` | WalletEmailAddView | WALLET_EMAIL_ADD |
+| `wallet/link/` | WalletLinkView | WALLET_LINK |
 | `passkey/register/options/` | PasskeyRegistrationOptionsView | PASSKEY_AUTH |
 | `passkey/register/verify/` | PasskeyRegistrationVerifyView | PASSKEY_AUTH |
 | `passkey/auth/options/` | PasskeyAuthenticationOptionsView | PASSKEY_AUTH |
@@ -76,7 +77,7 @@ Key settings in `BLOCK_AUTH_SETTINGS`:
 - `REFRESH_TOKEN_LIFETIME` — timedelta (default: 1 day)
 - `BLOCK_AUTH_USER_MODEL` — dotted path to user model
 - `FEATURES` — dict of feature flags (all True by default)
-- Triggers: `PRE_SIGNUP_TRIGGER`, `POST_SIGNUP_TRIGGER`, `POST_LOGIN_TRIGGER`, `POST_PASSWORD_CHANGE_TRIGGER`, `POST_PASSWORD_RESET_TRIGGER`
+- Triggers: `PRE_SIGNUP_TRIGGER`, `POST_SIGNUP_TRIGGER`, `POST_LOGIN_TRIGGER`, `POST_PASSWORD_CHANGE_TRIGGER`, `POST_PASSWORD_RESET_TRIGGER`, `POST_WALLET_LINK_TRIGGER`
 - `DEFAULT_NOTIFICATION_CLASS` — notification handler
 
 ## Security Rules

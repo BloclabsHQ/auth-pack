@@ -17,6 +17,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 - `POST /wallet/link/` with an invalid wallet address format now returns `400` instead of `500`.
 - Business rule evaluation order in `WalletLinkSerializer` — user's existing wallet check now runs before the DB conflict query, preventing unnecessary database queries and wallet enumeration.
+- `POST /wallet/email/add/` with an invalid email format now returns `400` instead of `500` (same root cause as the wallet address fix).
 
 ---
 
