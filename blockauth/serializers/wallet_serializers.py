@@ -138,6 +138,70 @@ class WalletLoginSerializer(serializers.Serializer):
         }
 
 
+class WalletLinkSerializer(serializers.Serializer):
+    """
+    Validates a wallet link request from an already-authenticated user.
+
+    Performs full signature verification (including replay protection) via
+    WalletAuthenticator. Raises WalletConflictError (409) if the address
+    belongs to another user, ValidationError (400) if the user already has
+    a wallet linked.
+    """
+
+    wallet_address = serializers.CharField(max_length=42, help_text="Ethereum wallet address (0x...)")
+    message = serializers.CharField(help_text="JSON-encoded message with nonce + timestamp that was signed.")
+    signature = serializers.CharField(
+        max_length=132, help_text="Ethereum signature (0x-prefixed, 130 hex chars)"
+    )
+
+    def validate_wallet_address(self, value):
+        if not value.startswith("0x") or len(value) != 42:
+            raise ValidationError(
+                detail={
+                    "wallet_address": "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
+                }
+            )
+        return value.lower()
+
+    def validate(self, data):
+        super().validate(data)
+
+        wallet_address = data.get("wallet_address")
+        message = data.get("message")
+        signature = data.get("signature")
+        request = self.context.get("request")
+
+        # 1. Verify signature — replay protection, nonce, timestamp all handled here
+        try:
+            authenticator = WalletAuthenticator()
+            if not authenticator.verify_signature(wallet_address, message, signature):
+                raise ValidationError(
+                    detail={"signature": "Invalid signature. Signature verification failed."}, code="INVALID_SIGNATURE"
+                )
+        except ValueError as e:
+            raise ValidationError(detail={"message": str(e)}, code="INVALID_SIGNATURE")
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Signature verification error: {str(e)}")
+            raise ValidationError(detail={"signature": "Signature verification failed."}, code="INVALID_SIGNATURE")
+
+        # 2. Wallet must not belong to a different account
+        from blockauth.utils.custom_exception import WalletConflictError
+
+        if _User.objects.filter(wallet_address=wallet_address).exclude(pk=request.user.pk).exists():
+            raise WalletConflictError()
+
+        # 3. User must not already have a wallet linked
+        if request.user.wallet_address:
+            raise ValidationError(
+                detail={"wallet_address": "Your account already has a linked wallet. Unlink it first."},
+                code="WALLET_ALREADY_LINKED",
+            )
+
+        return data
+
+
 class WalletEmailAddSerializer(serializers.Serializer):
     email = serializers.EmailField(help_text="Email address to add and verify")
     verification_type = serializers.ChoiceField(

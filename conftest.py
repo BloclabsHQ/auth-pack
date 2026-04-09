@@ -31,7 +31,7 @@ def pytest_configure():
         BLOCK_AUTH_SETTINGS={
             "SECRET_KEY": "test-secret-key-not-for-production",
             "ALGORITHM": "HS256",
-            "BLOCK_AUTH_USER_MODEL": "auth.User",
+            "BLOCK_AUTH_USER_MODEL": "django.contrib.auth.User",
         },
         REST_FRAMEWORK={
             "DEFAULT_AUTHENTICATION_CLASSES": [
