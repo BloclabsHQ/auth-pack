@@ -23,12 +23,9 @@ class WalletLoginSerializer(serializers.Serializer):
     )
 
     def validate_wallet_address(self, value):
-        """Validate Ethereum wallet address format"""
         if not value.startswith("0x") or len(value) != 42:
             raise ValidationError(
-                detail={
-                    "wallet_address": "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
-                }
+                "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
             )
         return value.lower()
 
@@ -155,9 +152,7 @@ class WalletLinkSerializer(serializers.Serializer):
     def validate_wallet_address(self, value):
         if not value.startswith("0x") or len(value) != 42:
             raise ValidationError(
-                detail={
-                    "wallet_address": "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
-                }
+                "Invalid wallet address format. Must be a 42-character hex string starting with 0x."
             )
         return value.lower()
 

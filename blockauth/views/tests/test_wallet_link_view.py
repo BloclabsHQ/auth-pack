@@ -209,3 +209,16 @@ class TestFeatureFlag:
             patterns = build_urlpatterns()
             names = [p.name for p in patterns if hasattr(p, "name")]
             assert "wallet-link" in names
+
+
+class TestInvalidAddress:
+    def test_invalid_address_returns_400_not_500(self):
+        user = _make_user()
+        request = factory.post(
+            "/wallet/link/",
+            data={**_make_payload(), "wallet_address": "notvalid"},
+            format="json",
+        )
+        request._force_auth_user = user
+        response = VIEW(request)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
