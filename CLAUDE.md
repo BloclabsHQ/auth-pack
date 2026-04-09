@@ -4,7 +4,7 @@
 
 ## Overview
 
-BlockAuth is a Django REST Framework authentication package bridging Web2 and Web3. Version 0.3.0, MIT licensed, uses uv for package management.
+BlockAuth is a Django REST Framework authentication package bridging Web2 and Web3. Version 0.4.0, MIT licensed, uses uv for package management.
 
 ## Architecture
 
@@ -104,7 +104,7 @@ uv build           # build package
 
 Bump version in `pyproject.toml` and `blockauth/__init__.py`, then:
 ```bash
-git tag v0.3.0 && git push origin v0.3.0
+git tag v0.5.0 && git push origin v0.5.0
 ```
 
 ## Documentation
