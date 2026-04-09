@@ -1,6 +1,13 @@
 # BlockAuth
 
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://bloclabshq.github.io/auth-pack/)
+[![Release](https://img.shields.io/github/v/release/BloclabsHQ/auth-pack)](https://github.com/BloclabsHQ/auth-pack/releases/latest)
+[![Tests](https://img.shields.io/badge/tests-333%20passing-brightgreen)]()
+[![License](https://img.shields.io/github/license/BloclabsHQ/auth-pack)](LICENSE)
+
 Comprehensive Python authentication package bridging Web2 and Web3. Provides JWT authentication, OAuth integration, passwordless login, Web3 wallet authentication, TOTP/2FA, WebAuthn passkeys, and a KDF system that enables blockchain access without crypto knowledge.
+
+**[Read the full documentation](https://bloclabshq.github.io/auth-pack/)**
 
 ## Table of Contents
 - [Features](#features)
