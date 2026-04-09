@@ -11,7 +11,7 @@ class BlockUser(AbstractBaseUser):
     This model is not allowed to be managed by Django migrations.
     & also it is not encouraged to be created using Django admin.
 
-    Inherit this model in your project's User model to become compitable
+    Inherit this model in your project's User model to become compatible
     with this app functionalities.
     """
 

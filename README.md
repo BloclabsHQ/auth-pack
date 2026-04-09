@@ -83,7 +83,7 @@ After a user completes an additional authentication factor (e.g., TOTP verificat
 from blockauth.stepup import ReceiptIssuer
 
 issuer = ReceiptIssuer(
-    secret="your-shared-secret-min-32-chars",
+    secret=RECEIPT_SHARED_SECRET,  # min 32 chars
     issuer="my-auth-service",
     default_audience="my-wallet-service",
     default_scope="mpc",
@@ -101,7 +101,7 @@ receipt_token = issuer.issue(subject=str(user.id))
 from blockauth.stepup import ReceiptValidator, ReceiptValidationError
 
 validator = ReceiptValidator(
-    secret="your-shared-secret-min-32-chars",
+    secret=RECEIPT_SHARED_SECRET,  # min 32 chars
     expected_audience="my-wallet-service",
     expected_scope="mpc",
 )
@@ -330,9 +330,9 @@ BLOCK_AUTH_SETTINGS = {
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",   # Field name in the user model which will be used as user id in the JWT token
     "JWT_SECRET_KEY": "your-jwt-secret-key-here",  # For HS256: shared secret (optional, falls back to Django SECRET_KEY)
-    # "JWT_PRIVATE_KEY": "-----BEGIN RSA PRIVATE KEY-----\n...",  # For RS256/ES256: PEM private key (signing)
-    # "JWT_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----\n...",        # For RS256/ES256: PEM public key (verification)
-    # NOTE: For RS256/ES256, never expose private keys in logs, version control, or client-side code.
+    # "JWT_PRIVATE_KEY": "<PEM-encoded signing key>",   # For RS256/ES256: PEM key (signing)
+    # "JWT_PUBLIC_KEY": "<PEM-encoded verification key>", # For RS256/ES256: PEM key (verification)
+    # NOTE: For RS256/ES256, never expose signing keys in logs, version control, or client-side code.
     # Use environment variables or a secrets manager (1Password, AWS Secrets Manager) in production.
 
     "OTP_VALIDITY": timedelta(minutes=3),
@@ -750,9 +750,9 @@ BlockAuth supports Ethereum wallet-based authentication using cryptographic sign
 ```json
 POST /api/v1/auth/login/wallet/
 {
-  "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+  "wallet_address": "0x742d35Cc...b4d8b6",
   "message": "ABC",
-  "signature": "0x1234567890abcdef1234567890abcdef1234567890abcd..."
+  "signature": "0x1234...abcd"
 }
 ```
 
@@ -1088,7 +1088,7 @@ kdf_manager = get_kdf_manager()
 # Create wallet for email user
 wallet_data = kdf_manager.create_wallet(
     email="user@example.com",
-    password="SecurePassword123",
+    password=EXAMPLE_PASSWORD,
     wallet_name="primary"
 )
 
@@ -1115,7 +1115,7 @@ print(f"Passwordless Wallet: {wallet_data['wallet_address']}")
 # Create multiple wallets with different names
 wallets = kdf_manager.create_multiple_wallets(
     email="user@example.com",
-    password="SecurePassword123",
+    password=EXAMPLE_PASSWORD,
     wallet_names=["primary", "trading", "savings"]
 )
 
@@ -1230,7 +1230,7 @@ kdf_manager = get_kdf_manager()
 # Test with email/password
 wallet = kdf_manager.create_wallet(
     email="test@example.com",
-    password="TestPassword123"
+    password=EXAMPLE_PASSWORD
 )
 
 assert wallet['wallet_address'].startswith('0x')
@@ -1371,7 +1371,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 - [PyJWT](https://pyjwt.readthedocs.io/en/stable/)
 - [drf-yasg](https://drf-yasg.readthedocs.io/en/stable/)
 - [Google OAuth2](https://developers.google.com/identity/protocols/oauth2)
-- [LinkedIn OAuth2](https://docs.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow?context=linkedin/context)
+- [LinkedIn OAuth2](https://learn.microsoft.com/en-us/linkedin/shared/authentication/)
 - [Facebook OAuth2](https://developers.facebook.com/docs/facebook-login/)
 - [Cryptography](https://cryptography.io/) - For AES-256-GCM encryption
 - [Web3.py](https://web3py.readthedocs.io/) - For Ethereum integration

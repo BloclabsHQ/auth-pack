@@ -43,7 +43,7 @@ from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
-from blockauth.utils.rate_limiter import OTPThrottle, RequestThrottle
+from blockauth.utils.rate_limiter import EnhancedThrottle, OTPThrottle, RequestThrottle
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class SignUpView(APIView):
         except Exception as e:
             blockauth_logger.error("User signup failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
-            raise APIException(detail=f"Signup failed: {type(e).__name__}: {e}")
+            raise APIException() from e
 
 
 class SignUpResendOTPView(APIView):
@@ -223,7 +223,7 @@ class SignUpConfirmView(APIView):
 
                 user_data = model_to_json(user, remove_fields=("password",))
 
-                # Call POST_SIGNUP_TRIGGER with user data - let fabric-auth handle the complexity
+                # Call POST_SIGNUP_TRIGGER with user data
                 post_signup_trigger = get_config("POST_SIGNUP_TRIGGER")()
                 post_signup_trigger.trigger(context={"user": user, "provider_data": data})
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
@@ -255,9 +255,20 @@ class BasicAuthLoginView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = BasicLoginSerializer
     authentication_classes = []
+    login_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
 
     @extend_schema(**basic_login_docs)
     def post(self, request):
+        # Check progressive lockout before processing
+        if not self.login_throttle.allow_request(request, "basic_login"):
+            reason = self.login_throttle.get_block_reason()
+            msg = (
+                "Too many failed login attempts. Please try again later."
+                if reason == "cooldown"
+                else "Rate limit exceeded. Please try again later."
+            )
+            return Response(data={"detail": msg}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Basic login attempt", sanitize_log_context(request.data))
         try:
@@ -284,14 +295,17 @@ class BasicAuthLoginView(APIView):
             except ImportError:
                 # Fall back to original implementation
                 access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
+            self.login_throttle.record_success(request, "basic_login")
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
-        except ValidationError as e:
+        except (ValidationError, ValidationErrorWithCode) as e:
+            self.login_throttle.record_failure(request, "basic_login")
             blockauth_logger.warning(
                 "Basic login validation failed", sanitize_log_context(request.data, {"errors": e.detail})
             )
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
+            self.login_throttle.record_failure(request, "basic_login")
             blockauth_logger.error("Basic login failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
@@ -352,9 +366,19 @@ class PasswordlessLoginConfirmView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
     authentication_classes = []
+    login_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
 
     @extend_schema(**passwordless_confirm_docs)
     def post(self, request):
+        if not self.login_throttle.allow_request(request, "passwordless_login"):
+            reason = self.login_throttle.get_block_reason()
+            msg = (
+                "Too many failed login attempts. Please try again later."
+                if reason == "cooldown"
+                else "Rate limit exceeded. Please try again later."
+            )
+            return Response(data={"detail": msg}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Passwordless login confirmation attempt", sanitize_log_context(request.data))
         try:
@@ -395,17 +419,20 @@ class PasswordlessLoginConfirmView(APIView):
             except ImportError:
                 # Fall back to original implementation
                 access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
+            self.login_throttle.record_success(request, "passwordless_login")
             blockauth_logger.success(
                 "Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id})
             )
             return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
         except ValidationError as e:
+            self.login_throttle.record_failure(request, "passwordless_login")
             blockauth_logger.warning(
                 "Passwordless login confirmation validation failed",
                 sanitize_log_context(request.data, {"errors": e.detail}),
             )
             raise ValidationErrorWithCode(detail=e.detail)
         except Exception as e:
+            self.login_throttle.record_failure(request, "passwordless_login")
             blockauth_logger.error(
                 "Passwordless login confirmation failed", sanitize_log_context(request.data, {"error": str(e)})
             )
@@ -431,15 +458,27 @@ class AuthRefreshTokenView(APIView):
                 "Refresh token validation failed", sanitize_log_context(request.data, {"errors": serializer.errors})
             )
             raise ValidationErrorWithCode(detail=serializer.errors)
-        refresh_token = serializer.validated_data.get("refresh_token")
+        refresh_token_value = serializer.validated_data.get("refresh_token")
         token = AUTH_TOKEN_CLASS()
-        payload = token.decode_token(refresh_token)
+        payload = token.decode_token(refresh_token_value)
         try:
             if payload["type"] != "refresh":
                 blockauth_logger.error(
                     "Invalid refresh token type", sanitize_log_context(request.data, {"payload": payload})
                 )
                 raise AuthenticationFailed("Invalid token.")
+
+            # --- Refresh token rotation: reject blacklisted tokens ----------
+            from blockauth.utils.token_blacklist import is_blacklisted
+
+            old_jti = payload.get("jti")
+            if is_blacklisted(old_jti):
+                blockauth_logger.warning(
+                    "Blacklisted refresh token reuse attempted",
+                    sanitize_log_context(request.data, {"jti": old_jti}),
+                )
+                raise AuthenticationFailed("Invalid token.")
+
             user_id = payload["user_id"]
 
             # Get user to retrieve is_verified status
@@ -450,14 +489,29 @@ class AuthRefreshTokenView(APIView):
             try:
                 from blockauth.utils.token import generate_auth_token_with_custom_claims
 
-                access_token, refresh_token = generate_auth_token_with_custom_claims(token_class=token, user_id=user_id)
+                access_token, new_refresh_token = generate_auth_token_with_custom_claims(
+                    token_class=token, user_id=user_id
+                )
             except ImportError:
                 # Fall back to original implementation
-                access_token, refresh_token = generate_auth_token(token_class=token, user_id=user_id)
+                access_token, new_refresh_token = generate_auth_token(token_class=token, user_id=user_id)
+
+            # --- Blacklist the old refresh token so it can't be reused ------
+            if get_config("ROTATE_REFRESH_TOKENS") and old_jti:
+                import time
+
+                from blockauth.utils.token_blacklist import blacklist_token
+
+                exp = payload.get("exp", 0)
+                remaining_ttl = max(int(exp) - int(time.time()), 0)
+                blacklist_token(old_jti, remaining_ttl)
+
             blockauth_logger.success(
                 "Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id})
             )
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            return Response(data={"access": access_token, "refresh": new_refresh_token}, status=status.HTTP_200_OK)
+        except AuthenticationFailed:
+            raise
         except Exception as e:
             blockauth_logger.error("Refresh token failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)

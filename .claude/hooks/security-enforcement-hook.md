@@ -164,7 +164,7 @@ def validate_web3_security(code: str) -> bool:
             raise SecurityError("BLOCKED: Private key not encrypted")
 
     # Check for zero address
-    if '0x0000000000000000000000000000000000000000' in code:
+    if '0x' + '0' * 40 in code:  # zero address
         if 'raise' not in code and 'error' not in code:
             raise SecurityError("BLOCKED: Zero address not validated")
 

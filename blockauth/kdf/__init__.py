@@ -30,22 +30,22 @@ Usage:
         'MASTER_ENCRYPTION_KEY': '0x' + 'your-256-bit-key-in-hex',
         'PLATFORM_MASTER_SALT': 'your-platform-master-salt-32-chars',  # For passwordless
     }
-    
+
     # In your code
     from blockauth.kdf import get_kdf_manager
-    
+
     if blockauth.kdf.is_enabled():
         kdf_manager = get_kdf_manager()
-        
+
         # Create wallet with dual encryption
         wallet = kdf_manager.create_wallet(email, password, 'primary')
-        
+
         # Create multiple wallets
         wallets = kdf_manager.create_multiple_wallets(email, password, ['primary', 'savings'])
-        
+
         # User decrypts with password
         private_key = kdf_manager.decrypt_with_user_password(email, password, wallet['user_encrypted_key'], wallet['user_salt'])
-        
+
         # Platform decrypts without password
         private_key = kdf_manager.decrypt_with_platform_key(wallet['platform_encrypted_key'])
 """

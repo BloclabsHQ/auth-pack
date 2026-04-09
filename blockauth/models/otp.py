@@ -1,3 +1,4 @@
+import hmac
 import secrets
 import string
 
@@ -35,7 +36,13 @@ class OTP(models.Model):
             .first()
         )
 
-        if not otp_instance or otp_instance["code"] != code:
+        # Always run constant-time comparison even when no OTP exists,
+        # so attackers can't distinguish "no OTP" from "wrong code" via timing.
+        # Pad dummy to same length as input so compare_digest doesn't leak length.
+        stored_code = otp_instance["code"] if otp_instance else "\0" * len(code)
+        code_match = hmac.compare_digest(stored_code, code)
+
+        if not otp_instance or not code_match:
             raise ValidationError(detail={"code": "invalid otp"}, code=4010)
 
         if timezone.now() > otp_instance["created_at"] + get_config("OTP_VALIDITY") or otp_instance["is_used"]:
