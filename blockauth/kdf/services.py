@@ -143,7 +143,11 @@ class PBKDF2Service(BaseKDFService):
     """PBKDF2-based key derivation service"""
 
     def __init__(self, iterations: int = 100000, hash_algorithm: str = "sha256"):
-        self.iterations = max(SecurityConstants.MIN_ITERATIONS, iterations)  # Minimum security threshold
+        if iterations < SecurityConstants.MIN_ITERATIONS:
+            raise ValueError(
+                f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS}, got {iterations}"
+            )
+        self.iterations = iterations
         self.hash_algorithm = hash_algorithm
 
         if hash_algorithm not in ["sha256", "sha512"]:
@@ -188,13 +192,19 @@ class Argon2Service(BaseKDFService):
     """Argon2-based key derivation service (most secure)"""
 
     def __init__(self, time_cost: int = 3, memory_cost: int = 65536, parallelism: int = 4):
-        self.time_cost = max(1, time_cost)
-        self.memory_cost = max(1024, memory_cost)  # Minimum 1MB
-        self.parallelism = max(1, parallelism)
+        if time_cost < 1:
+            raise ValueError(f"time_cost must be at least 1, got {time_cost}")
+        if memory_cost < 1024:
+            raise ValueError(f"memory_cost must be at least 1024, got {memory_cost}")
+        if parallelism < 1:
+            raise ValueError(f"parallelism must be at least 1, got {parallelism}")
+        self.time_cost = time_cost
+        self.memory_cost = memory_cost
+        self.parallelism = parallelism
 
         # Try to import argon2, fallback to PBKDF2 if not available
         try:
-            pass
+            import argon2  # noqa: F401
 
             self.argon2_available = True
         except ImportError:
@@ -382,17 +392,17 @@ class KeyDerivationService:
         self.algorithm = algorithm or config["algorithm"]
         self.iterations = iterations or config["iterations"]
         self.master_salt = master_salt or config["master_salt"]
-        security_level = security_level or config["security_level"]
 
-        # Validate algorithm
-        if not KDFAlgorithms.is_supported(self.algorithm):
-            raise ValueError(ErrorMessages.INVALID_ALGORITHM)
-
-        # Apply security preset if specified
+        # Only apply security preset if explicitly provided (not from config defaults)
+        # This ensures explicit algorithm/iterations params aren't overridden
         if security_level:
             preset = SecurityLevels.get_preset(security_level)
             self.algorithm = preset["algorithm"]
             self.iterations = preset["iterations"]
+
+        # Validate algorithm
+        if not KDFAlgorithms.is_supported(self.algorithm):
+            raise ValueError(ErrorMessages.INVALID_ALGORITHM)
 
         self.iterations = max(SecurityConstants.MIN_ITERATIONS, self.iterations)
 

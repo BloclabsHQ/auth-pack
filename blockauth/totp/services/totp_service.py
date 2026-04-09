@@ -468,7 +468,7 @@ class TOTPService:
 
             return SetupResult(secret=secret, provisioning_uri=provisioning_uri, backup_codes=backup_codes)
 
-        except TOTPAlreadyEnabledError:
+        except (TOTPAlreadyEnabledError, TOTPEncryptionRequiredError):
             raise
         except Exception as e:
             logger.error("TOTP setup failed for user %s: %s", user_id, e)
