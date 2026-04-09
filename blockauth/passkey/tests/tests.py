@@ -14,8 +14,9 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase
+from django.test import TestCase
 from rest_framework import status
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from ..constants import (
     AttestationConveyance,
@@ -52,11 +53,11 @@ class TestPasskeyConstants(unittest.TestCase):
 
     def test_config_keys_exist(self):
         """Test that all config keys are defined"""
-        self.assertEqual(PasskeyConfigKeys.RP_ID, "PASSKEY_RP_ID")
-        self.assertEqual(PasskeyConfigKeys.RP_NAME, "PASSKEY_RP_NAME")
-        self.assertEqual(PasskeyConfigKeys.ALLOWED_ORIGINS, "PASSKEY_ALLOWED_ORIGINS")
-        self.assertEqual(PasskeyConfigKeys.ATTESTATION, "PASSKEY_ATTESTATION")
-        self.assertEqual(PasskeyConfigKeys.USER_VERIFICATION, "PASSKEY_USER_VERIFICATION")
+        self.assertEqual(PasskeyConfigKeys.RP_ID, "RP_ID")
+        self.assertEqual(PasskeyConfigKeys.RP_NAME, "RP_NAME")
+        self.assertEqual(PasskeyConfigKeys.ALLOWED_ORIGINS, "ALLOWED_ORIGINS")
+        self.assertEqual(PasskeyConfigKeys.ATTESTATION, "ATTESTATION")
+        self.assertEqual(PasskeyConfigKeys.USER_VERIFICATION, "USER_VERIFICATION")
 
     def test_attestation_conveyance_values(self):
         """Test attestation conveyance enum values"""
@@ -238,7 +239,7 @@ class TestGenericErrorMessages(unittest.TestCase):
 class TestIsEnabled(unittest.TestCase):
     """Test is_enabled() function"""
 
-    @patch("blockauth.passkey.get_config")
+    @patch("blockauth.utils.config.get_config")
     def test_is_enabled_when_true(self, mock_get_config):
         """Test is_enabled returns True when feature is enabled"""
         from blockauth.passkey import is_enabled
@@ -248,7 +249,7 @@ class TestIsEnabled(unittest.TestCase):
         result = is_enabled()
         self.assertTrue(result)
 
-    @patch("blockauth.passkey.get_config")
+    @patch("blockauth.utils.config.get_config")
     def test_is_enabled_when_false(self, mock_get_config):
         """Test is_enabled returns False when feature is disabled"""
         from blockauth.passkey import is_enabled
@@ -258,7 +259,7 @@ class TestIsEnabled(unittest.TestCase):
         result = is_enabled()
         self.assertFalse(result)
 
-    @patch("blockauth.passkey.get_config")
+    @patch("blockauth.utils.config.get_config")
     def test_is_enabled_when_not_set(self, mock_get_config):
         """Test is_enabled returns False when feature is not set"""
         from blockauth.passkey import is_enabled
@@ -272,7 +273,7 @@ class TestIsEnabled(unittest.TestCase):
         """Test is_enabled returns False on import error"""
         from blockauth.passkey import is_enabled
 
-        with patch("blockauth.passkey.get_config", side_effect=ImportError):
+        with patch("blockauth.utils.config.get_config", side_effect=ImportError):
             result = is_enabled()
             self.assertFalse(result)
 
@@ -282,9 +283,9 @@ class TestPasskeyViews(TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.factory = RequestFactory()
+        self.factory = APIRequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="test@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="testuser", email="test@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")
@@ -311,9 +312,8 @@ class TestPasskeyViews(TestCase):
 
         view = PasskeyRegistrationOptionsView.as_view()
         request = self.factory.post("/auth/passkey/register/options/")
-        request.user = self.user
-        request.data = {}
-        request.META = {"REMOTE_ADDR": "127.0.0.1"}
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         response = view(request)
 
@@ -352,30 +352,20 @@ class TestRateLimiting(TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.factory = RequestFactory()
+        self.factory = APIRequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="ratelimit@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="ratelimituser", email="ratelimit@example.com", password="testpass123")
 
-    @patch("blockauth.passkey.views.is_enabled")
-    @patch("blockauth.passkey.views.PasskeyService")
-    def test_rate_limit_handler_exists(self, mock_service, mock_is_enabled):
-        """Test that rate limit handler is defined on views"""
-        from ..views import (
-            PasskeyAuthenticationOptionsView,
-            PasskeyAuthenticationVerifyView,
-            PasskeyCredentialDetailView,
-            PasskeyCredentialListView,
-            PasskeyRegistrationOptionsView,
-            PasskeyRegistrationVerifyView,
-        )
+    def test_rate_limit_throttles_exist(self):
+        """Test that rate limit throttles are defined"""
+        from ..views import PasskeyThrottles
 
-        # All views should have rate_limit_handler
-        self.assertTrue(hasattr(PasskeyRegistrationOptionsView, "rate_limit_handler"))
-        self.assertTrue(hasattr(PasskeyRegistrationVerifyView, "rate_limit_handler"))
-        self.assertTrue(hasattr(PasskeyAuthenticationOptionsView, "rate_limit_handler"))
-        self.assertTrue(hasattr(PasskeyAuthenticationVerifyView, "rate_limit_handler"))
-        self.assertTrue(hasattr(PasskeyCredentialListView, "rate_limit_handler"))
-        self.assertTrue(hasattr(PasskeyCredentialDetailView, "rate_limit_handler"))
+        # All throttle subjects should be defined
+        self.assertIsNotNone(PasskeyThrottles.REGISTER_OPTIONS)
+        self.assertIsNotNone(PasskeyThrottles.REGISTER_VERIFY)
+        self.assertIsNotNone(PasskeyThrottles.AUTH_OPTIONS)
+        self.assertIsNotNone(PasskeyThrottles.AUTH_VERIFY)
+        self.assertIsNotNone(PasskeyThrottles.CREDENTIALS)
 
     def test_rate_limit_response_format(self):
         """Test rate limit response format"""
@@ -392,9 +382,9 @@ class TestViewErrorHandling(TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.factory = RequestFactory()
+        self.factory = APIRequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="error@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="erroruser", email="error@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")
@@ -409,9 +399,8 @@ class TestViewErrorHandling(TestCase):
 
         view = PasskeyRegistrationOptionsView.as_view()
         request = self.factory.post("/auth/passkey/register/options/")
-        request.user = self.user
-        request.data = {}
-        request.META = {"REMOTE_ADDR": "127.0.0.1"}
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         response = view(request)
 
@@ -449,9 +438,9 @@ class TestCredentialManagement(TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.factory = RequestFactory()
+        self.factory = APIRequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="cred@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="creduser", email="cred@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")

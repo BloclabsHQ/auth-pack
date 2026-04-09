@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from rest_framework import status
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from ..exceptions import TOTPAlreadyEnabledError, TOTPInvalidCodeError, TOTPNotEnabledError
 from ..views import (
@@ -31,6 +31,7 @@ class MockUser:
 
     def __init__(self, user_id="test-user-123"):
         self.id = user_id
+        self.pk = user_id
         self.email = "test@example.com"
         self.is_authenticated = True
 
@@ -106,7 +107,7 @@ class TestRateLimitingBehavior(unittest.TestCase):
         mock_throttles.SETUP = mock_throttle
 
         request = self.factory.post("/totp/setup/", {})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPSetupView.as_view()
@@ -122,7 +123,7 @@ class TestRateLimitingBehavior(unittest.TestCase):
         mock_throttles.VERIFY = mock_throttle
 
         request = self.factory.post("/totp/verify/", {"code": "123456"})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPVerifyView.as_view()
@@ -138,7 +139,7 @@ class TestRateLimitingBehavior(unittest.TestCase):
         mock_throttles.SETUP = mock_throttle
 
         request = self.factory.post("/totp/setup/", {})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPSetupView.as_view()
@@ -203,7 +204,7 @@ class TestErrorResponses(unittest.TestCase):
         mock_get_service.return_value = mock_service
 
         request = self.factory.post("/totp/setup/", {})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPSetupView.as_view()
@@ -224,7 +225,7 @@ class TestErrorResponses(unittest.TestCase):
         mock_get_service.return_value = mock_service
 
         request = self.factory.post("/totp/verify/", {"code": "123456"})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
         request.META["HTTP_USER_AGENT"] = "Test Agent"
 
@@ -247,7 +248,7 @@ class TestErrorResponses(unittest.TestCase):
         mock_get_service.return_value = mock_service
 
         request = self.factory.post("/totp/verify/", {"code": "000000"})
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
         request.META["HTTP_USER_AGENT"] = "Test Agent"
 
@@ -272,7 +273,7 @@ class TestInputValidation(unittest.TestCase):
         mock_throttles.VERIFY = mock_throttle
 
         request = self.factory.post("/totp/verify/", {})  # No code
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPVerifyView.as_view()
@@ -288,7 +289,7 @@ class TestInputValidation(unittest.TestCase):
         mock_throttles.CONFIRM = mock_throttle
 
         request = self.factory.post("/totp/confirm/", {})  # No code
-        request.user = self.user
+        force_authenticate(request, user=self.user)
         request.META["REMOTE_ADDR"] = "127.0.0.1"
 
         view = TOTPConfirmView.as_view()
