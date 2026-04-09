@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from blockauth.serializers.wallet_serializers import WalletLinkSerializer
+from blockauth.serializers.wallet_serializers import WalletLinkSerializer, WalletLoginSerializer
 from blockauth.utils.custom_exception import WalletConflictError
 
 
@@ -141,3 +141,22 @@ class TestBusinessRules:
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
             assert s.is_valid(), s.errors
+
+
+class TestWalletLoginSerializerInvalidAddress:
+    def test_invalid_address_is_invalid_and_has_wallet_address_in_errors(self):
+        s = WalletLoginSerializer(
+            data={
+                "wallet_address": "notvalid",
+                "message": json.dumps(
+                    {
+                        "nonce": "test-nonce-0000-1111-2222",
+                        "timestamp": int(time.time()),
+                        "body": "Login to TestApp",
+                    }
+                ),
+                "signature": "0x" + "a" * 130,
+            }
+        )
+        assert not s.is_valid()
+        assert "wallet_address" in s.errors

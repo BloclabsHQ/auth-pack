@@ -207,7 +207,7 @@ class WalletEmailAddSerializer(serializers.Serializer):
             EmailValidator()(value)
         except Exception:
             raise ValidationError(
-                detail={"email": "Invalid email address format. Please provide a valid email address."}
+                "Invalid email address format. Please provide a valid email address."
             )
         return value
 
