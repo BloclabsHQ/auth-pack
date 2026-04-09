@@ -1,5 +1,5 @@
 import logging
-import uuid
+import secrets
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
@@ -65,7 +65,7 @@ class JWTTokenManager:
         # Base claims (always included — set AFTER extra_claims to prevent override)
         base_claims = {
             "user_id": user_id,
-            "jti": str(uuid.uuid4()),
+            "jti": secrets.token_urlsafe(32),
             "exp": get_current_time() + token_lifetime,
             "iat": get_current_time(),
             "type": token_type,
@@ -119,7 +119,7 @@ class JWTTokenManager:
             raise AuthenticationFailed("Token has expired.")
         except jwt.InvalidTokenError as e:
             logger.error(f"Invalid token: {str(e)}")
-            raise AuthenticationFailed(f"Invalid token: {str(e)}")
+            raise AuthenticationFailed("Invalid token.")
 
     def get_custom_claims(self, token: str) -> Dict[str, Any]:
         """Extract only custom claims from a token"""

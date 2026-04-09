@@ -97,7 +97,7 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed("User not found")
         except Exception as e:
             logger.error(f"Error occurred while authenticating user: {e}")
-            raise AuthenticationFailed(f"Authentication failed")
+            raise AuthenticationFailed("Authentication failed")
         return user
 
     def authenticate_header(self, request):

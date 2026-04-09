@@ -13,15 +13,15 @@ Constants are organized into logical groups:
 
 Usage:
     from blockauth.constants import Features, URLNames
-    
+
     # Check if a feature is enabled
     if is_feature_enabled(Features.SIGNUP):
         # Show signup form
         pass
-    
+
     # Get URL by name
     signup_url = reverse(URLNames.SIGNUP)
-    
+
     # Use in configuration
     BLOCK_AUTH_SETTINGS = {
         'FEATURES': {

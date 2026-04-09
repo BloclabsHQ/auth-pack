@@ -9,13 +9,6 @@ from blockauth.utils.logger import blockauth_logger
 logger = logging.getLogger(__name__)
 
 
-"""
-================================
-BELOW IS THE NOTIFICATION MODULE
-================================
-"""
-
-
 class NotificationEvent:
     """
     This class contains the event of the notification.
@@ -53,13 +46,6 @@ class DummyNotification(BaseNotification):
         blockauth_logger.info(
             f"Notification sent using method: {method}, event: {event}", sanitize_log_context(context)
         )
-
-
-"""
-================================================================
-BELOW ARE THE UTILITY FUNCTIONS THAT USE THE NOTIFICATION MODULE
-================================================================
-"""
 
 
 def send_otp(data, subject):

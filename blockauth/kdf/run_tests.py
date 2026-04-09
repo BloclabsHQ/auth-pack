@@ -64,17 +64,17 @@ def test_kdf_enabled_with_settings():
                 "MASTER_ENCRYPTION_KEY": "0x" + "a" * 64,
             }
 
-            from blockauth.kdf import get_kdf_service, is_enabled
+            from blockauth.kdf import get_kdf_manager, is_enabled
 
             if is_enabled():
                 print("✅ KDF correctly enabled with settings")
 
                 # Test service creation
-                kdf_service = get_kdf_service()
+                kdf_manager = get_kdf_manager()
                 print("✅ KDF service created successfully")
 
                 # Test basic functionality
-                wallet_data = kdf_service.create_user_wallet("test@example.com", "TestPassword123")
+                wallet_data = kdf_manager.create_user_wallet("test@example.com", "TestPassword123")
 
                 if "wallet_address" in wallet_data:
                     print("✅ Wallet creation works correctly")
@@ -104,17 +104,17 @@ def test_kdf_environment_variables():
         os.environ["KDF_MASTER_SALT"] = "env-salt-32-chars-minimum"
         os.environ["MASTER_ENCRYPTION_KEY"] = "0x" + "b" * 64
 
-        from blockauth.kdf import get_kdf_service, is_enabled
+        from blockauth.kdf import get_kdf_manager, is_enabled
 
         if is_enabled():
             print("✅ KDF enabled with environment variables")
 
             # Test service creation
-            kdf_service = get_kdf_service()
+            kdf_manager = get_kdf_manager()
             print("✅ KDF service created with environment variables")
 
             # Test basic functionality
-            wallet_data = kdf_service.create_user_wallet("envtest@example.com", "EnvPassword123")
+            wallet_data = kdf_manager.create_user_wallet("envtest@example.com", "EnvPassword123")
 
             if "wallet_address" in wallet_data:
                 print("✅ Environment-based wallet creation works")

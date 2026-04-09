@@ -43,6 +43,9 @@ dev = [
     "isort>=5.13.0",
     "flake8>=7.0.0",
     "autoflake>=2.3.0",
+    "pytest>=8.0.0",
+    "pytest-django>=4.8.0",
+    "mypy>=1.10.0",
 ]
 
 [tool.uv]
@@ -55,6 +58,19 @@ target-version = ["py312"]
 [tool.isort]
 profile = "black"
 line_length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["blockauth"]
+python_files = ["test_*.py", "tests.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
 
 [build-system]
 requires = ["hatchling"]
