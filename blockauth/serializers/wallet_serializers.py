@@ -43,13 +43,18 @@ class WalletLoginSerializer(serializers.Serializer):
         message = data.get("message")
         signature = data.get("signature")
 
-        # Verify the signature
+        # Verify the signature (includes replay protection via nonce + timestamp)
         try:
             authenticator = WalletAuthenticator()
             if not authenticator.verify_signature(wallet_address, message, signature):
                 raise ValidationError(
                     detail={"signature": "Invalid signature. Signature verification failed."}, code=4009
                 )
+        except ValueError as e:
+            # Structured validation errors from replay/timestamp/nonce checks
+            raise ValidationError(detail={"message": str(e)}, code=4009)
+        except ValidationError:
+            raise
         except Exception as e:
             logger.error(f"Signature verification error: {str(e)}")
             raise ValidationError(detail={"signature": "Signature verification failed."}, code=4009)

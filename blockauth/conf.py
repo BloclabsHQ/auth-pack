@@ -57,6 +57,10 @@ DEFAULTS = {
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
     "BLOCK_AUTH_LOGGER_CLASS": "blockauth.utils.logger.DummyLogger",
+    # Wallet replay protection
+    "WALLET_MESSAGE_TTL": 300,  # Signed wallet messages expire after 5 minutes
+    # Refresh token rotation
+    "ROTATE_REFRESH_TOKENS": True,  # Blacklist old refresh token on rotation
 }
 
 
