@@ -5,7 +5,7 @@ Get BlockAuth running in 5 minutes. This guide covers install, configuration, an
 ## 1. Install
 
 ```bash
-pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.4.0/blockauth-0.4.0-py3-none-any.whl
 ```
 
 ## 2. Create Your User Model

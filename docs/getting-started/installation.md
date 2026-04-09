@@ -30,13 +30,13 @@
 ### From GitHub Releases (recommended)
 
 ```bash
-pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl
+pip install https://github.com/BloclabsHQ/auth-pack/releases/download/v0.4.0/blockauth-0.4.0-py3-none-any.whl
 ```
 
 With uv:
 
 ```bash
-uv add "blockauth @ https://github.com/BloclabsHQ/auth-pack/releases/download/v0.3.0/blockauth-0.3.0-py3-none-any.whl"
+uv add "blockauth @ https://github.com/BloclabsHQ/auth-pack/releases/download/v0.4.0/blockauth-0.4.0-py3-none-any.whl"
 ```
 
 ### From Git (development)
