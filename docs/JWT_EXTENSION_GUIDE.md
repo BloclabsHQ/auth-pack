@@ -177,11 +177,10 @@ class MyAppConfig(AppConfig):
 
 ## Testing
 
-Run the test script to verify the implementation:
+Run the test suite to verify the implementation:
 
 ```bash
-cd services/auth-pack
-python test_jwt_extension.py
+uv run pytest blockauth/utils/tests/test_token_algorithms.py -v
 ```
 
 ## Migration Guide

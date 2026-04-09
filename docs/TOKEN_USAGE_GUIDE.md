@@ -180,8 +180,8 @@ BLOCK_AUTH_SETTINGS = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
     
-    # Custom algorithm
-    "ALGORITHM": "HS512",
+    # Custom algorithm (HS256, RS256, or ES256)
+    "ALGORITHM": "HS256",
     
     # Custom secret key
     "JWT_SECRET_KEY": "your-super-secret-key",
