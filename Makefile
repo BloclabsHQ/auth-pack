@@ -4,6 +4,8 @@
 
 .PHONY: format lint check install test build clean typecheck help
 
+.DEFAULT_GOAL := help
+
 # Install dependencies
 install:
 	@uv sync

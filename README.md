@@ -86,7 +86,7 @@ All endpoints are feature-flag controlled. See the [Installation guide](https://
 | POST | `passkey/auth/options/` | Get WebAuthn authentication options | PASSKEY_AUTH |
 | POST | `passkey/auth/verify/` | Verify WebAuthn authentication | PASSKEY_AUTH |
 | GET | `passkey/credentials/` | List user's passkeys | PASSKEY_AUTH |
-| DELETE | `passkey/credentials/<id>/` | Revoke a passkey | PASSKEY_AUTH |
+| DELETE | `passkey/credentials/<uuid:credential_id>/` | Revoke a passkey | PASSKEY_AUTH |
 | GET | `google/` | Google OAuth login | SOCIAL_AUTH |
 | GET | `google/callback/` | Google OAuth callback | SOCIAL_AUTH |
 | GET | `facebook/` | Facebook OAuth login | SOCIAL_AUTH |

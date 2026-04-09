@@ -38,7 +38,8 @@ class OTP(models.Model):
 
         # Always run constant-time comparison even when no OTP exists,
         # so attackers can't distinguish "no OTP" from "wrong code" via timing.
-        stored_code = otp_instance["code"] if otp_instance else ""
+        # Pad dummy to same length as input so compare_digest doesn't leak length.
+        stored_code = otp_instance["code"] if otp_instance else "\0" * len(code)
         code_match = hmac.compare_digest(stored_code, code)
 
         if not otp_instance or not code_match:

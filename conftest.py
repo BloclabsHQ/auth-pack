@@ -10,6 +10,8 @@ from django.conf import settings
 
 
 def pytest_configure():
+    if settings.configured:
+        return
     settings.configure(
         DATABASES={
             "default": {

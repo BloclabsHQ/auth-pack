@@ -59,7 +59,7 @@ blockauth/
 | `passkey/auth/options/` | PasskeyAuthenticationOptionsView | PASSKEY_AUTH |
 | `passkey/auth/verify/` | PasskeyAuthenticationVerifyView | PASSKEY_AUTH |
 | `passkey/credentials/` | PasskeyCredentialListView | PASSKEY_AUTH |
-| `passkey/credentials/<id>/` | PasskeyCredentialDetailView | PASSKEY_AUTH |
+| `passkey/credentials/<uuid:credential_id>/` | PasskeyCredentialDetailView | PASSKEY_AUTH |
 | `google/` | GoogleAuthLoginView | SOCIAL_AUTH |
 | `google/callback/` | GoogleAuthCallbackView | SOCIAL_AUTH |
 | `facebook/` | FacebookAuthLoginView | SOCIAL_AUTH |
