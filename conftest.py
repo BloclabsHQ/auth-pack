@@ -32,6 +32,10 @@ def pytest_configure():
             "SECRET_KEY": "test-secret-key-not-for-production",
             "ALGORITHM": "HS256",
             "BLOCK_AUTH_USER_MODEL": "auth.User",
+            "KDF_ENABLED": True,
+            "KDF_MASTER_SALT": "test-platform-master-salt-32-chars-min",
+            "MASTER_ENCRYPTION_KEY": "0x" + "ab" * 32,
+            "PLATFORM_MASTER_SALT": "test-platform-master-salt-32-chars-min",
         },
         REST_FRAMEWORK={
             "DEFAULT_AUTHENTICATION_CLASSES": [

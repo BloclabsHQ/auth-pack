@@ -129,12 +129,9 @@ class TestArgon2Service(unittest.TestCase):
         with self.assertRaises(ValueError):
             Argon2Service(parallelism=0)
 
-    @patch("blockauth.kdf.services.importlib.import_module")
-    def test_fallback_to_pbkdf2(self, mock_import):
+    @patch.dict("sys.modules", {"argon2": None})
+    def test_fallback_to_pbkdf2(self):
         """Test fallback to PBKDF2 when Argon2 is not available"""
-        # Mock import failure
-        mock_import.side_effect = ImportError("No module named 'argon2'")
-
         service = Argon2Service()
         self.assertFalse(service.argon2_available)
 
@@ -304,32 +301,20 @@ class TestKeyEncryptionService(unittest.TestCase):
         with self.assertRaises(ValueError):
             KeyEncryptionService("0x" + "a" * 63)  # Too short
 
-    def test_environment_variable_key(self):
-        """Test getting key from environment variable"""
-        with patch.dict(os.environ, {"MASTER_ENCRYPTION_KEY": self.encryption_key}):
-            service = KeyEncryptionService()
+    def test_default_key_from_settings(self):
+        """Test getting key from Django settings"""
+        service = KeyEncryptionService()
 
-            # Should use environment variable
-            encrypted_data = service.encrypt_private_key(self.private_key)
-            decrypted_key = service.decrypt_private_key(encrypted_data)
+        # Should use key from BLOCK_AUTH_SETTINGS
+        encrypted_data = service.encrypt_private_key(self.private_key)
+        decrypted_key = service.decrypt_private_key(encrypted_data)
 
-            self.assertEqual(decrypted_key, self.private_key)
+        self.assertEqual(decrypted_key, self.private_key)
 
-    def test_generated_key_warning(self):
-        """Test that generating new key produces warning"""
-        with patch("blockauth.kdf.services.logger") as mock_logger:
-            # Clear environment variable to force key generation
-            with patch.dict(os.environ, {}, clear=True):
-                service = KeyEncryptionService()
-
-                # Should log warning about generated key
-                mock_logger.warning.assert_called()
-
-                # Should still work
-                encrypted_data = service.encrypt_private_key(self.private_key)
-                decrypted_key = service.decrypt_private_key(encrypted_data)
-
-                self.assertEqual(decrypted_key, self.private_key)
+    def test_missing_key_raises_error(self):
+        """Test that missing encryption key raises ValueError"""
+        with self.assertRaises(ValueError):
+            KeyEncryptionService("")
 
 
 class TestKDFManager(unittest.TestCase):
@@ -351,24 +336,25 @@ class TestKDFManager(unittest.TestCase):
             encryption_key=self.encryption_key,
         )
 
-        self.assertIsInstance(manager.kdf_service, KeyDerivationService)
-        self.assertIsInstance(manager.encryption_service, KeyEncryptionService)
+        self.assertIsInstance(manager.password_kdf_service, KeyDerivationService)
+        self.assertIsInstance(manager.platform_encryption_service, KeyEncryptionService)
 
-    def test_create_secure_wallet(self):
-        """Test secure wallet creation"""
+    def test_create_wallet(self):
+        """Test wallet creation with dual encryption"""
         manager = KDFManager(master_salt=self.master_salt, encryption_key=self.encryption_key)
 
-        wallet_data = manager.create_secure_wallet(self.email, self.password)
+        wallet_data = manager.create_wallet(self.email, self.password)
 
         # Check required fields
         required_fields = [
             "wallet_address",
-            "encrypted_private_key",
-            "salt",
+            "user_encrypted_key",
+            "platform_encrypted_key",
+            "user_salt",
             "public_key",
             "algorithm",
             "iterations",
-            "encryption_version",
+            "wallet_version",
         ]
         for field in required_fields:
             self.assertIn(field, wallet_data)
@@ -377,40 +363,34 @@ class TestKDFManager(unittest.TestCase):
         self.assertTrue(wallet_data["wallet_address"].startswith("0x"))
         self.assertEqual(len(wallet_data["wallet_address"]), 42)
 
-        # Check encrypted key is JSON string
-        encrypted_data = json.loads(wallet_data["encrypted_private_key"])
-        self.assertIn("encrypted_key", encrypted_data)
-        self.assertIn("nonce", encrypted_data)
-        self.assertIn("tag", encrypted_data)
+        # Check platform encrypted key has AES-GCM fields
+        self.assertIn("encrypted_key", wallet_data["platform_encrypted_key"])
+        self.assertIn("nonce", wallet_data["platform_encrypted_key"])
+        self.assertIn("tag", wallet_data["platform_encrypted_key"])
 
-    def test_verify_and_decrypt_key(self):
-        """Test password verification and key decryption"""
+    def test_platform_key_decryption(self):
+        """Test platform key can decrypt the wallet"""
         manager = KDFManager(master_salt=self.master_salt, encryption_key=self.encryption_key)
 
-        # Create wallet
-        wallet_data = manager.create_secure_wallet(self.email, self.password)
+        wallet_data = manager.create_wallet(self.email, self.password)
 
-        # Verify and decrypt
-        private_key = manager.verify_and_decrypt_key(
-            self.email, self.password, wallet_data["salt"], wallet_data["encrypted_private_key"]
+        # Decrypt with platform key
+        private_key = manager.platform_encryption_service.decrypt_private_key(
+            wallet_data["platform_encrypted_key"]
         )
 
-        # Should return the original private key
+        # Should return a valid private key
         self.assertTrue(private_key.startswith("0x"))
         self.assertEqual(len(private_key), 66)
 
-    def test_verify_and_decrypt_key_wrong_password(self):
-        """Test that wrong password fails verification"""
+    def test_deterministic_wallet_address(self):
+        """Test that same credentials produce same wallet address"""
         manager = KDFManager(master_salt=self.master_salt, encryption_key=self.encryption_key)
 
-        # Create wallet
-        wallet_data = manager.create_secure_wallet(self.email, self.password)
+        wallet1 = manager.create_wallet(self.email, self.password, custom_salt="fixed_salt_for_test")
+        wallet2 = manager.create_wallet(self.email, self.password, custom_salt="fixed_salt_for_test")
 
-        # Try with wrong password
-        with self.assertRaises(ValueError):
-            manager.verify_and_decrypt_key(
-                self.email, "WrongPassword", wallet_data["salt"], wallet_data["encrypted_private_key"]
-            )
+        self.assertEqual(wallet1["wallet_address"], wallet2["wallet_address"])
 
 
 class TestSecurityFeatures(unittest.TestCase):
@@ -427,12 +407,13 @@ class TestSecurityFeatures(unittest.TestCase):
         self.assertNotIn("private_key", wallet_data)
 
     def test_deterministic_generation(self):
-        """Test that same credentials always produce same wallet"""
+        """Test that same credentials with same salt always produce same wallet"""
         service = KeyDerivationService()
+        fixed_salt = "fixed_test_salt_for_determinism"
 
-        # Create wallet twice with same credentials
-        wallet1 = service.create_user_wallet("test@example.com", "password123")
-        wallet2 = service.create_user_wallet("test@example.com", "password123")
+        # Create wallet twice with same credentials and salt
+        wallet1 = service.create_user_wallet("test@example.com", "password123", user_salt=fixed_salt)
+        wallet2 = service.create_user_wallet("test@example.com", "password123", user_salt=fixed_salt)
 
         # Should be identical
         self.assertEqual(wallet1["wallet_address"], wallet2["wallet_address"])
@@ -441,16 +422,17 @@ class TestSecurityFeatures(unittest.TestCase):
     def test_input_normalization(self):
         """Test that inputs are properly normalized"""
         service = KeyDerivationService()
+        fixed_salt = "fixed_salt_for_normalization_test"
 
-        # Test email normalization
-        wallet1 = service.create_user_wallet("TEST@EXAMPLE.COM", "password123")
-        wallet2 = service.create_user_wallet("test@example.com", "password123")
+        # Test email normalization (same salt to test determinism)
+        wallet1 = service.create_user_wallet("TEST@EXAMPLE.COM", "password123", user_salt=fixed_salt)
+        wallet2 = service.create_user_wallet("test@example.com", "password123", user_salt=fixed_salt)
 
         # Should be identical (case-insensitive email)
         self.assertEqual(wallet1["wallet_address"], wallet2["wallet_address"])
 
         # Test password trimming
-        wallet3 = service.create_user_wallet("test@example.com", "  password123  ")
+        wallet3 = service.create_user_wallet("test@example.com", "  password123  ", user_salt=fixed_salt)
         self.assertEqual(wallet1["wallet_address"], wallet3["wallet_address"])
 
 
