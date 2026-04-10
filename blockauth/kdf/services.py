@@ -943,10 +943,10 @@ class KDFManager:
         decrypted_key = self.encryption_service.decrypt_private_key(encrypted_data)
 
         if not hmac.compare_digest(derived_key.lower(), decrypted_key.lower()):
-            derived_key = "0" * len(derived_key)
+            del derived_key
             raise ValueError("Password verification failed: keys do not match")
 
-        derived_key = "0" * len(derived_key)
+        del derived_key
         return decrypted_key
 
     def decrypt_with_user_password(self, email: str, password: str, user_encrypted_key: str, user_salt: str) -> str:
