@@ -67,6 +67,7 @@ class Features:
 
     # Wallet management features
     WALLET_EMAIL_ADD = "WALLET_EMAIL_ADD"  # Add email to wallet accounts
+    WALLET_LINK = "WALLET_LINK"  # Wallet linking (email/OAuth user links an external wallet)
 
     # Social authentication features
     SOCIAL_AUTH = "SOCIAL_AUTH"  # Master switch for social authentication
@@ -100,6 +101,7 @@ class Features:
             cls.EMAIL_CHANGE,
             cls.EMAIL_VERIFICATION,
             cls.WALLET_EMAIL_ADD,
+            cls.WALLET_LINK,
             cls.SOCIAL_AUTH,
             cls.PASSKEY_AUTH,
             cls.TOTP_2FA,
@@ -236,6 +238,7 @@ class URLNames:
 
     # Wallet
     WALLET_EMAIL_ADD = "wallet-email-add"
+    WALLET_LINK = "wallet-link"
 
     # Social Auth
     GOOGLE_LOGIN = "google-login"

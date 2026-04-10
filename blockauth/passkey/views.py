@@ -73,7 +73,19 @@ def get_passkey_service():
     return PasskeyService()
 
 
-class PasskeyRegistrationOptionsView(APIView):
+class PasskeyBaseView(APIView):
+    """Base class for passkey views with shared utilities."""
+
+    @staticmethod
+    def rate_limit_handler(request, subject):
+        """Return rate limit exceeded response."""
+        return Response(
+            {"error_code": "RATE_LIMIT", "message": "Too many requests. Please try again later."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+
+class PasskeyRegistrationOptionsView(PasskeyBaseView):
     """
     Generate WebAuthn registration options.
 
@@ -141,7 +153,7 @@ class PasskeyRegistrationOptionsView(APIView):
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PasskeyRegistrationVerifyView(APIView):
+class PasskeyRegistrationVerifyView(PasskeyBaseView):
     """
     Verify WebAuthn registration response.
 
@@ -210,7 +222,7 @@ class PasskeyRegistrationVerifyView(APIView):
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PasskeyAuthenticationOptionsView(APIView):
+class PasskeyAuthenticationOptionsView(PasskeyBaseView):
     """
     Generate WebAuthn authentication options.
 
@@ -262,7 +274,7 @@ class PasskeyAuthenticationOptionsView(APIView):
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PasskeyAuthenticationVerifyView(APIView):
+class PasskeyAuthenticationVerifyView(PasskeyBaseView):
     """
     Verify WebAuthn authentication response.
 
@@ -346,7 +358,7 @@ class PasskeyAuthenticationVerifyView(APIView):
             return Response(GENERIC_AUTH_ERROR, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PasskeyCredentialListView(APIView):
+class PasskeyCredentialListView(PasskeyBaseView):
     """
     List user's passkey credentials.
 
@@ -397,7 +409,7 @@ class PasskeyCredentialListView(APIView):
             return Response(GENERIC_PASSKEY_ERROR, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PasskeyCredentialDetailView(APIView):
+class PasskeyCredentialDetailView(PasskeyBaseView):
     """
     Manage individual passkey credential.
 

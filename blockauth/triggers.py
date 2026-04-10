@@ -65,4 +65,20 @@ class DummyPostPasswordResetTrigger(BaseTrigger):
         blockauth_logger.info(f"Post password reset trigger called with context")
 
 
+class DummyPostWalletLinkTrigger(BaseTrigger):
+    """
+    Default no-op trigger fired after a user successfully links a wallet.
+
+    Replace with a real implementation to handle post-link events
+    such as syncing wallet data or updating JWT claims.
+
+    Context keys:
+        user (dict): Serialized user data (no password).
+        wallet_address (str): The wallet address that was linked.
+    """
+
+    def trigger(self, context: dict) -> None:
+        pass
+
+
 # NOTE: For custom triggers, always use blockauth_logger and sanitize_log_context for any logging or print statements to avoid leaking sensitive data.

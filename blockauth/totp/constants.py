@@ -43,6 +43,9 @@ class TOTPConfigKeys:
         }
     """
 
+    # Feature enable flag
+    ENABLED = "TOTP_ENABLED"
+
     # Security (REQUIRED)
     ENCRYPTION_KEY = "ENCRYPTION_KEY"  # Required for secret encryption
 

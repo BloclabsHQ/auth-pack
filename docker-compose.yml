@@ -1,0 +1,4 @@
+services:
+  test:
+    build: .
+    command: uv run pytest -v

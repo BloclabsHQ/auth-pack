@@ -173,7 +173,7 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
     """
     Get the TOTP encryption service from Django settings.
 
-    Reads the encryption key from BLOCK_AUTH_SETTINGS['TOTP_CONFIG']['ENCRYPTION_KEY'].
+    Reads the encryption key from BLOCK_AUTH_SETTINGS['ENCRYPTION_KEY'].
 
     Args:
         raise_if_missing: If True (default), raises exception when key not configured.
@@ -190,7 +190,6 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
 
     from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
 
-    # Get TOTP_CONFIG object
     totp_config = blockauth_settings.get(TOTP_CONFIG_KEY, {})
     encryption_key = totp_config.get(TOTPConfigKeys.ENCRYPTION_KEY)
 
@@ -239,7 +238,7 @@ def validate_totp_encryption_config() -> bool:
 
     if not encryption_key:
         raise TOTPEncryptionNotConfiguredError(
-            "TOTP is enabled (FEATURES['TOTP_2FA']=True) but TOTP_CONFIG.ENCRYPTION_KEY is not configured. "
+            "TOTP is enabled but TOTP_CONFIG.ENCRYPTION_KEY is not configured in BLOCK_AUTH_SETTINGS. "
             "Either disable TOTP or configure an encryption key. "
             "Generate a key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         )

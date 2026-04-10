@@ -42,6 +42,7 @@ DEFAULTS = {
         "EMAIL_VERIFICATION": True,  # Enable email verification requirement
         # Wallet features
         "WALLET_EMAIL_ADD": True,  # Enable adding email to wallet accounts
+        "WALLET_LINK": True,  # Enable linking a MetaMask wallet to an existing account
         # Social authentication (controlled by provider configuration)
         "SOCIAL_AUTH": True,  # Master switch for social authentication
         # Passkey/WebAuthn authentication
@@ -56,6 +57,7 @@ DEFAULTS = {
     # Password management triggers
     "POST_PASSWORD_CHANGE_TRIGGER": "blockauth.triggers.DummyPostPasswordChangeTrigger",
     "POST_PASSWORD_RESET_TRIGGER": "blockauth.triggers.DummyPostPasswordResetTrigger",
+    "POST_WALLET_LINK_TRIGGER": "blockauth.triggers.DummyPostWalletLinkTrigger",
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
     "BLOCK_AUTH_LOGGER_CLASS": "blockauth.utils.logger.DummyLogger",
@@ -84,6 +86,7 @@ IMPORT_STRINGS = (
     "POST_LOGIN_TRIGGER",
     "POST_PASSWORD_CHANGE_TRIGGER",
     "POST_PASSWORD_RESET_TRIGGER",
+    "POST_WALLET_LINK_TRIGGER",
     "BLOCK_AUTH_LOGGER_CLASS",
 )
 

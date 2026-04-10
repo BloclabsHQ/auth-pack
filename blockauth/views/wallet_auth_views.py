@@ -8,12 +8,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from blockauth.docs.wallet_auth_docs import wallet_email_add_docs, wallet_login_docs
+from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTPSubject
 from blockauth.notification import send_otp
-from blockauth.serializers.wallet_serializers import WalletEmailAddSerializer, WalletLoginSerializer
-from blockauth.utils.config import get_block_auth_user_model
-from blockauth.utils.custom_exception import ValidationErrorWithCode
-from blockauth.utils.generics import sanitize_log_context
+from blockauth.serializers.wallet_serializers import (
+    WalletEmailAddSerializer,
+    WalletLinkSerializer,
+    WalletLoginSerializer,
+)
+from blockauth.utils.config import get_block_auth_user_model, get_config
+from blockauth.utils.custom_exception import ValidationErrorWithCode, WalletConflictError
+from blockauth.utils.generics import model_to_json, sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.rate_limiter import EnhancedThrottle
 
@@ -129,4 +134,74 @@ class WalletEmailAddView(APIView):
         except Exception as e:
             blockauth_logger.error("Wallet email add failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Wallet email add request failed: {e}", exc_info=True)
+            raise APIException()
+
+
+class WalletLinkView(APIView):
+    """
+    API endpoint for authenticated users to link a MetaMask (or compatible) wallet.
+
+    The user must already hold a valid JWT. They sign a structured JSON message
+    with their wallet and submit address + message + signature. Full replay
+    protection (nonce + timestamp) is enforced by WalletAuthenticator.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    serializer_class = WalletLinkSerializer
+    link_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
+
+    def post(self, request):
+        if not self.link_throttle.allow_request(request, "wallet_link"):
+            reason = self.link_throttle.get_block_reason()
+            msg = (
+                "Too many failed attempts. Please try again later."
+                if reason == "cooldown"
+                else "Rate limit exceeded. Please try again later."
+            )
+            return Response(data={"detail": msg}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        serializer = self.serializer_class(data=request.data, context={"request": request})
+        blockauth_logger.info("Wallet link attempt", sanitize_log_context(request.data))
+
+        try:
+            serializer.is_valid(raise_exception=True)
+
+            user = request.user
+            wallet_address = serializer.validated_data["wallet_address"]
+
+            user.wallet_address = wallet_address
+            user.add_authentication_type(AuthenticationType.WALLET)
+            user.save()
+
+            user_data = model_to_json(user, remove_fields=("password",))
+            post_wallet_link_trigger = get_config("POST_WALLET_LINK_TRIGGER")()
+            post_wallet_link_trigger.trigger(context={"user": user_data, "wallet_address": wallet_address})
+
+            self.link_throttle.record_success(request, "wallet_link")
+            blockauth_logger.success(
+                "Wallet linked successfully",
+                sanitize_log_context(request.data, {"user": user.id}),
+            )
+
+            return Response(
+                data={"message": "Wallet linked successfully.", "wallet_address": wallet_address},
+                status=status.HTTP_200_OK,
+            )
+
+        except WalletConflictError:
+            self.link_throttle.record_failure(request, "wallet_link")
+            raise
+
+        except ValidationError as e:
+            self.link_throttle.record_failure(request, "wallet_link")
+            blockauth_logger.warning(
+                "Wallet link validation failed",
+                sanitize_log_context(request.data, {"errors": e.detail}),
+            )
+            raise ValidationErrorWithCode(detail=e.detail)
+
+        except Exception as e:
+            self.link_throttle.record_failure(request, "wallet_link")
+            blockauth_logger.error("Wallet link failed", sanitize_log_context(request.data, {"error": str(e)}))
+            logger.error(f"Wallet link request failed: {e}", exc_info=True)
             raise APIException()
