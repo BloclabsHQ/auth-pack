@@ -1,6 +1,6 @@
-# MANDATORY SECURITY STANDARDS - BlockAuth
+# 🔐 MANDATORY SECURITY STANDARDS - FabricBloc Authentication
 
-## CRITICAL: These Standards Are NON-NEGOTIABLE
+## ⚠️ CRITICAL: These Standards Are NON-NEGOTIABLE
 
 **EVERY line of code MUST comply with these security standards. NO EXCEPTIONS.**
 
@@ -79,8 +79,7 @@ PASSWORD_VALIDATORS = [
      'OPTIONS': {'min_length': 12}},  # MINIMUM 12 characters
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-    {'NAME': 'blockauth.validators.PasswordStrengthValidator'},
-    {'NAME': 'blockauth.validators.PwnedPasswordValidator'},  # Check breaches
+    {'NAME': 'blockauth.utils.validators.BlockAuthPasswordValidator'},
 ]
 
 # MANDATORY complexity requirements
@@ -673,6 +672,6 @@ No exceptions, no shortcuts, no "temporary" insecure code.
 When in doubt, choose the MORE SECURE option. Always.
 
 **See also:**
-- SOC2 compliance: Planned — see project roadmap
-- Audit trail implementation: Planned — see project roadmap
-- Security enforcement hooks: Planned — see project roadmap
+- [SOC2_COMPLIANCE.md](SOC2_COMPLIANCE.md) - Full SOC2 implementation
+- [AUDIT_TRAIL_IMPLEMENTATION.md](AUDIT_TRAIL_IMPLEMENTATION.md) - Complete audit guide
+- [security-enforcement-hook.md](hooks/security-enforcement-hook.md) - Automatic enforcement

@@ -46,6 +46,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-django>=4.8.0",
     "mypy>=1.10.0",
+    "mkdocs-material>=9.7.6",
 ]
 
 [tool.uv]

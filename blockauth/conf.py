@@ -47,6 +47,8 @@ DEFAULTS = {
         "SOCIAL_AUTH": True,  # Master switch for social authentication
         # Passkey/WebAuthn authentication
         "PASSKEY_AUTH": True,  # Enable passkey/WebAuthn authentication (Face ID, Touch ID, Windows Hello)
+        # TOTP 2FA
+        "TOTP_2FA": False,  # Enable TOTP 2FA (requires TOTP_CONFIG.ENCRYPTION_KEY)
     },
     # Trigger classes
     "POST_SIGNUP_TRIGGER": "blockauth.triggers.DummyPostSignupTrigger",

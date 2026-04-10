@@ -23,7 +23,6 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from blockauth.settings import blockauth_settings
 from blockauth.utils.logger import blockauth_logger
 
 from .totp_service import ISecretEncryption
@@ -187,18 +186,17 @@ def get_encryption_service(raise_if_missing: bool = True) -> Optional[FernetSecr
         TOTPEncryptionNotConfiguredError: If key is not configured and raise_if_missing=True
         ValueError: If key is configured but invalid
     """
-    from ..constants import TOTPConfigKeys
+    from blockauth.settings import blockauth_settings
 
-    encryption_key = blockauth_settings.get(TOTPConfigKeys.ENCRYPTION_KEY)
+    from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
+
+    totp_config = blockauth_settings.get(TOTP_CONFIG_KEY, {})
+    encryption_key = totp_config.get(TOTPConfigKeys.ENCRYPTION_KEY)
 
     if not encryption_key:
         if raise_if_missing:
-            blockauth_logger.error("SECURITY: TOTP_ENCRYPTION_KEY not configured - TOTP cannot be used safely")
-            raise TOTPEncryptionNotConfiguredError(
-                "TOTP_ENCRYPTION_KEY is not configured in BLOCK_AUTH_SETTINGS. "
-                "TOTP 2FA requires encryption for secure secret storage. "
-                "Generate a key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-            )
+            blockauth_logger.error("SECURITY: TOTP_CONFIG.ENCRYPTION_KEY not configured - TOTP cannot be used safely")
+            raise TOTPEncryptionNotConfiguredError()
         return None
 
     return FernetSecretEncryption(master_key=encryption_key)
@@ -224,19 +222,23 @@ def validate_totp_encryption_config() -> bool:
                 from blockauth.totp.services.encryption import validate_totp_encryption_config
                 validate_totp_encryption_config()
     """
-    from ..constants import TOTPConfigKeys
+    from blockauth.settings import blockauth_settings
+    from blockauth.totp import is_enabled
 
-    # Check if TOTP is enabled
-    if not blockauth_settings.get(TOTPConfigKeys.ENABLED, True):
+    from ..constants import TOTP_CONFIG_KEY, TOTPConfigKeys
+
+    # Check if TOTP is enabled (via FEATURES["TOTP_2FA"])
+    if not is_enabled():
         # TOTP disabled, no need to validate encryption
         return True
 
     # TOTP is enabled, encryption MUST be configured
-    encryption_key = blockauth_settings.get(TOTPConfigKeys.ENCRYPTION_KEY)
+    totp_config = blockauth_settings.get(TOTP_CONFIG_KEY, {})
+    encryption_key = totp_config.get(TOTPConfigKeys.ENCRYPTION_KEY)
 
     if not encryption_key:
         raise TOTPEncryptionNotConfiguredError(
-            "TOTP is enabled but TOTP_ENCRYPTION_KEY is not configured in BLOCK_AUTH_SETTINGS. "
+            "TOTP is enabled but TOTP_CONFIG.ENCRYPTION_KEY is not configured in BLOCK_AUTH_SETTINGS. "
             "Either disable TOTP or configure an encryption key. "
             "Generate a key with: from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         )

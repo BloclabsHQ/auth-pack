@@ -178,8 +178,8 @@ class TestWalletLoginSerializerErrorCodes:
             assert len(error) > 0
             assert error[0].code == "INVALID_SIGNATURE"
 
-    def test_value_error_code_is_string(self):
-        """ValueError from replay/timestamp checks yields code INVALID_SIGNATURE."""
+    def test_value_error_code_is_int(self):
+        """ValueError from replay/timestamp checks yields numeric code 4009."""
         data = {
             "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12",
             "message": '{"nonce": "abc", "timestamp": 9999999999, "body": "Login"}',
@@ -191,7 +191,7 @@ class TestWalletLoginSerializerErrorCodes:
             s.is_valid()
             error = s.errors.get("message", [])
             assert len(error) > 0
-            assert error[0].code == "INVALID_SIGNATURE"
+            assert error[0].code == 4009
 
     def test_unexpected_exception_code_is_string(self):
         """Unexpected exceptions during verification yield code INVALID_SIGNATURE."""

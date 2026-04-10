@@ -46,7 +46,7 @@ class WalletLoginSerializer(serializers.Serializer):
                 )
         except ValueError as e:
             # Structured validation errors from replay/timestamp/nonce checks
-            raise ValidationError(detail={"message": str(e)}, code="INVALID_SIGNATURE")
+            raise ValidationError(detail={"message": str(e)}, code=4009)
         except ValidationError:
             raise
         except Exception as e:

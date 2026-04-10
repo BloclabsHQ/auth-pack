@@ -1,0 +1,186 @@
+"""
+Tests for login views: BasicAuthLoginView, PasswordlessLoginView, PasswordlessLoginConfirmView.
+
+Tests the HTTP contract — status codes and response keys — not implementation details.
+"""
+
+import pytest
+from django.urls import reverse
+from rest_framework import status
+
+from blockauth.models.otp import OTP, OTPSubject
+
+
+BASIC_LOGIN_URL = reverse("basic-login")
+PASSWORDLESS_URL = reverse("passwordless-login")
+PASSWORDLESS_CONFIRM_URL = reverse("passwordless-login-confirm")
+
+
+@pytest.mark.django_db
+class TestBasicLoginView:
+    """Tests for email/password login."""
+
+    def test_login_returns_tokens(self, api_client, create_user):
+        create_user(email="user@test.com", password="StrongP@ss1!")
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": "StrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.data
+        assert "refresh" in response.data
+
+    def test_login_wrong_password(self, api_client, create_user):
+        create_user(email="user@test.com", password="StrongP@ss1!")
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": "WrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_nonexistent_user(self, api_client):
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "nobody@test.com",
+            "password": "StrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_unverified_user(self, api_client, create_user):
+        create_user(email="user@test.com", password="StrongP@ss1!", is_verified=False)
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": "StrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_missing_identifier(self, api_client):
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "password": "StrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_missing_password(self, api_client):
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_empty_body(self, api_client):
+        response = api_client.post(BASIC_LOGIN_URL, {})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_login_rate_limit_after_failures(self, api_client, create_user):
+        """Progressive lockout after repeated failures."""
+        create_user(email="user@test.com", password="StrongP@ss1!")
+        # Make 5 failed attempts to trigger cooldown
+        for _ in range(5):
+            api_client.post(BASIC_LOGIN_URL, {
+                "identifier": "user@test.com",
+                "password": "WrongP@ss!",
+            })
+        # Next attempt should be rate-limited even with correct password
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": "StrongP@ss1!",
+        })
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+
+@pytest.mark.django_db
+class TestPasswordlessLoginView:
+    """Tests for passwordless OTP request."""
+
+    def test_send_otp_returns_200(self, api_client, create_user):
+        create_user(email="user@test.com")
+        response = api_client.post(PASSWORDLESS_URL, {
+            "identifier": "user@test.com",
+            "method": "email",
+            "verification_type": "otp",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "message" in response.data
+
+    def test_send_otp_creates_otp_record(self, api_client, create_user):
+        create_user(email="user@test.com")
+        api_client.post(PASSWORDLESS_URL, {
+            "identifier": "user@test.com",
+            "method": "email",
+            "verification_type": "otp",
+        })
+        assert OTP.objects.filter(
+            identifier="user@test.com",
+            subject=OTPSubject.LOGIN,
+        ).exists()
+
+    def test_send_otp_missing_identifier(self, api_client):
+        response = api_client.post(PASSWORDLESS_URL, {
+            "method": "email",
+            "verification_type": "otp",
+        })
+        assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_send_otp_invalid_method(self, api_client):
+        response = api_client.post(PASSWORDLESS_URL, {
+            "identifier": "user@test.com",
+            "method": "pigeon",
+            "verification_type": "otp",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+class TestPasswordlessLoginConfirmView:
+    """Tests for passwordless OTP verification."""
+
+    def test_confirm_valid_otp_returns_tokens(self, api_client, create_user, create_otp):
+        create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.data
+        assert "refresh" in response.data
+
+    def test_confirm_creates_user_if_not_exists(self, api_client, create_otp):
+        """Passwordless login should create a new user if one doesn't exist."""
+        from blockauth.utils.config import get_block_auth_user_model
+        User = get_block_auth_user_model()
+
+        create_otp(identifier="new@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "new@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert User.objects.filter(email="new@test.com").exists()
+
+    def test_confirm_invalid_otp(self, api_client, create_user, create_otp):
+        create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "WRONG",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_confirm_missing_code(self, api_client):
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+        })
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_confirm_rate_limit_after_failures(self, api_client, create_user):
+        """Progressive lockout after repeated failed OTP attempts."""
+        create_user(email="user@test.com")
+        for _ in range(5):
+            api_client.post(PASSWORDLESS_CONFIRM_URL, {
+                "identifier": "user@test.com",
+                "code": "WRONG",
+            })
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "ANYTHING",
+        })
+        assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS

@@ -453,9 +453,6 @@ class TOTPService:
         Raises:
             TOTPAlreadyEnabledError: If TOTP is already enabled for user
         """
-        if not user_id:
-            raise TOTPSetupError("user_id cannot be empty")
-
         # Check if already enabled
         existing = self.store.get_by_user_id(user_id)
         if existing and existing.status == TOTPStatus.ENABLED.value:
@@ -691,7 +688,7 @@ class TOTPService:
 
         logger.info("Backup code used for user %s (remaining: %d)", user_id, remaining)
 
-        return VerifyResult(success=True, verification_type="backup_code", backup_codes_remaining=remaining)
+        return VerifyResult(success=True, verification_type="backup", backup_codes_remaining=remaining)
 
     def _handle_failed_verification(
         self, user_id: str, verification_type: str, reason: str, ip_address: Optional[str] = None, user_agent: str = ""

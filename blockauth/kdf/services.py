@@ -146,7 +146,7 @@ class PBKDF2Service(BaseKDFService):
     def __init__(self, iterations: int = 100000, hash_algorithm: str = "sha256"):
         if iterations < SecurityConstants.MIN_ITERATIONS:
             raise ValueError(
-                f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS} (got {iterations})"
+                f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS}, got {iterations}"
             )
         self.iterations = iterations
         self.hash_algorithm = hash_algorithm
@@ -194,19 +194,19 @@ class Argon2Service(BaseKDFService):
 
     def __init__(self, time_cost: int = 3, memory_cost: int = 65536, parallelism: int = 4):
         if time_cost < 1:
-            raise ValueError("time_cost must be at least 1")
+            raise ValueError(f"time_cost must be at least 1, got {time_cost}")
         if memory_cost < 1024:
-            raise ValueError("memory_cost must be at least 1024 (1MB)")
+            raise ValueError(f"memory_cost must be at least 1024, got {memory_cost}")
         if parallelism < 1:
-            raise ValueError("parallelism must be at least 1")
-
+            raise ValueError(f"parallelism must be at least 1, got {parallelism}")
         self.time_cost = time_cost
         self.memory_cost = memory_cost
         self.parallelism = parallelism
 
         # Try to import argon2, fallback to PBKDF2 if not available
         try:
-            importlib.import_module("argon2")
+            import argon2  # noqa: F401
+
             self.argon2_available = True
         except ImportError:
             blockauth_logger.warning(
@@ -393,17 +393,17 @@ class KeyDerivationService:
         self.algorithm = algorithm or config["algorithm"]
         self.iterations = iterations or config["iterations"]
         self.master_salt = master_salt or config["master_salt"]
-        security_level = security_level or config["security_level"]
+
+        # Only apply security preset if explicitly provided (not from config defaults)
+        # This ensures explicit algorithm/iterations params aren't overridden
+        if security_level:
+            preset = SecurityLevels.get_preset(security_level)
+            self.algorithm = preset["algorithm"]
+            self.iterations = preset["iterations"]
 
         # Validate algorithm
         if not KDFAlgorithms.is_supported(self.algorithm):
             raise ValueError(ErrorMessages.INVALID_ALGORITHM)
-
-        # Apply security preset only if no algorithm was explicitly provided
-        if security_level and algorithm is None:
-            preset = SecurityLevels.get_preset(security_level)
-            self.algorithm = preset["algorithm"]
-            self.iterations = preset["iterations"]
 
         self.iterations = max(SecurityConstants.MIN_ITERATIONS, self.iterations)
 
@@ -646,6 +646,9 @@ class KeyEncryptionService:
         Raises:
             ValueError: If encryption key is invalid or missing
         """
+        if encryption_key is not None and encryption_key == "":
+            raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
+
         if encryption_key:
             # Use provided key
             if encryption_key.startswith("0x"):

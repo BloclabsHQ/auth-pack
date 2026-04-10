@@ -1,0 +1,74 @@
+site_name: BlockAuth
+site_description: Comprehensive Python authentication bridging Web2 and Web3
+site_url: https://bloclabshq.github.io/auth-pack/
+repo_url: https://github.com/BloclabsHQ/auth-pack
+repo_name: BloclabsHQ/auth-pack
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Configuration: getting-started/configuration.md
+    - Quick Start: getting-started/quick-start.md
+  - Guides:
+    - Signup & Login: guides/signup-login.md
+    - JWT Tokens: guides/jwt-tokens.md
+    - OAuth Providers: guides/oauth.md
+    - Wallet Authentication: guides/wallet-auth.md
+    - Passkeys (WebAuthn): guides/passkey-webauthn.md
+    - TOTP 2FA: guides/totp-2fa.md
+    - KDF System: guides/kdf-system.md
+    - Step-Up Auth: guides/step-up-auth.md
+  - Reference:
+    - API Endpoints: reference/api-endpoints.md
+    - Settings: reference/settings.md
+    - Models: reference/models.md
+    - Management Commands: reference/management-commands.md
+  - Security:
+    - Overview: security/overview.md
+    - Standards: security/security-standards.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
