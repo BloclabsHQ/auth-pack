@@ -45,8 +45,16 @@ class WalletLoginSerializer(serializers.Serializer):
                     detail={"signature": "Invalid signature. Signature verification failed."}, code="INVALID_SIGNATURE"
                 )
         except ValueError as e:
-            # Structured validation errors from replay/timestamp/nonce checks
-            raise ValidationError(detail={"message": str(e)}, code=4009)
+            # Structured validation errors from replay/timestamp/nonce checks.
+            # Map to static strings — don't surface raw exception messages externally.
+            _reason = str(e).lower()
+            if "expired" in _reason:
+                _detail = "Message has expired. Please sign a new message."
+            elif "nonce" in _reason:
+                _detail = "Nonce has already been used. Please sign a new message."
+            else:
+                _detail = "Message validation failed. Please sign a new message."
+            raise ValidationError(detail={"message": _detail}, code=4009)
         except ValidationError:
             raise
         except Exception as e:
@@ -166,7 +174,15 @@ class WalletLinkSerializer(serializers.Serializer):
                     code="INVALID_SIGNATURE",
                 )
         except ValueError as e:
-            raise ValidationError(detail={"message": str(e)}, code="INVALID_SIGNATURE")
+            # Map to static strings — don't surface raw exception messages externally.
+            _reason = str(e).lower()
+            if "expired" in _reason:
+                _detail = "Message has expired. Please sign a new message."
+            elif "nonce" in _reason:
+                _detail = "Nonce has already been used. Please sign a new message."
+            else:
+                _detail = "Message validation failed. Please sign a new message."
+            raise ValidationError(detail={"message": _detail}, code=4009)
         except ValidationError:
             raise
         except Exception as e:

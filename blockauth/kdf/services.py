@@ -437,8 +437,10 @@ class KeyDerivationService:
         try:
             # Derive deterministic salt from email + password when none provided
             if not user_salt:
+                # Derive a per-user salt from the email only. Password security
+                # comes from the KDF (PBKDF2/Argon2) applied on top of this salt.
                 user_salt = hashlib.sha256(
-                    f"{email.lower().strip()}:{password.strip()}".encode()
+                    f"wallet-salt-v1:{email.lower().strip()}".encode()
                 ).hexdigest()
 
             # Derive private key
