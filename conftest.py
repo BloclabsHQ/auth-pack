@@ -32,6 +32,7 @@ def pytest_configure():
             "SECRET_KEY": "test-secret-key-not-for-production",
             "ALGORITHM": "HS256",
             "BLOCK_AUTH_USER_MODEL": "django.contrib.auth.User",
+            "KDF_ENABLED": True,
         },
         REST_FRAMEWORK={
             "DEFAULT_AUTHENTICATION_CLASSES": [

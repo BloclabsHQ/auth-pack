@@ -68,6 +68,8 @@ Usage:
         )
 """
 
+from blockauth.utils.config import get_config
+
 from .constants import (
     PASSKEY_CONFIG_KEY,
     PASSKEY_FEATURE_FLAG,
@@ -148,7 +150,6 @@ def is_enabled() -> bool:
     """
     try:
         from blockauth.constants import ConfigKeys
-        from blockauth.utils.config import get_config
 
         features = get_config(ConfigKeys.FEATURES)
         return features.get(PASSKEY_FEATURE_FLAG, False)

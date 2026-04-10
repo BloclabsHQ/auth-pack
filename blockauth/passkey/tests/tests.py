@@ -284,7 +284,7 @@ class TestPasskeyViews(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="test@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="test@example.com", email="test@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")
@@ -311,7 +311,7 @@ class TestPasskeyViews(TestCase):
 
         view = PasskeyRegistrationOptionsView.as_view()
         request = self.factory.post("/auth/passkey/register/options/")
-        request.user = self.user
+        request._force_auth_user = self.user
         request.data = {}
         request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
@@ -354,7 +354,7 @@ class TestRateLimiting(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="ratelimit@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="ratelimit@example.com", email="ratelimit@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")
@@ -394,7 +394,7 @@ class TestViewErrorHandling(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="error@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="error@example.com", email="error@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")
@@ -409,7 +409,7 @@ class TestViewErrorHandling(TestCase):
 
         view = PasskeyRegistrationOptionsView.as_view()
         request = self.factory.post("/auth/passkey/register/options/")
-        request.user = self.user
+        request._force_auth_user = self.user
         request.data = {}
         request.META = {"REMOTE_ADDR": "127.0.0.1"}
 
@@ -451,7 +451,7 @@ class TestCredentialManagement(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(email="cred@example.com", password="testpass123")
+        self.user = User.objects.create_user(username="cred@example.com", email="cred@example.com", password="testpass123")
 
     @patch("blockauth.passkey.views.is_enabled")
     @patch("blockauth.passkey.views.PasskeyService")

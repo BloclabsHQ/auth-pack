@@ -190,4 +190,4 @@ def is_valid_phone_number(phone: str) -> bool:
         return False
 
     # Only international phone numbers are allowed
-    return phone.startswith("+") and 11 <= len(phone) <= 15
+    return phone.startswith("+") and 11 <= len(phone) <= 16

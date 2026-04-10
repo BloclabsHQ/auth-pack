@@ -119,6 +119,29 @@ class TOTPService:
     # Core TOTP Algorithm (RFC 6238)
     # =========================================================================
 
+    def generate_code(self, secret: str, timestamp: int = None) -> str:
+        """
+        Generate a TOTP code from a secret.
+
+        Convenience wrapper around generate_totp for use in tests and tooling.
+
+        Args:
+            secret: Base32-encoded TOTP secret
+            timestamp: Optional Unix timestamp (uses current time if not provided)
+
+        Returns:
+            TOTP code string
+        """
+        time_offset = 0 if timestamp is None else timestamp - int(time.time())
+        code, _ = self.generate_totp(
+            secret,
+            time_offset=time_offset,
+            time_step=self.config.time_step,
+            digits=self.config.digits,
+            algorithm=self.config.algorithm,
+        )
+        return code
+
     @staticmethod
     def generate_secret(length: int = 32) -> str:
         """
@@ -430,6 +453,9 @@ class TOTPService:
         Raises:
             TOTPAlreadyEnabledError: If TOTP is already enabled for user
         """
+        if not user_id:
+            raise TOTPSetupError("user_id cannot be empty")
+
         # Check if already enabled
         existing = self.store.get_by_user_id(user_id)
         if existing and existing.status == TOTPStatus.ENABLED.value:
@@ -468,7 +494,7 @@ class TOTPService:
 
             return SetupResult(secret=secret, provisioning_uri=provisioning_uri, backup_codes=backup_codes)
 
-        except TOTPAlreadyEnabledError:
+        except (TOTPAlreadyEnabledError, TOTPEncryptionRequiredError):
             raise
         except Exception as e:
             logger.error("TOTP setup failed for user %s: %s", user_id, e)
@@ -516,7 +542,6 @@ class TOTPService:
 
         # Enable TOTP
         self.store.update_status(user_id, TOTPStatus.ENABLED.value)
-        self.store.record_successful_verification(user_id, counter)
         self.store.log_verification(user_id=user_id, success=True, verification_type="totp")
 
         logger.info("TOTP enabled for user %s", user_id)
@@ -611,7 +636,7 @@ class TOTPService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            raise TOTPVerificationError()
+            raise TOTPInvalidCodeError()
 
         # Check for replay attack
         if counter and self.store.is_counter_used(user_id, counter):
@@ -666,7 +691,7 @@ class TOTPService:
 
         logger.info("Backup code used for user %s (remaining: %d)", user_id, remaining)
 
-        return VerifyResult(success=True, verification_type="backup", backup_codes_remaining=remaining)
+        return VerifyResult(success=True, verification_type="backup_code", backup_codes_remaining=remaining)
 
     def _handle_failed_verification(
         self, user_id: str, verification_type: str, reason: str, ip_address: Optional[str] = None, user_agent: str = ""

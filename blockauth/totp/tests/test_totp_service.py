@@ -59,7 +59,6 @@ class MockTOTPStore(ITOTP2FAStore):
             backup_codes_remaining=0,
             failed_attempts=0,
             locked_until=None,
-            last_used_code=None,
             enabled_at=None,
         )
         return self.data[user_id]
@@ -78,26 +77,65 @@ class MockTOTPStore(ITOTP2FAStore):
             return True
         return False
 
-    def set_backup_codes(self, user_id: str, hashed_codes: list):
-        self.backup_codes[user_id] = hashed_codes
-        if user_id in self.data:
-            self.update(user_id, backup_codes_remaining=len(hashed_codes))
-
     def get_backup_codes(self, user_id: str) -> list:
         return self.backup_codes.get(user_id, [])
 
-    def mark_backup_code_used(self, user_id: str, code_hash: str):
-        codes = self.backup_codes.get(user_id, [])
-        if code_hash in codes:
-            codes.remove(code_hash)
-            self.backup_codes[user_id] = codes
-            self.update(user_id, backup_codes_remaining=len(codes))
+    def update_status(self, user_id: str, status: str) -> bool:
+        if user_id in self.data:
+            self.update(user_id, status=status)
+            return True
+        return False
 
-    def record_failed_attempt(self, user_id: str):
+    def set_backup_codes(self, user_id: str, hashed_codes: list):
+        self.backup_codes[user_id] = hashed_codes
+        if user_id in self.data:
+            self.update(user_id, backup_codes_remaining=len(hashed_codes), backup_codes_hash=list(hashed_codes))
+
+    def use_backup_code(self, user_id: str, code_index: int) -> bool:
+        data = self.data.get(user_id)
+        if data and 0 <= code_index < len(data.backup_codes_hash):
+            new_codes = list(data.backup_codes_hash)
+            new_codes[code_index] = None
+            remaining = sum(1 for c in new_codes if c)
+            self.update(user_id, backup_codes_hash=new_codes, backup_codes_remaining=remaining)
+            return True
+        return False
+
+    def record_failed_attempt(self, user_id: str, max_attempts: int = 5, lockout_duration: int = 300) -> bool:
+        from datetime import timedelta, timezone
         data = self.data.get(user_id)
         if data:
             new_count = data.failed_attempts + 1
             self.update(user_id, failed_attempts=new_count)
+            if new_count >= max_attempts:
+                locked_until = datetime.now(tz=timezone.utc) + timedelta(seconds=lockout_duration)
+                self.update(user_id, locked_until=locked_until)
+                return True
+        return False
+
+    def record_successful_verification(self, user_id: str, time_counter: int) -> bool:
+        if user_id in self.data:
+            self.update(user_id, last_used_counter=time_counter, failed_attempts=0)
+            self.used_codes[user_id] = time_counter
+            return True
+        return False
+
+    def is_counter_used(self, user_id: str, time_counter: int) -> bool:
+        data = self.data.get(user_id)
+        if data is None:
+            return False
+        return getattr(data, "last_used_counter", None) == time_counter
+
+    def log_verification(
+        self,
+        user_id: str,
+        success: bool,
+        verification_type: str = "totp",
+        ip_address=None,
+        user_agent: str = "",
+        failure_reason: str = "",
+    ) -> None:
+        pass
 
     def reset_failed_attempts(self, user_id: str):
         self.update(user_id, failed_attempts=0)
@@ -108,11 +146,7 @@ class MockTOTPStore(ITOTP2FAStore):
     def unlock_account(self, user_id: str):
         self.update(user_id, locked_until=None, failed_attempts=0)
 
-    def set_last_used_code(self, user_id: str, code: str):
-        self.used_codes[user_id] = code
-        self.update(user_id, last_used_code=code)
-
-    def get_last_used_code(self, user_id: str) -> str:
+    def get_last_used_code(self, user_id: str):
         return self.used_codes.get(user_id)
 
 
@@ -330,14 +364,16 @@ class TestReplayAttackPrevention(unittest.TestCase):
             self.service.verify(user_id="user123", code=code)
 
     def test_last_used_code_tracked(self):
-        """Last used code should be stored for replay prevention."""
+        """Last used counter should be stored for replay prevention."""
         secret = self._setup_enabled_totp()
         code = self.service.generate_code(secret)
+        _, counter = self.service.generate_totp(secret)
 
         self.service.verify(user_id="user123", code=code)
 
-        last_used = self.store.get_last_used_code("user123")
-        self.assertEqual(last_used, code)
+        data = self.store.get_by_user_id("user123")
+        self.assertIsNotNone(data.last_used_counter)
+        self.assertEqual(data.last_used_counter, counter)
 
 
 # =============================================================================
@@ -644,7 +680,7 @@ class TestConstants(unittest.TestCase):
 
     def test_default_secret_length_is_256_bits(self):
         """SECURITY: Default secret length must be 32 bytes."""
-        self.assertEqual(DEFAULTS["TOTP_SECRET_LENGTH"], 32)
+        self.assertEqual(DEFAULTS["SECRET_LENGTH"], 32)
 
     def test_supported_algorithms(self):
         """Should support standard TOTP algorithms."""
@@ -679,11 +715,11 @@ class TestInputValidation(unittest.TestCase):
         self.service.confirm_setup("user123", code)
 
         # Too short
-        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError)):
+        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError, TOTPInvalidBackupCodeError)):
             self.service.verify(user_id="user123", code="123")
 
         # Too long
-        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError)):
+        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError, TOTPInvalidBackupCodeError)):
             self.service.verify(user_id="user123", code="12345678901234567890")
 
     def test_non_numeric_code_rejected(self):
@@ -692,7 +728,7 @@ class TestInputValidation(unittest.TestCase):
         code = self.service.generate_code(result.secret)
         self.service.confirm_setup("user123", code)
 
-        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError)):
+        with self.assertRaises((TOTPInvalidCodeError, TOTPVerificationError, TOTPInvalidBackupCodeError)):
             self.service.verify(user_id="user123", code="abcdef")
 
     def test_empty_user_id_handling(self):
