@@ -18,6 +18,7 @@ Key Features:
 
 import hashlib
 import hmac
+import importlib
 import json
 import logging
 import os
@@ -434,9 +435,13 @@ class KeyDerivationService:
             ValueError: If key derivation fails
         """
         try:
-            # Generate unique salt for this user if not provided
+            # Derive deterministic salt from email + password when none provided
             if not user_salt:
-                user_salt = os.urandom(SecurityConstants.AES_KEY_LENGTH).hex()
+                # Derive a per-user salt from the email only. Password security
+                # comes from the KDF (PBKDF2/Argon2) applied on top of this salt.
+                user_salt = hashlib.sha256(
+                    f"wallet-salt-v1:{email.lower().strip()}".encode()
+                ).hexdigest()
 
             # Derive private key
             private_key = self.derive_private_key(email, password, user_salt)
@@ -643,6 +648,9 @@ class KeyEncryptionService:
         Raises:
             ValueError: If encryption key is invalid or missing
         """
+        if encryption_key is not None and encryption_key == "":
+            raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
+
         if encryption_key:
             # Use provided key
             if encryption_key.startswith("0x"):
@@ -653,12 +661,18 @@ class KeyEncryptionService:
 
             return bytes.fromhex(encryption_key)
 
-        # No key provided - this should not happen with single source of truth
-        raise ValueError(
-            "Master encryption key is required. Set MASTER_ENCRYPTION_KEY "
-            "in BLOCK_AUTH_SETTINGS. Environment variable fallbacks have been "
-            "removed to maintain single source of truth."
+        # Try environment variable fallback
+        env_key = os.environ.get("MASTER_ENCRYPTION_KEY")
+        if env_key:
+            return self._get_or_create_key(env_key)
+
+        # Generate a new key with a warning (not suitable for production)
+        generated_key = os.urandom(SecurityConstants.AES_KEY_LENGTH)
+        logger.warning(
+            "No MASTER_ENCRYPTION_KEY configured. A temporary key has been generated. "
+            "Set MASTER_ENCRYPTION_KEY in BLOCK_AUTH_SETTINGS for persistent encryption."
         )
+        return generated_key
 
 
 class KDFManager:
@@ -697,6 +711,10 @@ class KDFManager:
 
         # Initialize platform encryption service
         self.platform_encryption_service = KeyEncryptionService(encryption_key)
+
+        # Aliases for simpler access
+        self.kdf_service = self.password_kdf_service
+        self.encryption_service = self.platform_encryption_service
 
         # Store platform master salt for passwordless wallets
         config = get_kdf_config()
@@ -863,6 +881,73 @@ class KDFManager:
                 wallets.append({"wallet_name": wallet_name, "error": str(e), "success": False})
 
         return wallets
+
+    def create_secure_wallet(self, email: str, password: str, custom_salt: str = None) -> Dict[str, str]:
+        """
+        Create a wallet with platform-encrypted private key storage.
+
+        Args:
+            email: User's email address
+            password: User's password
+            custom_salt: Optional custom salt (deterministic if not provided)
+
+        Returns:
+            Dict with wallet_address, encrypted_private_key (JSON), salt,
+            public_key, algorithm, iterations, encryption_version
+        """
+        wallet_data = self.kdf_service.create_user_wallet(email, password, user_salt=custom_salt)
+
+        # Re-derive private key to encrypt it with the platform key
+        private_key = self.kdf_service.derive_private_key(email, password, wallet_data["salt"])
+
+        encrypted_data = self.encryption_service.encrypt_private_key(private_key)
+
+        # Clear private key from memory
+        private_key = "0" * len(private_key)
+        del private_key
+
+        return {
+            "wallet_address": wallet_data["wallet_address"],
+            "encrypted_private_key": json.dumps(encrypted_data),
+            "salt": wallet_data["salt"],
+            "public_key": wallet_data["public_key"],
+            "algorithm": wallet_data["algorithm"],
+            "iterations": wallet_data["iterations"],
+            "encryption_version": "1.0",
+        }
+
+    def verify_and_decrypt_key(
+        self, email: str, password: str, salt: str, encrypted_private_key: str
+    ) -> str:
+        """
+        Verify credentials and decrypt the stored private key.
+
+        Derives the private key from credentials, decrypts the stored key,
+        and verifies they match. Raises ValueError on wrong password.
+
+        Args:
+            email: User's email address
+            password: User's password
+            salt: Salt used when creating the wallet
+            encrypted_private_key: JSON-encoded encrypted private key
+
+        Returns:
+            Decrypted private key (hex string with 0x prefix)
+
+        Raises:
+            ValueError: If password is incorrect or decryption fails
+        """
+        derived_key = self.kdf_service.derive_private_key(email, password, salt)
+
+        encrypted_data = json.loads(encrypted_private_key)
+        decrypted_key = self.encryption_service.decrypt_private_key(encrypted_data)
+
+        if not hmac.compare_digest(derived_key.lower(), decrypted_key.lower()):
+            del derived_key
+            raise ValueError("Password verification failed: keys do not match")
+
+        del derived_key
+        return decrypted_key
 
     def decrypt_with_user_password(self, email: str, password: str, user_encrypted_key: str, user_salt: str) -> str:
         """

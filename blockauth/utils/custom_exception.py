@@ -1,6 +1,14 @@
 from rest_framework.exceptions import APIException
 
 
+class WalletConflictError(APIException):
+    """Raised when a wallet address is already linked to a different account (HTTP 409)."""
+
+    status_code = 409
+    default_detail = "This wallet address is already linked to another account."
+    default_code = "WALLET_IN_USE"
+
+
 class ValidationErrorWithCode(APIException):
     status_code = 400
     default_code = "4000"

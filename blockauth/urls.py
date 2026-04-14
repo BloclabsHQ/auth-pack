@@ -55,7 +55,7 @@ from blockauth.views.basic_auth_views import (
 from blockauth.views.facebook_auth_views import FacebookAuthCallbackView, FacebookAuthLoginView
 from blockauth.views.google_auth_views import GoogleAuthCallbackView, GoogleAuthLoginView
 from blockauth.views.linkedin_auth_views import LinkedInAuthCallbackView, LinkedInAuthLoginView
-from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView
+from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView, WalletLinkView
 
 # Note: All endpoints include trailing slashes for consistency.
 # Django's APPEND_SLASH=True setting will automatically redirect
@@ -105,6 +105,9 @@ URL_PATTERN_MAPPINGS = {
     # Wallet management endpoints
     Features.WALLET_EMAIL_ADD: [
         ("wallet/email/add/", WalletEmailAddView, URLNames.WALLET_EMAIL_ADD),  # Add email to wallet account
+    ],
+    Features.WALLET_LINK: [
+        ("wallet/link/", WalletLinkView, URLNames.WALLET_LINK),
     ],
     # Passkey/WebAuthn authentication endpoints
     Features.PASSKEY_AUTH: [

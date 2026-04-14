@@ -119,6 +119,29 @@ class TOTPService:
     # Core TOTP Algorithm (RFC 6238)
     # =========================================================================
 
+    def generate_code(self, secret: str, timestamp: int = None) -> str:
+        """
+        Generate a TOTP code from a secret.
+
+        Convenience wrapper around generate_totp for use in tests and tooling.
+
+        Args:
+            secret: Base32-encoded TOTP secret
+            timestamp: Optional Unix timestamp (uses current time if not provided)
+
+        Returns:
+            TOTP code string
+        """
+        time_offset = 0 if timestamp is None else timestamp - int(time.time())
+        code, _ = self.generate_totp(
+            secret,
+            time_offset=time_offset,
+            time_step=self.config.time_step,
+            digits=self.config.digits,
+            algorithm=self.config.algorithm,
+        )
+        return code
+
     @staticmethod
     def generate_secret(length: int = 32) -> str:
         """
@@ -516,7 +539,6 @@ class TOTPService:
 
         # Enable TOTP
         self.store.update_status(user_id, TOTPStatus.ENABLED.value)
-        self.store.record_successful_verification(user_id, counter)
         self.store.log_verification(user_id=user_id, success=True, verification_type="totp")
 
         logger.info("TOTP enabled for user %s", user_id)
@@ -611,7 +633,7 @@ class TOTPService:
                 ip_address=ip_address,
                 user_agent=user_agent,
             )
-            raise TOTPVerificationError()
+            raise TOTPInvalidCodeError()
 
         # Check for replay attack
         if counter and self.store.is_counter_used(user_id, counter):
