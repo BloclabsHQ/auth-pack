@@ -640,41 +640,23 @@ passwordless_confirm_docs = {
         ),
     ],
     "responses": {
+        # Issue #97: point at the real response serializer so the OpenAPI
+        # spec stops drifting from the runtime shape.
         200: OpenApiResponse(
             description="Login successful",
-            response={
-                "type": "object",
-                "properties": {
-                    "access": {
-                        "type": "string",
-                        "description": "JWT access token for API authentication",
-                        "format": "jwt",
-                    },
-                    "refresh": {
-                        "type": "string",
-                        "description": "JWT refresh token for token renewal",
-                        "format": "jwt",
-                    },
-                    "user": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "integer", "description": "User ID"},
-                            "email": {"type": "string", "format": "email", "description": "User email address"},
-                            "phone_number": {"type": "string", "description": "User phone number"},
-                            "is_verified": {"type": "boolean", "description": "Email verification status"},
-                        },
-                        "required": ["id", "is_verified"],
-                    },
-                },
-                "required": ["access", "refresh"],
-            },
+            response=PasswordlessLoginResponseSerializer,
             examples=[
                 OpenApiExample(
                     "Success",
                     value={
                         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                         "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                        "user": {"id": 123, "email": "user@example.com", "is_verified": True},
+                        "user": {
+                            "id": "8f3e8f4c-1c2d-4a3b-bd8b-4a0f8f5b1a21",
+                            "email": "user@example.com",
+                            "is_verified": True,
+                            "wallet_address": None,
+                        },
                     },
                     status_codes=[200],
                 )
