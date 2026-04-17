@@ -478,6 +478,39 @@ class TestWalletLoginEndpoints:
         assert login_resp.status_code == 200, login_resp.content
         _assert_no_credential_leak(login_resp.json()["user"])
 
+    def test_login_returns_null_email_for_wallet_first_creator(self):
+        """Issue #99: wallet-first Creators have no email on first SIWE
+        login. The response must expose ``user.email`` as ``None`` (a
+        supported case) rather than coercing to an empty string or
+        tripping the serializer's validation.
+        """
+        client = APIClient()
+        challenge_resp = client.post(
+            reverse("wallet-login-challenge"),
+            {"address": _TEST_ADDRESS_LC},
+            format="json",
+        )
+        assert challenge_resp.status_code == 200, challenge_resp.content
+        message = challenge_resp.json()["message"]
+        sig = _sign(message)
+
+        cache.clear()
+        login_resp = client.post(
+            reverse("wallet-login"),
+            {
+                "wallet_address": _TEST_ADDRESS_LC,
+                "message": message,
+                "signature": sig,
+            },
+            format="json",
+        )
+        # Auto-create path: no ValidationError, no 400 -- wallet-first
+        # Creators without email are explicitly supported.
+        assert login_resp.status_code == status.HTTP_200_OK, login_resp.content
+        user_payload = login_resp.json()["user"]
+        assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
+        assert user_payload["email"] is None
+
     def test_login_rejects_forged_domain(self):
         client = APIClient()
         issued = django_timezone.now()
