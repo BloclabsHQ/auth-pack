@@ -498,3 +498,90 @@ class OTPThrottle(RequestThrottle):
             )
             # Fail open for availability
             return True
+
+
+class WalletLoginThrottle(BaseThrottle):
+    """
+    Throttle for the SIWE challenge + login endpoints.
+
+    Addresses issue #90 hardening item #10 ("throttle scoping"):
+
+    * The bucket key combines client IP **and** the wallet address the request
+      is targeting. Behind a load balancer where ``REMOTE_ADDR`` is the LB IP,
+      every legitimate user would share a bucket under a naive IP-only scheme;
+      mixing the address breaks that up for challenge-flood scenarios while
+      still rate-limiting pure address-enumeration from a single IP.
+    * ``get_client_ip`` is XFF-aware with the existing validation, so
+      deployments behind Kong / ALB keep per-user granularity.
+    * Scope key ``scope`` defaults to ``"wallet_challenge"`` or
+      ``"wallet_login"`` so the challenge and login endpoints get independent
+      counters (the attacker needs to successfully mint a nonce AND bomb the
+      login endpoint separately to exhaust both).
+
+    ``rate`` is ``(num_requests, duration_seconds)`` and defaults to
+    ``(30, 60)`` -- 30 requests per minute per (IP, address, scope) tuple.
+    That is lax enough for a user who is retrying a flaky MetaMask popup but
+    tight enough to make address enumeration expensive.
+    """
+
+    cache = default_cache
+    timer = time.time
+    DEFAULT_RATE: tuple[int, int] = (30, 60)
+
+    def __init__(self, scope: str = "wallet_login", rate: tuple[int, int] = None):
+        self.scope = scope
+        self.num_requests, self.duration = rate or self.DEFAULT_RATE
+
+    def _extract_address(self, request) -> str:
+        """Best-effort extraction of the target wallet from the request body.
+
+        Accepts ``address`` (challenge) or ``wallet_address`` (login). Returns
+        an empty string when missing — that still produces a scoped bucket,
+        because the IP + scope components are always present.
+        """
+        data = getattr(request, "data", None) or {}
+        address = data.get("wallet_address") or data.get("address") or ""
+        if isinstance(address, str):
+            return address.lower()[:64]
+        return ""
+
+    def get_cache_key(self, request) -> str:
+        ip = get_client_ip(request) or "unknown"
+        address = self._extract_address(request) or "anon"
+        return f"wallet_throttle_{self.scope}_{ip}_{address}"
+
+    def allow_request(self, request, view) -> bool:
+        key = self.get_cache_key(request)
+        now = self.timer()
+        history = self.cache.get(key, [])
+        history = [t for t in history if now - t < self.duration]
+
+        if len(history) >= self.num_requests:
+            blockauth_logger.warning(
+                f"Wallet throttle exceeded for {self.scope}",
+                sanitize_log_context(
+                    {
+                        "scope": self.scope,
+                        "ip": get_client_ip(request),
+                        "address": self._extract_address(request),
+                        "history_len": len(history),
+                        "limit": self.num_requests,
+                        "duration": self.duration,
+                    }
+                ),
+            )
+            return False
+
+        history.append(now)
+        self.cache.set(key, history, self.duration)
+        return True
+
+    def wait(self):  # pragma: no cover - DRF interface
+        return self.duration
+
+
+class WalletChallengeThrottle(WalletLoginThrottle):
+    """Default throttle for the challenge endpoint (scope = wallet_challenge)."""
+
+    def __init__(self, rate: tuple[int, int] = None):
+        super().__init__(scope="wallet_challenge", rate=rate)

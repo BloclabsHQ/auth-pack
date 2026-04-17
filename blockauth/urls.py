@@ -55,7 +55,12 @@ from blockauth.views.basic_auth_views import (
 from blockauth.views.facebook_auth_views import FacebookAuthCallbackView, FacebookAuthLoginView
 from blockauth.views.google_auth_views import GoogleAuthCallbackView, GoogleAuthLoginView
 from blockauth.views.linkedin_auth_views import LinkedInAuthCallbackView, LinkedInAuthLoginView
-from blockauth.views.wallet_auth_views import WalletAuthLoginView, WalletEmailAddView, WalletLinkView
+from blockauth.views.wallet_auth_views import (
+    WalletAuthLoginView,
+    WalletChallengeView,
+    WalletEmailAddView,
+    WalletLinkView,
+)
 
 # Note: All endpoints include trailing slashes for consistency.
 # Django's APPEND_SLASH=True setting will automatically redirect
@@ -84,7 +89,11 @@ URL_PATTERN_MAPPINGS = {
         ),  # Confirm OTP
     ],
     Features.WALLET_LOGIN: [
-        ("login/wallet/", WalletAuthLoginView, URLNames.WALLET_LOGIN),  # Web3 wallet authentication
+        # Challenge route must be declared before the login route so clients
+        # never hit a slash-eating wildcard. Order doesn't matter for Django
+        # URL resolution, but it keeps the pair visibly grouped.
+        ("login/wallet/challenge/", WalletChallengeView, URLNames.WALLET_LOGIN_CHALLENGE),
+        ("login/wallet/", WalletAuthLoginView, URLNames.WALLET_LOGIN),  # SIWE-backed wallet auth (#90)
     ],
     Features.TOKEN_REFRESH: [
         ("token/refresh/", AuthRefreshTokenView, URLNames.TOKEN_REFRESH),  # Refresh JWT tokens

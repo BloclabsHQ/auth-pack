@@ -35,6 +35,12 @@ def pytest_configure():
         ROOT_URLCONF="blockauth.urls",
         SECRET_KEY="test-secret-key-not-for-production",
         DEFAULT_AUTO_FIELD="django.db.models.BigAutoField",
+        DEBUG=True,
+        # SIWE defaults for the test suite. Individual tests may override
+        # these via pytest-django's ``settings`` fixture.
+        WALLET_LOGIN_EXPECTED_DOMAINS=("example.com",),
+        WALLET_LOGIN_DEFAULT_CHAIN_ID=1,
+        WALLET_LOGIN_NONCE_TTL_SECONDS=300,
         BLOCK_AUTH_SETTINGS={
             "SECRET_KEY": "test-secret-key-not-for-production",
             "ALGORITHM": "HS256",
