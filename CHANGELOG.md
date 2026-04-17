@@ -9,9 +9,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ## [Unreleased]
 
+### Added
+
+### Changed
+
+### Fixed
+
+---
+
+## [0.7.0] - 2026-04-17
+
 ### Breaking Changes
 
 - **Wallet login now requires a server-issued SIWE (EIP-4361) challenge** (#90). Clients must call `POST /login/wallet/challenge/` to obtain a signed plaintext before calling `POST /login/wallet/`. The login response shape (`{access, refresh}`) is unchanged, and the error envelope is now `{"error": {"code": "...", "message": "..."}}` with distinct string codes (e.g. `invalid_signature`, `nonce_invalid`, `domain_mismatch`) for each failure mode. Consumers that were passing raw JSON-body payloads to the old endpoint must migrate to the two-round-trip flow. See the "Migration notes" section below.
+- **`ValidationErrorWithCode` now subclasses DRF's `ValidationError`** (#101). `.detail` is a DRF-native `{field: [ErrorDetail, ...]}` map; the top-level error code moves from `.detail["error_code"]` to the `.error_code` attribute on the exception instance.
+  - Response body for DRF's default exception handler changes from `{"detail": {"error_code": "4000", "detail": {field: message}}}` to `{field: [message]}`. The top-level code is no longer in the body when using DRF's default handler.
+  - Custom exception handlers that branch on `isinstance(exc, ValidationError)` now pick up `ValidationErrorWithCode` automatically and can iterate `exc.detail` as a DRF-native field map.
+  - Per-field multi-message behavior changes: the old code joined multiple error messages per field into a single space-separated string. The new class preserves DRF's list of `ErrorDetail` so per-error codes and messages are iterable individually.
+  - Scalar per-field `detail` values (e.g. `{"email": "msg"}`) are normalized into `[ErrorDetail("msg")]` on `__init__` so `.detail` always matches the `{field: [ErrorDetail, ...]}` shape. Caller-supplied `code=` now propagates to both `.error_code` and per-field wrapping so top-level and per-field codes stay consistent. Tuple per-field values and nested-serializer detail dicts are accepted when deriving `.error_code` (tuples alongside lists; nested dicts recurse to the deepest leaf).
 
 ### Added
 
@@ -42,6 +57,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 - Set `WALLET_LOGIN_EXPECTED_DOMAINS` in production Django settings (the hard-failing startup check fires on `DEBUG=False` deployments without one).
 - Update wallet-login clients to call `POST /login/wallet/challenge/` first, sign the returned `message` verbatim with the wallet's private key, and post `{wallet_address, message, signature}` to `POST /login/wallet/`.
 - Schedule `python manage.py prune_wallet_nonces` every 5–15 minutes (Celery Beat, cron, or systemd timer).
+- If your service uses a custom DRF `EXCEPTION_HANDLER` that special-cases `ValidationErrorWithCode` by reading `exc.detail["error_code"]` or `exc.detail["detail"]`, switch to reading `exc.error_code` and iterating `exc.detail` as a standard DRF field map. If your service relies on DRF's default handler and was parsing the legacy envelope, switch to the DRF-native `{field: [message]}` shape (#101).
 
 ---
 
