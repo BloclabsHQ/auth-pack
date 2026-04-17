@@ -52,6 +52,40 @@ def _sign(message: str) -> str:
     return sig_hex if sig_hex.startswith("0x") else "0x" + sig_hex
 
 
+def _perform_wallet_login(client, address):
+    """Run the full challenge -> sign -> login round-trip and return the response.
+
+    Factored out of the individual tests so the identical 15-line
+    boilerplate (POST challenge, read message, sign, POST login) lives
+    in one place. The issue #99 tests (credential leak + null email)
+    and any future endpoint-level test should reuse this helper rather
+    than duplicating the sequence.
+    """
+    challenge_resp = client.post(
+        reverse("wallet-login-challenge"),
+        {"address": address},
+        format="json",
+    )
+    assert challenge_resp.status_code == 200, challenge_resp.content
+    message = challenge_resp.json()["message"]
+    signature = _sign(message)
+    # cache.clear() between challenge and login is intentionally omitted
+    # here -- the two endpoints use independent throttle scope keys
+    # (``wallet_challenge`` vs ``wallet_login``) so issuing one challenge
+    # does not populate the login bucket. See the cleanup commit that
+    # removed the cargo-cult clears from the individual tests for the
+    # full rationale.
+    return client.post(
+        reverse("wallet-login"),
+        {
+            "wallet_address": address,
+            "message": message,
+            "signature": signature,
+        },
+        format="json",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _override_domains(settings):
     """Apply the SIWE allow-list for every test in this module."""
@@ -437,60 +471,71 @@ class TestWalletLoginEndpoints:
         ``ModelSerializer(fields="__all__")``.
         """
         client = APIClient()
-        challenge_resp = client.post(
-            reverse("wallet-login-challenge"),
-            {"address": _TEST_ADDRESS_LC},
-            format="json",
-        )
-        assert challenge_resp.status_code == 200, challenge_resp.content
-        message = challenge_resp.json()["message"]
-        sig = _sign(message)
-
-        cache.clear()
-        login_resp = client.post(
-            reverse("wallet-login"),
-            {
-                "wallet_address": _TEST_ADDRESS_LC,
-                "message": message,
-                "signature": sig,
-            },
-            format="json",
-        )
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
         assert login_resp.status_code == 200, login_resp.content
         assert_no_credential_leak(login_resp.json()["user"])
 
-    def test_login_returns_null_email_for_wallet_first_creator(self):
+    def test_login_returns_null_email_for_wallet_first_creator_autocreate(self):
         """Issue #99: wallet-first Creators have no email on first SIWE
-        login. The response must expose ``user.email`` as ``None`` (a
-        supported case) rather than coercing to an empty string or
-        tripping the serializer's validation.
-        """
-        client = APIClient()
-        challenge_resp = client.post(
-            reverse("wallet-login-challenge"),
-            {"address": _TEST_ADDRESS_LC},
-            format="json",
-        )
-        assert challenge_resp.status_code == 200, challenge_resp.content
-        message = challenge_resp.json()["message"]
-        sig = _sign(message)
+        login. The auto-create path must expose ``user.email`` as
+        ``None`` (a supported case) rather than coercing to an empty
+        string or tripping the serializer's validation.
 
-        cache.clear()
-        login_resp = client.post(
-            reverse("wallet-login"),
-            {
-                "wallet_address": _TEST_ADDRESS_LC,
-                "message": message,
-                "signature": sig,
-            },
-            format="json",
-        )
-        # Auto-create path: no ValidationError, no 400 -- wallet-first
-        # Creators without email are explicitly supported.
+        Also asserts the DB row itself has ``email IS NULL`` -- the
+        response could in principle correctly surface ``None`` while
+        the backing user row stored ``""``, or vice versa, and both
+        would be regressions. Checking both pins the contract
+        end-to-end.
+        """
+        from tests.models import TestBlockUser
+
+        client = APIClient()
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
         assert login_resp.status_code == status.HTTP_200_OK, login_resp.content
         user_payload = login_resp.json()["user"]
         assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
         assert user_payload["email"] is None
+
+        # DB-level sanity: the auto-create path must store ``None``, not
+        # ``""``. A coerced empty string would satisfy the response
+        # check (DRF would still serialize it as ``""``) so this is an
+        # independent assertion, not a duplicate.
+        created = TestBlockUser.objects.get(wallet_address=_TEST_ADDRESS_LC)
+        assert created.email is None
+
+    def test_login_returns_null_email_for_existing_wallet_first_creator(self):
+        """Issue #99: the response must also expose ``user.email`` as
+        ``None`` for a *pre-existing* wallet-first Creator -- not just
+        on the auto-create branch.
+
+        The auto-create variant alone is too weak: if a future change
+        coerced ``email`` to ``""`` only when looking up an existing
+        row (say, a ``User.objects.get_or_create(defaults={"email":
+        ""})`` regression), the auto-create test would still pass
+        because it asserts the happy-path default, not the lookup
+        branch.
+
+        Seed an existing row with ``email=None`` via the ORM, then
+        drive a login against it and assert both the response and the
+        untouched DB row still hold ``None``.
+        """
+        from tests.models import TestBlockUser
+
+        existing = TestBlockUser.objects.create(
+            wallet_address=_TEST_ADDRESS_LC,
+            email=None,
+            is_verified=False,
+        )
+        client = APIClient()
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
+        assert login_resp.status_code == status.HTTP_200_OK, login_resp.content
+        user_payload = login_resp.json()["user"]
+        assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
+        assert user_payload["email"] is None
+
+        # Existing row must not have been mutated by the login path.
+        existing.refresh_from_db()
+        assert existing.email is None
 
     def test_login_rejects_forged_domain(self):
         client = APIClient()
