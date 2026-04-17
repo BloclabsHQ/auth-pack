@@ -19,6 +19,10 @@ class ValidationErrorWithCode(ValidationError):
     Subclassing ``ValidationError`` means ``isinstance(exc, ValidationError)``
     checks in downstream exception handlers pick this up automatically and
     can iterate ``.detail`` as a standard DRF field map.
+
+    When a caller passes ``code=``, it is both stored on ``.error_code`` and
+    propagated to DRF's per-field wrapping so scalar ``detail`` values get
+    the same code at every level.
     """
 
     default_code = "4000"
@@ -26,14 +30,23 @@ class ValidationErrorWithCode(ValidationError):
     def __init__(self, detail=None, code=None):
         if detail is None:
             detail = {"non_field_errors": ["A validation error occurred. Please check your input and try again."]}
+        if isinstance(detail, dict):
+            detail = {k: v if isinstance(v, (list, tuple, dict)) else [v] for k, v in detail.items()}
         self.error_code = code if code is not None else self._derive_error_code(detail)
-        super().__init__(detail, code=None)
+        super().__init__(detail, code=code)
 
-    @staticmethod
-    def _derive_error_code(detail):
+    @classmethod
+    def _derive_error_code(cls, detail):
         if not isinstance(detail, dict) or not detail:
-            return ValidationErrorWithCode.default_code
+            return cls.default_code
         first_field = next(iter(detail.values()))
-        first_err = first_field[0] if isinstance(first_field, list) and first_field else first_field
+        if isinstance(first_field, dict):
+            return cls._derive_error_code(first_field)
+        if isinstance(first_field, (list, tuple)) and first_field:
+            first_err = first_field[0]
+        elif isinstance(first_field, (list, tuple)):
+            first_err = None
+        else:
+            first_err = first_field
         err_code = getattr(first_err, "code", None)
-        return ValidationErrorWithCode.default_code if err_code in (None, "required") else err_code
+        return cls.default_code if err_code in (None, "required") else err_code

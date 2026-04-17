@@ -78,6 +78,40 @@ def test_default_detail_when_none_passed():
     # DRF wraps scalar strings into `[ErrorDetail(...)]` during __init__.
     assert isinstance(exc.detail["non_field_errors"], list)
     assert "validation error" in str(exc.detail["non_field_errors"][0]).lower()
+    # Wrapped ErrorDetail carries the default code so per-field and
+    # top-level `error_code` stay consistent.
+    assert exc.detail["non_field_errors"][0].code == "4000"
+
+
+def test_scalar_per_field_is_normalized_to_list():
+    """Raw scalars per field are wrapped into ``[ErrorDetail(...)]`` so
+    ``.detail`` always matches DRF's ``{field: [ErrorDetail, ...]}`` shape."""
+    exc = ValidationErrorWithCode(detail={"email": "raw string"})
+    assert isinstance(exc.detail["email"], list)
+    assert len(exc.detail["email"]) == 1
+    assert str(exc.detail["email"][0]) == "raw string"
+
+
+def test_explicit_code_propagates_to_per_field_errordetail():
+    """When ``code=`` is passed, it applies to both ``.error_code`` and the
+    per-field wrapping for scalar detail values — no silent split between
+    top-level and per-field codes."""
+    exc = ValidationErrorWithCode(detail={"email": "raw"}, code="4042")
+    assert exc.error_code == "4042"
+    assert exc.detail["email"][0].code == "4042"
+
+
+def test_tuple_per_field_derives_code_from_first_element():
+    """DRF sometimes passes tuples; derivation must accept them alongside lists."""
+    exc = ValidationErrorWithCode(detail={"email": (ErrorDetail("bad", code="invalid"),)})
+    assert exc.error_code == "invalid"
+
+
+def test_nested_dict_recurses_for_error_code():
+    """Nested-serializer validation errors ``{parent: {child: [ErrorDetail]}}``
+    recurse so the deepest code surfaces, not the default."""
+    exc = ValidationErrorWithCode(detail={"user": {"email": [ErrorDetail("bad", code="invalid")]}})
+    assert exc.error_code == "invalid"
 
 
 def test_multi_message_per_field_preserved_as_list():
