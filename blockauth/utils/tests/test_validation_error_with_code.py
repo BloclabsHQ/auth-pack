@@ -25,17 +25,13 @@ def test_isinstance_check_passes_for_raised_instance():
     """Behavioral form of the subclass contract — catching
     `ValidationError` MUST catch `ValidationErrorWithCode`."""
     with pytest.raises(ValidationError) as exc_info:
-        raise ValidationErrorWithCode(
-            detail={"email": [ErrorDetail("required", code="required")]}
-        )
+        raise ValidationErrorWithCode(detail={"email": [ErrorDetail("required", code="required")]})
     assert isinstance(exc_info.value, ValidationErrorWithCode)
 
 
 def test_detail_is_drf_native_field_map():
     """No flatten — `.detail[field]` stays a list of `ErrorDetail`."""
-    exc = ValidationErrorWithCode(
-        detail={"password": [ErrorDetail("too short", code="min_length")]}
-    )
+    exc = ValidationErrorWithCode(detail={"password": [ErrorDetail("too short", code="min_length")]})
     assert isinstance(exc.detail, dict)
     assert isinstance(exc.detail["password"], list)
     assert exc.detail["password"][0] == "too short"
@@ -43,17 +39,13 @@ def test_detail_is_drf_native_field_map():
 
 
 def test_error_code_derived_from_first_field_code():
-    exc = ValidationErrorWithCode(
-        detail={"email": [ErrorDetail("bad address", code="invalid")]}
-    )
+    exc = ValidationErrorWithCode(detail={"email": [ErrorDetail("bad address", code="invalid")]})
     assert exc.error_code == "invalid"
 
 
 def test_error_code_required_maps_to_4000():
     """`code="required"` is treated as the default-code sentinel."""
-    exc = ValidationErrorWithCode(
-        detail={"email": [ErrorDetail("This field is required.", code="required")]}
-    )
+    exc = ValidationErrorWithCode(detail={"email": [ErrorDetail("This field is required.", code="required")]})
     assert exc.error_code == "4000"
 
 
@@ -106,9 +98,7 @@ def test_multi_message_per_field_preserved_as_list():
 
 
 def test_status_code_is_400():
-    exc = ValidationErrorWithCode(
-        detail={"email": [ErrorDetail("required", code="required")]}
-    )
+    exc = ValidationErrorWithCode(detail={"email": [ErrorDetail("required", code="required")]})
     assert exc.status_code == 400
 
 
@@ -116,9 +106,7 @@ def test_default_drf_handler_renders_field_map():
     """Locks in the new wire contract: DRF's default exception_handler
     renders `{field: [message]}` without the legacy `{"detail": ...}`
     outer wrap."""
-    exc = ValidationErrorWithCode(
-        detail={"password": [ErrorDetail("This field is required.", code="required")]}
-    )
+    exc = ValidationErrorWithCode(detail={"password": [ErrorDetail("This field is required.", code="required")]})
     response = exception_handler(exc, context={})
     assert response is not None
     assert response.status_code == 400
