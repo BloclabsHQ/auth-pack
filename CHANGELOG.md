@@ -34,6 +34,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 - With `WALLET_LOGIN_AUTO_CREATE=False` the endpoint no longer acts as a registration oracle -- unknown and known wallets both return a generic 401. Deployments that need the distinct 403 can opt in via `WALLET_LOGIN_EXPOSE_REGISTRATION_STATUS=True` (#90, hardening #4).
 - Narrow exception handling in signature verification. A library regression surfaces as `signature_internal_error` (mapped to HTTP 500) with `logger.exception`, rather than masquerading as a 400 from bad input (#90, hardening #5).
 - Token-issuance fallback now warns on `ImportError` instead of silently dropping custom claims (#90, hardening #6).
+- Startup validation no longer fires during offline management commands. Docker builds that run `python manage.py collectstatic` / `migrate` / `check` / etc. no longer fail on a non-DEBUG deployment with an empty `WALLET_LOGIN_EXPECTED_DOMAINS`. The check still fires for `runserver` and for WSGI/ASGI boots (gunicorn, uvicorn, daphne), so a misconfigured deployment still refuses to serve traffic (#93).
 
 ### Migration notes
 
