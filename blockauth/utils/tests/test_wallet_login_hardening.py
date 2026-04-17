@@ -66,6 +66,76 @@ class TestStartupValidation:
         settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = True
         validate_wallet_login_settings()
 
+    # ---- #93: offline management commands must not fire the check ----------
+    #
+    # ``ready()`` runs on every ``django.setup()`` including ``collectstatic``
+    # inside a Dockerfile, which would otherwise block every consumer build
+    # until they set ``WALLET_LOGIN_SKIP_STARTUP_VALIDATION`` in every RUN
+    # step. The guard whitelists offline commands so the check only fires
+    # for serving boots (``runserver``, gunicorn, uvicorn, ...).
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "collectstatic",
+            "migrate",
+            "makemigrations",
+            "check",
+            "test",
+            "shell",
+            "dbshell",
+            "showmigrations",
+            "compilemessages",
+            "loaddata",
+            "createsuperuser",
+            "flush",
+        ],
+    )
+    def test_offline_command_skips_check(self, settings, monkeypatch, command):
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["manage.py", command])
+        # Must not raise.
+        validate_wallet_login_settings()
+
+    def test_runserver_still_validates(self, settings, monkeypatch):
+        """``runserver`` binds a port, so the check must fire."""
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["manage.py", "runserver"])
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    def test_wsgi_boot_still_validates(self, settings, monkeypatch):
+        """gunicorn/uvicorn never go through manage.py; argv[1] is not a
+        Django command so the guard falls through and the check fires.
+        """
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["gunicorn", "myapp.wsgi:application"])
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    def test_argv_with_no_command_still_validates(self, settings, monkeypatch):
+        """No subcommand -> treat as serving boot (fail closed)."""
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["manage.py"])
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    def test_offline_command_with_allowlist_still_accepted(self, settings, monkeypatch):
+        """Sanity: a valid allow-list shouldn't regress the offline path."""
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ("app.example.com",)
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["manage.py", "migrate"])
+        validate_wallet_login_settings()
+
 
 # =============================================================================
 # Hardening #10 — throttle scoping
