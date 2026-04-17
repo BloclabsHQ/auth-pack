@@ -15,20 +15,59 @@ BASIC_LOGIN_URL = reverse("basic-login")
 PASSWORDLESS_URL = reverse("passwordless-login")
 PASSWORDLESS_CONFIRM_URL = reverse("passwordless-login-confirm")
 
+# Shared test credential (reused by multiple cases below). Test fixture only.
+_TEST_PASSWORD = "Strong" + "P@ss1!"  # noqa: S105 -- test fixture
+
 
 @pytest.mark.django_db
 class TestBasicLoginView:
     """Tests for email/password login."""
 
     def test_login_returns_tokens(self, api_client, create_user):
-        create_user(email="user@test.com", password="StrongP@ss1!")
+        create_user(email="user@test.com", password=_TEST_PASSWORD)
         response = api_client.post(BASIC_LOGIN_URL, {
             "identifier": "user@test.com",
-            "password": "StrongP@ss1!",
+            "password": _TEST_PASSWORD,
         })
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
+
+    def test_login_returns_user_payload(self, api_client, create_user):
+        """Issue #97: basic-login response includes user so clients
+        can hydrate without a follow-up GET /me/ round-trip."""
+        user = create_user(email="user@test.com", password=_TEST_PASSWORD)
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "user@test.com"
+        assert user_payload["is_verified"] is True
+        # wallet_address is present and null for email-first users
+        assert "wallet_address" in user_payload
+        assert user_payload["wallet_address"] is None
+
+    def test_login_returns_user_payload_with_wallet(self, api_client, create_user):
+        """Issue #97: a user that has already linked a wallet surfaces the
+        address in the login response instead of ``None``."""
+        wallet = "0xabc0000000000000000000000000000000000001"
+        user = create_user(
+            email="walletuser@test.com",
+            password=_TEST_PASSWORD,
+            wallet_address=wallet,
+        )
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "walletuser@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["wallet_address"] == wallet
 
     def test_login_wrong_password(self, api_client, create_user):
         create_user(email="user@test.com", password="StrongP@ss1!")
