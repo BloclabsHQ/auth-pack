@@ -9,6 +9,7 @@ default URLconf.
 
 from rest_framework import serializers
 
+from blockauth.serializers.user_account_serializers import LoginUserSerializer
 from blockauth.utils.siwe import MAX_SIWE_MESSAGE_LENGTH
 
 
@@ -81,8 +82,19 @@ class WalletLoginRequestSerializer(serializers.Serializer):
     )
 
 
+# Backwards-compat alias. The wallet-login response used to embed a
+# ``WalletLoginUserSerializer`` declared here. Issue #97 generalised the
+# payload to basic-login and passwordless-login, at which point the
+# serializer was promoted to the shared ``LoginUserSerializer`` in
+# ``user_account_serializers``. Keeping the alias avoids breaking any
+# external consumer that imported the old name before the rename was
+# released; remove in a future major bump.
+WalletLoginUserSerializer = LoginUserSerializer
+
+
 class WalletLoginResponseSerializer(serializers.Serializer):
     """Response body for ``POST /login/wallet/``."""
 
     access = serializers.CharField(help_text="JWT access token")
     refresh = serializers.CharField(help_text="JWT refresh token")
+    user = LoginUserSerializer(help_text="Authenticated user profile")

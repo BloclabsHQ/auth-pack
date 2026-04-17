@@ -256,3 +256,67 @@ class EmailChangeConfirmationSerializer(serializers.Serializer):
 
 class RefreshTokenSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(help_text="Refresh token to get new access token", required=True)
+
+
+"""shared login response serializers (issue #97)
+
+These serializers describe the ``{access, refresh, user}`` response shape
+used by basic-login, passwordless-login, and wallet-login. Keeping them in
+one place means the OpenAPI spec stays consistent across all three endpoints
+and clients can share a single generated type.
+
+``email`` and ``wallet_address`` are both nullable because:
+
+* wallet-first accounts are created with no email on first SIWE login,
+* basic / passwordless accounts have no wallet until the user runs the
+  ``wallet/link/`` flow.
+"""
+
+
+class LoginUserSerializer(serializers.Serializer):
+    """User payload embedded in every login response.
+
+    Shared by ``BasicLoginResponseSerializer``,
+    ``PasswordlessLoginResponseSerializer``, and
+    ``WalletLoginResponseSerializer`` so the three endpoints stay in lock-step.
+    Do not add anything here that isn't safe to surface to the client --
+    this object goes into the success response of an unauthenticated call.
+    """
+
+    id = serializers.UUIDField(help_text="User UUID")
+    email = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="Email address (null for wallet-first accounts)",
+    )
+    is_verified = serializers.BooleanField(help_text="Whether the account is verified")
+    wallet_address = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="Ethereum wallet address (null for accounts without a linked wallet)",
+    )
+
+
+class BasicLoginResponseSerializer(serializers.Serializer):
+    """Response body for ``POST /login/basic/`` (issue #97).
+
+    The ``user`` field gives clients parity with wallet-login so they can
+    hydrate profile state without a follow-up ``GET /me/`` round-trip.
+    """
+
+    access = serializers.CharField(help_text="JWT access token")
+    refresh = serializers.CharField(help_text="JWT refresh token")
+    user = LoginUserSerializer(help_text="Authenticated user profile")
+
+
+class PasswordlessLoginResponseSerializer(serializers.Serializer):
+    """Response body for ``POST /login/passwordless/confirm/`` (issue #97).
+
+    Same shape as :class:`BasicLoginResponseSerializer`; kept as a distinct
+    class so drf-spectacular can tag the schema separately per endpoint and
+    so future divergence (e.g. passwordless-only flags) is cheap.
+    """
+
+    access = serializers.CharField(help_text="JWT access token")
+    refresh = serializers.CharField(help_text="JWT refresh token")
+    user = LoginUserSerializer(help_text="Authenticated user profile")

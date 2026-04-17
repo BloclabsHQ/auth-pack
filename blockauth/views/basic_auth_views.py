@@ -26,11 +26,13 @@ from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTP, OTPSubject
 from blockauth.notification import NotificationEvent, send_otp
 from blockauth.serializers.user_account_serializers import (
+    BasicLoginResponseSerializer,
     BasicLoginSerializer,
     EmailChangeConfirmationSerializer,
     EmailChangeRequestSerializer,
     PasswordChangeSerializer,
     PasswordlessLoginConfirmationSerializer,
+    PasswordlessLoginResponseSerializer,
     PasswordlessLoginSerializer,
     PasswordResetConfirmationEmailSerializer,
     PasswordResetRequestSerializer,
@@ -297,7 +299,23 @@ class BasicAuthLoginView(APIView):
                 access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
             self.login_throttle.record_success(request, "basic_login")
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            # Issue #97: return user payload so clients can hydrate profile
+            # state without a second ``GET /me/`` round-trip. Same shape as
+            # wallet-login. ``wallet_address`` is null for email-first users
+            # until they run the ``wallet/link/`` flow.
+            response_serializer = BasicLoginResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "is_verified": user.is_verified,
+                        "wallet_address": user.wallet_address,
+                    },
+                }
+            )
+            return Response(data=response_serializer.data, status=status.HTTP_200_OK)
         except (ValidationError, ValidationErrorWithCode) as e:
             self.login_throttle.record_failure(request, "basic_login")
             blockauth_logger.warning(
@@ -423,7 +441,23 @@ class PasswordlessLoginConfirmView(APIView):
             blockauth_logger.success(
                 "Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id})
             )
-            return Response(data={"access": access_token, "refresh": refresh_token}, status=status.HTTP_200_OK)
+            # Issue #97: mirror basic-login / wallet-login by returning the
+            # authenticated user so clients can hydrate profile state in one
+            # round-trip. ``wallet_address`` is null for email / SMS users
+            # that haven't linked a wallet yet.
+            response_serializer = PasswordlessLoginResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "is_verified": user.is_verified,
+                        "wallet_address": user.wallet_address,
+                    },
+                }
+            )
+            return Response(data=response_serializer.data, status=status.HTTP_200_OK)
         except ValidationError as e:
             self.login_throttle.record_failure(request, "passwordless_login")
             blockauth_logger.warning(

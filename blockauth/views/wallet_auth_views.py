@@ -7,7 +7,7 @@ Includes:
   ``message`` verbatim with the wallet's private key.
 * :class:`WalletAuthLoginView` — ``POST /login/wallet/``, consumes the
   nonce, verifies the signature, and issues JWTs. Response shape is
-  ``{"access", "refresh"}`` so clients only add the challenge round-trip.
+  ``{"access", "refresh", "user"}`` (issue #97 — parity with basic-login).
 * :class:`WalletEmailAddView` / :class:`WalletLinkView` — unchanged from
   pre-SIWE behavior.
 
@@ -170,9 +170,9 @@ class WalletAuthLoginView(APIView):
     3. Verify the signature (with low-s malleability bound).
     4. Delegate user lookup/creation + token issuance to the linker service.
 
-    The response shape ``{"access", "refresh"}`` is unchanged from the
-    previous wallet login implementation. Clients only need to add the
-    preceding ``/login/wallet/challenge/`` round-trip.
+    The response shape is ``{"access", "refresh", "user"}`` -- the ``user``
+    payload includes ``id``, ``email``, ``is_verified``, and
+    ``wallet_address`` so clients can hydrate in one round-trip (issue #97).
     """
 
     permission_classes = (AllowAny,)
@@ -185,9 +185,11 @@ class WalletAuthLoginView(APIView):
         description=(
             "Consumes a nonce issued by `/login/wallet/challenge/` and a "
             "valid EIP-4361 signature to authenticate the wallet holder. "
-            "Returns the same `{access, refresh}` JWT pair as the other "
-            "login flows. Nonces are single-use and expire after the "
-            "configured TTL (default 5 minutes)."
+            "Returns `{access, refresh, user}` -- the `user` object "
+            "includes `id`, `email`, `is_verified`, and `wallet_address` "
+            "so clients can hydrate without a second round-trip. Nonces "
+            "are single-use and expire after the configured TTL (default "
+            "5 minutes)."
         ),
         request=WalletLoginRequestSerializer,
         responses={200: WalletLoginResponseSerializer},
@@ -228,8 +230,18 @@ class WalletAuthLoginView(APIView):
             sanitize_log_context({"user": linked.user_id, "created": linked.created}),
         )
 
+        user = linked.user
         response_serializer = WalletLoginResponseSerializer(
-            {"access": linked.access_token, "refresh": linked.refresh_token}
+            {
+                "access": linked.access_token,
+                "refresh": linked.refresh_token,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "is_verified": user.is_verified,
+                    "wallet_address": user.wallet_address,
+                },
+            }
         )
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
