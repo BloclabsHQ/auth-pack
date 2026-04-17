@@ -36,32 +36,13 @@ from blockauth.services.wallet_login_service import (
     reset_wallet_login_service,
 )
 from blockauth.utils.siwe import build_siwe_message
+from blockauth.utils.tests.credential_leak import assert_no_credential_leak
 
 # Deterministic test wallet — not a real account.
 _TEST_PRIVATE_KEY = "0x" + "1" * 64
 _TEST_ACCOUNT = Account.from_key(_TEST_PRIVATE_KEY)
 _TEST_ADDRESS = _TEST_ACCOUNT.address  # EIP-55 checksummed
 _TEST_ADDRESS_LC = _TEST_ADDRESS.lower()
-
-# Issue #99: shared allow-list of credential-material keys that must never
-# appear in the login ``user`` payload. Adding a new field only requires
-# updating this set, not rewriting every test.
-FORBIDDEN_USER_PAYLOAD_KEYS = frozenset({"password", "password_hash", "hashed_password"})
-
-
-def _assert_no_credential_leak(user_payload):
-    """Fail loudly if the wallet-login ``user`` object carries secrets.
-
-    Mirrors the basic/passwordless-login helper. Iterates the payload's
-    own keys so a future refactor to ``ModelSerializer(fields="__all__")``
-    can't silently ship private Django attributes (``_state`` etc.) or
-    password hash fields over the wire.
-    """
-    for key in user_payload.keys():
-        assert key not in FORBIDDEN_USER_PAYLOAD_KEYS, (
-            f"Forbidden credential field '{key}' leaked in wallet-login user payload"
-        )
-        assert not key.startswith("_"), f"Private field '{key}' leaked in wallet-login user payload"
 
 
 def _sign(message: str) -> str:
@@ -476,7 +457,7 @@ class TestWalletLoginEndpoints:
             format="json",
         )
         assert login_resp.status_code == 200, login_resp.content
-        _assert_no_credential_leak(login_resp.json()["user"])
+        assert_no_credential_leak(login_resp.json()["user"])
 
     def test_login_returns_null_email_for_wallet_first_creator(self):
         """Issue #99: wallet-first Creators have no email on first SIWE

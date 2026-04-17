@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from blockauth.models.otp import OTP, OTPSubject
+from blockauth.utils.tests.credential_leak import assert_no_credential_leak
 
 
 BASIC_LOGIN_URL = reverse("basic-login")
@@ -17,28 +18,6 @@ PASSWORDLESS_CONFIRM_URL = reverse("passwordless-login-confirm")
 
 # Shared test credential (reused by multiple cases below). Test fixture only.
 _TEST_PASSWORD = "Strong" + "P@ss1!"  # noqa: S105 -- test fixture
-
-# Issue #99: locking the user-payload contract down so a future refactor
-# (e.g. someone switching the response to a ModelSerializer with
-# ``fields = "__all__"``) can't silently leak credential material. Any new
-# sensitive field should be appended here, not removed.
-FORBIDDEN_USER_PAYLOAD_KEYS = frozenset({"password", "password_hash", "hashed_password"})
-
-
-def _assert_no_credential_leak(user_payload):
-    """Fail loudly if the login response's ``user`` object carries secrets.
-
-    Iterates the payload's own keys (rather than asserting one field at a
-    time) so adding a new forbidden key only touches
-    ``FORBIDDEN_USER_PAYLOAD_KEYS``. Any key that starts with an underscore
-    is also rejected — Django / DRF attach private state under ``_state``
-    and friends and those must never go over the wire.
-    """
-    for key in user_payload.keys():
-        assert key not in FORBIDDEN_USER_PAYLOAD_KEYS, (
-            f"Forbidden credential field '{key}' leaked in login user payload"
-        )
-        assert not key.startswith("_"), f"Private field '{key}' leaked in login user payload"
 
 
 @pytest.mark.django_db
@@ -103,7 +82,7 @@ class TestBasicLoginView:
             "password": _TEST_PASSWORD,
         })
         assert response.status_code == status.HTTP_200_OK
-        _assert_no_credential_leak(response.data["user"])
+        assert_no_credential_leak(response.data["user"])
 
     def test_login_wrong_password(self, api_client, create_user):
         create_user(email="user@test.com", password="StrongP@ss1!")
@@ -268,7 +247,7 @@ class TestPasswordlessLoginConfirmView:
             "code": "ABC123",
         })
         assert response.status_code == status.HTTP_200_OK
-        _assert_no_credential_leak(response.data["user"])
+        assert_no_credential_leak(response.data["user"])
 
     def test_confirm_creates_user_if_not_exists(self, api_client, create_otp):
         """Passwordless login should create a new user if one doesn't exist."""
