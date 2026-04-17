@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Any, Tuple
 
 from django.conf import settings
 from django.db import transaction
@@ -59,13 +59,20 @@ class WalletUserLinkError(Exception):
 
 @dataclass(frozen=True)
 class LinkedUser:
-    """Output of :meth:`WalletUserLinker.link`."""
+    """Output of :meth:`WalletUserLinker.link`.
+
+    ``user`` carries the Django model instance so the caller can serialise
+    a user payload into the HTTP response without an extra DB round-trip.
+    The field is typed ``Any`` to avoid importing the concrete user model
+    at class-definition time (it varies per deployment).
+    """
 
     user_id: str
     email: str
     access_token: str
     refresh_token: str
     created: bool
+    user: Any = None
 
 
 class WalletUserLinker:
@@ -161,6 +168,7 @@ class WalletUserLinker:
             access_token=access_token,
             refresh_token=refresh_token,
             created=created,
+            user=user,
         )
 
     # =========================================================================

@@ -403,8 +403,18 @@ class TestWalletLoginEndpoints:
             format="json",
         )
         assert login_resp.status_code == 200, login_resp.content
-        assert "access" in login_resp.json()
-        assert "refresh" in login_resp.json()
+        body = login_resp.json()
+        assert "access" in body
+        assert "refresh" in body
+        # Issue #97: wallet login now returns user payload
+        assert "user" in body
+        user_payload = body["user"]
+        assert "id" in user_payload
+        assert "is_verified" in user_payload
+        assert "wallet_address" in user_payload
+        assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
+        # email may be null for wallet-first accounts
+        assert "email" in user_payload
 
         cache.clear()
         replay = client.post(
@@ -518,7 +528,11 @@ class TestWalletLoginEndpoints:
             format="json",
         )
         assert resp.status_code == 200, resp.content
-        assert "access" in resp.json()
+        body = resp.json()
+        assert "access" in body
+        # Issue #97: user payload present for existing wallet too
+        assert "user" in body
+        assert body["user"]["wallet_address"] == _TEST_ADDRESS_LC
 
     def test_login_rejects_oversized_message(self):
         """Hardening #9 — serializer caps message length."""

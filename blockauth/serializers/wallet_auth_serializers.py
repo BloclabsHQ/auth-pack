@@ -81,8 +81,31 @@ class WalletLoginRequestSerializer(serializers.Serializer):
     )
 
 
+class WalletLoginUserSerializer(serializers.Serializer):
+    """User payload nested inside the wallet-login response.
+
+    Matches the shape described in issue #97 so clients get parity with
+    basic-login without a second ``GET /me/`` round-trip.  ``email`` is
+    nullable because wallet-first Creators may not have one yet.
+    """
+
+    id = serializers.UUIDField(help_text="User UUID")
+    email = serializers.EmailField(
+        allow_null=True,
+        required=False,
+        help_text="Email address (null for wallet-first accounts)",
+    )
+    is_verified = serializers.BooleanField(help_text="Whether the account is verified")
+    wallet_address = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="Ethereum wallet address",
+    )
+
+
 class WalletLoginResponseSerializer(serializers.Serializer):
     """Response body for ``POST /login/wallet/``."""
 
     access = serializers.CharField(help_text="JWT access token")
     refresh = serializers.CharField(help_text="JWT refresh token")
+    user = WalletLoginUserSerializer(help_text="Authenticated user profile")
