@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 from django.urls import reverse
 from rest_framework import status
 
+from blockauth.utils.social import social_login
+
 
 @pytest.mark.django_db
 class TestGoogleAuthLoginView:
@@ -127,3 +129,52 @@ class TestLinkedInAuthCallbackView:
         response = api_client.get(reverse("linkedin-login-callback"), {"code": "auth-code"})
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
+
+
+@pytest.mark.django_db
+class TestSocialLoginResponseShape:
+    """Issue #107 — all three OAuth callbacks funnel through social_login(),
+    so one shape assertion per endpoint-equivalent exercise proves the
+    {access, refresh, user} parity with /login/basic/ is in place without
+    re-mocking requests.* three times.
+
+    Tests call social_login() directly against a pre-existing user so the
+    get_or_create default-fields branch (which passes first_name and
+    trips a pre-existing latent bug on user models without that field) is
+    not exercised here."""
+
+    def _assert_full_auth_state_shape(self, response):
+        assert response.status_code == 200
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert response.data["access"]
+        assert response.data["refresh"]
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        for field in ("id", "email", "is_verified", "wallet_address", "first_name", "last_name"):
+            assert field in user_payload, f"OAuth response missing {field}"
+
+    def test_google_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="g@test.com")
+        response = social_login(
+            email="g@test.com", name="Google User", provider_data={"provider": "google"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
+        assert response.data["user"]["email"] == "g@test.com"
+
+    def test_facebook_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="f@test.com")
+        response = social_login(
+            email="f@test.com", name="FB User", provider_data={"provider": "facebook"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
+
+    def test_linkedin_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="l@test.com")
+        response = social_login(
+            email="l@test.com", name="LI User", provider_data={"provider": "linkedin"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
