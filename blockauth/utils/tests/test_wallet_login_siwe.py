@@ -69,12 +69,6 @@ def _perform_wallet_login(client, address):
     assert challenge_resp.status_code == 200, challenge_resp.content
     message = challenge_resp.json()["message"]
     signature = _sign(message)
-    # cache.clear() between challenge and login is intentionally omitted
-    # here -- the two endpoints use independent throttle scope keys
-    # (``wallet_challenge`` vs ``wallet_login``) so issuing one challenge
-    # does not populate the login bucket. See the cleanup commit that
-    # removed the cargo-cult clears from the individual tests for the
-    # full rationale.
     return client.post(
         reverse("wallet-login"),
         {
@@ -427,7 +421,6 @@ class TestWalletLoginEndpoints:
         message = challenge_resp.json()["message"]
         sig = _sign(message)
 
-        cache.clear()
         login_resp = client.post(
             reverse("wallet-login"),
             {
@@ -451,7 +444,6 @@ class TestWalletLoginEndpoints:
         # email may be null for wallet-first accounts
         assert "email" in user_payload
 
-        cache.clear()
         replay = client.post(
             reverse("wallet-login"),
             {
@@ -572,7 +564,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {
@@ -598,7 +589,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {
@@ -625,7 +615,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {
