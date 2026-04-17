@@ -1,6 +1,6 @@
 [project]
 name = "blockauth"
-version = "0.10.0"
+version = "0.11.0"
 description = "Comprehensive Python authentication package bridging Web2 and Web3"
 authors = [{name = "BloclabsHQ", email = "eng@bloclabs.com"}]
 license = {text = "MIT"}
