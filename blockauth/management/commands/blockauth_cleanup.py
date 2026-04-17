@@ -67,8 +67,7 @@ class Command(BaseCommand):
             )
             if total > 0:
                 logger.info(
-                    "blockauth_cleanup deleted %d records "
-                    "(OTP=%d, challenges=%d, TOTP logs=%d)",
+                    "blockauth_cleanup deleted %d records " "(OTP=%d, challenges=%d, TOTP logs=%d)",
                     total,
                     otp_deleted,
                     challenge_deleted,
@@ -105,9 +104,7 @@ class Command(BaseCommand):
         from django.db.models import Q
 
         # Expired (with grace period) OR already used
-        qs = PasskeyChallenge.objects.filter(
-            Q(expires_at__lt=cutoff) | Q(is_used=True)
-        )
+        qs = PasskeyChallenge.objects.filter(Q(expires_at__lt=cutoff) | Q(is_used=True))
 
         count = qs.count()
         if not dry_run and count > 0:

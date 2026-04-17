@@ -61,8 +61,11 @@ DEFAULTS = {
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
     "BLOCK_AUTH_LOGGER_CLASS": "blockauth.utils.logger.DummyLogger",
-    # Wallet replay protection
-    "WALLET_MESSAGE_TTL": 300,  # Signed wallet messages expire after 5 minutes
+    # Wallet replay protection (legacy JSON-message TTL for pre-SIWE
+    # WalletAuthenticator path). The SIWE flow uses top-level Django
+    # settings ``WALLET_LOGIN_*`` instead -- see ``blockauth/apps.py`` and
+    # ``blockauth/services/wallet_login_service.py``.
+    "WALLET_MESSAGE_TTL": 300,
     # Refresh token rotation
     "ROTATE_REFRESH_TOKENS": True,  # Blacklist old refresh token on rotation
 }

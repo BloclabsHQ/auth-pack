@@ -225,6 +225,7 @@ class URLNames:
     PASSWORDLESS_LOGIN = "passwordless-login"
     PASSWORDLESS_LOGIN_CONFIRM = "passwordless-login-confirm"
     WALLET_LOGIN = "wallet-login"
+    WALLET_LOGIN_CHALLENGE = "wallet-login-challenge"
     TOKEN_REFRESH = "refresh-token"
 
     # Password
