@@ -5,11 +5,64 @@ first wallet login request -- we want a non-DEBUG deployment with an empty
 ``WALLET_LOGIN_EXPECTED_DOMAINS`` list to fail to boot, not to silently
 accept SIWE challenges against a host extracted from the dev URL
 (hardening #3 in issue #90).
+
+The validation is also guarded by a ``sys.argv`` check so it only fires for
+commands that actually serve traffic (``runserver``, or a WSGI/ASGI server
+booting through ``django.setup()``). Management commands that trigger
+``ready()`` during a Docker build or a deploy (``collectstatic``,
+``migrate``, ``check``, ...) don't need the allow-list -- forcing every
+consumer's Dockerfile to set ``WALLET_LOGIN_SKIP_STARTUP_VALIDATION=true``
+just to build a static-asset layer was a silent landmine every new consumer
+tripped over (issue #93).
 """
+
+import sys
 
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+# Management commands that run ``django.setup()`` but don't serve HTTP
+# traffic. The SIWE allow-list check doesn't need to fire for any of these:
+# they either run during a Docker build (``collectstatic``), a deploy step
+# (``migrate``), CI (``check``, ``test``), ops inspection (``shell``,
+# ``dbshell``, ``showmigrations``, ``diffsettings``), i18n build
+# (``compilemessages``, ``makemessages``), data IO (``dumpdata``,
+# ``loaddata``, ``flush``, ``clearsessions``), or user admin
+# (``createsuperuser``, ``changepassword``).
+#
+# ``runserver`` / ``runserver_plus`` are deliberately absent -- they bind a
+# port and must validate. WSGI/ASGI servers (``gunicorn``, ``uvicorn``,
+# ``daphne``) don't run through manage.py so their ``sys.argv[1]`` is not
+# in this set either, which is the desired fail-closed behavior.
+_OFFLINE_MANAGEMENT_COMMANDS = frozenset(
+    {
+        "check",
+        "changepassword",
+        "clearsessions",
+        "collectstatic",
+        "compilemessages",
+        "createsuperuser",
+        "dbshell",
+        "diffsettings",
+        "dumpdata",
+        "flush",
+        "help",
+        "loaddata",
+        "makemessages",
+        "makemigrations",
+        "migrate",
+        "sendtestemail",
+        "shell",
+        "shell_plus",
+        "showmigrations",
+        "sqlflush",
+        "sqlmigrate",
+        "sqlsequencereset",
+        "test",
+        "version",
+    }
+)
 
 
 class BlockAuthConfig(AppConfig):
@@ -40,6 +93,15 @@ def validate_wallet_login_settings() -> None:
     # feature flag) silence the check without turning DEBUG on. Prefer to
     # leave it off in real production.
     if getattr(settings, "WALLET_LOGIN_SKIP_STARTUP_VALIDATION", False):
+        return
+
+    # #93: when running an offline management command (``collectstatic``,
+    # ``migrate``, ...), the check would crash a Docker build that hadn't
+    # yet wired the allow-list. Those commands don't serve traffic, so
+    # there's nothing to protect. We keep firing for ``runserver`` and for
+    # WSGI/ASGI boots (no ``manage.py <cmd>`` argv).
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command in _OFFLINE_MANAGEMENT_COMMANDS:
         return
 
     domains = getattr(settings, "WALLET_LOGIN_EXPECTED_DOMAINS", ())
