@@ -17,6 +17,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.9.0] - 2026-04-17
+
+### Added
+
+- **`POST /token/refresh/` returns the user payload** (api-optimization follow-up to fabric-auth#420). Response shape expands from `{access, refresh}` to `{access, refresh, user}` using the new shared `AuthStateResponseSerializer`. The user row is already loaded in the view for custom-claims population, so surfacing it is free. Consumers can drop the 5-min `/me/` poller pattern once on this version.
+- **`POST /password/reset/confirm/` auto-signs-in after a successful reset**. Response shape changes from `{"message": "..."}` to `{access, refresh, user}`. The OTP + new password prove ownership — forcing a second `/login/basic/` round-trip was pure ceremony.
+- **`POST /password/change/` returns a fresh token pair + user**. Response shape changes from `{"message": "..."}` to `{access, refresh, user}`. When `ROTATE_REFRESH_TOKENS` is enabled this is also the right moment to rotate out tokens issued under the prior password.
+- **`blockauth.serializers.user_account_serializers.AuthStateResponseSerializer`** — shared response class for all three endpoints above. Reusable by downstream services that add similar "full post-mutation auth state" endpoints.
+
+### Changed
+
+- `POST /password/reset/confirm/` and `POST /password/change/` success bodies change from `{"message": "..."}` to `{access, refresh, user}`. Clients that only inspected the HTTP status code are unaffected; clients that read the `message` field must switch to the new shape or ignore extra keys.
+- `POST /token/refresh/` adds a `user` field; existing consumers reading `access` / `refresh` are unaffected.
+
+### Fixed
+
+---
+
 ## [0.8.0] - 2026-04-17
 
 ### Added

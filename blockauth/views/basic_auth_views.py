@@ -26,6 +26,7 @@ from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTP, OTPSubject
 from blockauth.notification import NotificationEvent, send_otp
 from blockauth.serializers.user_account_serializers import (
+    AuthStateResponseSerializer,
     BasicLoginResponseSerializer,
     BasicLoginSerializer,
     EmailChangeConfirmationSerializer,
@@ -51,6 +52,36 @@ from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
+
+
+def _build_user_payload(user):
+    """Shape the ``user`` block used by every post-auth-state response.
+
+    Kept as a helper so basic-login, passwordless-confirm, wallet-login,
+    signup-confirm, refresh, and password mutation endpoints all emit the
+    same field set — clients can't tell one endpoint's user block from
+    another. ``first_name`` / ``last_name`` use ``getattr`` to stay
+    compatible with downstream user models that never added those fields.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "is_verified": user.is_verified,
+        "wallet_address": user.wallet_address,
+        "first_name": getattr(user, "first_name", None),
+        "last_name": getattr(user, "last_name", None),
+    }
+
+
+def _issue_auth_tokens(user):
+    """Issue a fresh (access, refresh) pair for ``user`` using the custom-claims
+    path when available. Mirrors the pattern used by login + signup-confirm."""
+    try:
+        from blockauth.utils.token import generate_auth_token_with_custom_claims
+
+        return generate_auth_token_with_custom_claims(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
+    except ImportError:
+        return generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
 
 
 class SignUpView(APIView):
@@ -585,7 +616,18 @@ class AuthRefreshTokenView(APIView):
             blockauth_logger.success(
                 "Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id})
             )
-            return Response(data={"access": access_token, "refresh": new_refresh_token}, status=status.HTTP_200_OK)
+            # api-optimization: return user so shells can drop the
+            # follow-up /me/ round-trip on every refresh tick. The user
+            # row is already loaded above for custom-claims population
+            # so serializing it here is free.
+            response_serializer = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": new_refresh_token,
+                    "user": _build_user_payload(user),
+                }
+            )
+            return Response(data=response_serializer.data, status=status.HTTP_200_OK)
         except AuthenticationFailed:
             raise
         except Exception as e:
@@ -700,8 +742,21 @@ class PasswordResetConfirmView(APIView):
             # send notification to user
             communication_class = get_config("DEFAULT_NOTIFICATION_CLASS")()
             communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_RESET, context=context)
+
+            # api-optimization: auto-sign-in after reset. The user just
+            # proved ownership via the email OTP and the new password;
+            # forcing them to follow up with /login/basic/ is pure
+            # ceremony.
+            access_token, refresh_token = _issue_auth_tokens(user)
             blockauth_logger.success("Password reset confirmed", {"user": user.id, **request.data})
-            return Response({"message": "Password has been reset successfully."}, status=status.HTTP_200_OK)
+            response_serializer = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": _build_user_payload(user),
+                }
+            )
+            return Response(data=response_serializer.data, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning(
                 "Password reset confirmation validation failed",
@@ -773,8 +828,22 @@ class PasswordChangeView(APIView):
 
             communication_class = get_config("DEFAULT_NOTIFICATION_CLASS")()
             communication_class.notify(method=method, event=NotificationEvent.SUCCESS_PASSWORD_CHANGE, context=context)
+
+            # api-optimization: hand back a fresh token pair so the
+            # client doesn't have to re-login or run a refresh round-trip
+            # after a password change. If refresh-token rotation is on,
+            # this is also the right moment to rotate out any tokens
+            # that were issued against the old password.
+            access_token, refresh_token = _issue_auth_tokens(user)
             blockauth_logger.success("Password change successful", {"user": user.id, **request.data})
-            return Response({"message": "Password has been changed successfully."}, status=status.HTTP_200_OK)
+            response_serializer = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": _build_user_payload(user),
+                }
+            )
+            return Response(data=response_serializer.data, status=status.HTTP_200_OK)
         except ValidationError as e:
             blockauth_logger.warning(
                 "Password change validation failed", sanitize_log_context(request.data, {"errors": e.detail})

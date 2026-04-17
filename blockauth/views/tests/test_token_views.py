@@ -24,6 +24,25 @@ class TestAuthRefreshTokenView:
         assert "access" in response.data
         assert "refresh" in response.data
 
+    def test_refresh_returns_user_payload(self, api_client, create_user):
+        """api-optimization v0.9.0: refresh response includes the user so
+        the shell can drop the 5-min /me/ poller. The view already loads
+        the user for custom-claims population."""
+        user = create_user(email="ref@test.com")
+        token = Token()
+        _, refresh = generate_auth_token(token_class=token, user_id=str(user.id))
+
+        response = api_client.post(REFRESH_URL, {"refresh_token": refresh})
+        assert response.status_code == status.HTTP_200_OK
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "ref@test.com"
+        assert user_payload["is_verified"] is True
+        assert "wallet_address" in user_payload
+        assert "first_name" in user_payload
+        assert "last_name" in user_payload
+
     def test_refresh_with_access_token_fails(self, api_client, create_user):
         """Access tokens should not be usable as refresh tokens."""
         user = create_user()
