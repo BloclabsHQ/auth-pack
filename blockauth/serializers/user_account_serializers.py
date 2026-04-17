@@ -339,6 +339,20 @@ class PasswordlessLoginResponseSerializer(serializers.Serializer):
     user = LoginUserSerializer(help_text="Authenticated user profile")
 
 
+class AuthStateResponseSerializer(serializers.Serializer):
+    """Response body for endpoints that mutate auth state and must hand
+    the client the full post-mutation auth tuple in one round trip.
+
+    Used by ``/token/refresh/``, ``/password/reset/confirm/``, and
+    ``/password/change/`` so clients never need a follow-up ``/me/`` or
+    ``/login/basic/`` to reconcile state after a mutation.
+    """
+
+    access = serializers.CharField(help_text="JWT access token (freshly issued)")
+    refresh = serializers.CharField(help_text="JWT refresh token (rotated where applicable)")
+    user = LoginUserSerializer(help_text="Current user profile")
+
+
 class SignUpConfirmResponseSerializer(serializers.Serializer):
     """Response body for successful ``POST /signup/confirm/`` (fabric-auth#420).
 
