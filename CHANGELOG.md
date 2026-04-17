@@ -17,6 +17,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.11.1] - 2026-04-17
+
+### Fixed
+
+- **`blockauth.utils.social.social_login()` no longer crashes on user models without a `first_name` field** (#109). Previously the `get_or_create(defaults={"first_name": name, ...})` call raised `FieldError: Invalid field name(s) for model ...` on the create path, breaking first-time OAuth signup for any consumer whose concrete user model didn't declare `first_name`. `social_login()` now probes the model with `_meta.get_field("first_name")` and only includes the default when the field exists. Populate behavior is preserved for models that do declare the field.
+
+### Added
+
+- 2 regression tests in `blockauth/views/tests/test_oauth_views.py` exercising the real `get_or_create` create path (no user pre-seed): one asserts no crash on a minimal user model, one asserts `first_name` still lands when the field exists.
+
+---
+
 ## [0.11.0] - 2026-04-17
 
 ### Added
