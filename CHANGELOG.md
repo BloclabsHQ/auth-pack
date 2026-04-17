@@ -17,6 +17,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.10.0] - 2026-04-17
+
+### Added
+
+- **OAuth callbacks return the full auth-state tuple** (#107). `GET /google/callback/`, `GET /facebook/callback/`, and `GET /linkedin/callback/` now return `{access, refresh, user}` using the shared `AuthStateResponseSerializer` introduced in 0.9.0. OAuth-signup shells can drop the follow-up `GET /me/` call that email/password/wallet flows already avoid. Fix is single-point in `blockauth.utils.social.social_login()` — all three callback views funnel through it.
+- Three parity tests in `blockauth/views/tests/test_oauth_views.py::TestSocialLoginResponseShape` — one per provider, asserting the full `LoginUserSerializer` field set is present and the `user.id` matches.
+
+### Changed
+
+- OAuth callback OpenAPI schemas in `blockauth/docs/social_auth_docs.py` now document the `user` field with full property-level typing. The previous schemas were technically correct (`{access, refresh}`) but silently misled consumers into `/me/` round-trips. Consumers reading only `access` / `refresh` are unaffected.
+
+### Fixed
+
+---
+
 ## [0.9.0] - 2026-04-17
 
 ### Added
