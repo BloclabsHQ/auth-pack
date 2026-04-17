@@ -36,6 +36,7 @@ from blockauth.services.wallet_login_service import (
     reset_wallet_login_service,
 )
 from blockauth.utils.siwe import build_siwe_message
+from blockauth.utils.tests.credential_leak import assert_no_credential_leak
 
 # Deterministic test wallet — not a real account.
 _TEST_PRIVATE_KEY = "0x" + "1" * 64
@@ -49,6 +50,34 @@ def _sign(message: str) -> str:
     signed = _TEST_ACCOUNT.sign_message(encode_defunct(text=message))
     sig_hex = signed.signature.hex()
     return sig_hex if sig_hex.startswith("0x") else "0x" + sig_hex
+
+
+def _perform_wallet_login(client, address):
+    """Run the full challenge -> sign -> login round-trip and return the response.
+
+    Factored out of the individual tests so the identical 15-line
+    boilerplate (POST challenge, read message, sign, POST login) lives
+    in one place. The issue #99 tests (credential leak + null email)
+    and any future endpoint-level test should reuse this helper rather
+    than duplicating the sequence.
+    """
+    challenge_resp = client.post(
+        reverse("wallet-login-challenge"),
+        {"address": address},
+        format="json",
+    )
+    assert challenge_resp.status_code == 200, challenge_resp.content
+    message = challenge_resp.json()["message"]
+    signature = _sign(message)
+    return client.post(
+        reverse("wallet-login"),
+        {
+            "wallet_address": address,
+            "message": message,
+            "signature": signature,
+        },
+        format="json",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -392,7 +421,6 @@ class TestWalletLoginEndpoints:
         message = challenge_resp.json()["message"]
         sig = _sign(message)
 
-        cache.clear()
         login_resp = client.post(
             reverse("wallet-login"),
             {
@@ -416,7 +444,6 @@ class TestWalletLoginEndpoints:
         # email may be null for wallet-first accounts
         assert "email" in user_payload
 
-        cache.clear()
         replay = client.post(
             reverse("wallet-login"),
             {
@@ -428,6 +455,79 @@ class TestWalletLoginEndpoints:
         )
         assert replay.status_code == status.HTTP_401_UNAUTHORIZED, replay.content
         assert replay.json()["error"]["code"] == "nonce_invalid"
+
+    def test_login_user_payload_does_not_leak_credentials(self):
+        """Issue #99: wallet-login's ``user`` payload must never contain
+        password hash material or private Django attributes. Guards
+        against a future refactor switching the response to a
+        ``ModelSerializer(fields="__all__")``.
+        """
+        client = APIClient()
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
+        assert login_resp.status_code == 200, login_resp.content
+        assert_no_credential_leak(login_resp.json()["user"])
+
+    def test_login_returns_null_email_for_wallet_first_creator_autocreate(self):
+        """Issue #99: wallet-first Creators have no email on first SIWE
+        login. The auto-create path must expose ``user.email`` as
+        ``None`` (a supported case) rather than coercing to an empty
+        string or tripping the serializer's validation.
+
+        Also asserts the DB row itself has ``email IS NULL`` -- the
+        response could in principle correctly surface ``None`` while
+        the backing user row stored ``""``, or vice versa, and both
+        would be regressions. Checking both pins the contract
+        end-to-end.
+        """
+        from tests.models import TestBlockUser
+
+        client = APIClient()
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
+        assert login_resp.status_code == status.HTTP_200_OK, login_resp.content
+        user_payload = login_resp.json()["user"]
+        assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
+        assert user_payload["email"] is None
+
+        # DB-level sanity: the auto-create path must store ``None``, not
+        # ``""``. A coerced empty string would satisfy the response
+        # check (DRF would still serialize it as ``""``) so this is an
+        # independent assertion, not a duplicate.
+        created = TestBlockUser.objects.get(wallet_address=_TEST_ADDRESS_LC)
+        assert created.email is None
+
+    def test_login_returns_null_email_for_existing_wallet_first_creator(self):
+        """Issue #99: the response must also expose ``user.email`` as
+        ``None`` for a *pre-existing* wallet-first Creator -- not just
+        on the auto-create branch.
+
+        The auto-create variant alone is too weak: if a future change
+        coerced ``email`` to ``""`` only when looking up an existing
+        row (say, a ``User.objects.get_or_create(defaults={"email":
+        ""})`` regression), the auto-create test would still pass
+        because it asserts the happy-path default, not the lookup
+        branch.
+
+        Seed an existing row with ``email=None`` via the ORM, then
+        drive a login against it and assert both the response and the
+        untouched DB row still hold ``None``.
+        """
+        from tests.models import TestBlockUser
+
+        existing = TestBlockUser.objects.create(
+            wallet_address=_TEST_ADDRESS_LC,
+            email=None,
+            is_verified=False,
+        )
+        client = APIClient()
+        login_resp = _perform_wallet_login(client, _TEST_ADDRESS_LC)
+        assert login_resp.status_code == status.HTTP_200_OK, login_resp.content
+        user_payload = login_resp.json()["user"]
+        assert user_payload["wallet_address"] == _TEST_ADDRESS_LC
+        assert user_payload["email"] is None
+
+        # Existing row must not have been mutated by the login path.
+        existing.refresh_from_db()
+        assert existing.email is None
 
     def test_login_rejects_forged_domain(self):
         client = APIClient()
@@ -464,7 +564,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {
@@ -490,7 +589,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {
@@ -517,7 +615,6 @@ class TestWalletLoginEndpoints:
         )
         message = challenge_resp.json()["message"]
         sig = _sign(message)
-        cache.clear()
         resp = client.post(
             reverse("wallet-login"),
             {

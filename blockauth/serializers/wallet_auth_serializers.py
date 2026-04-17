@@ -93,7 +93,12 @@ WalletLoginUserSerializer = LoginUserSerializer
 
 
 class WalletLoginResponseSerializer(serializers.Serializer):
-    """Response body for ``POST /login/wallet/``."""
+    """Response body for ``POST /login/wallet/`` (issue #97).
+
+    Shares the :class:`LoginUserSerializer` payload with basic-login and
+    passwordless-login so the three endpoints return the same shape and
+    clients can share a single generated type.
+    """
 
     access = serializers.CharField(help_text="JWT access token")
     refresh = serializers.CharField(help_text="JWT refresh token")

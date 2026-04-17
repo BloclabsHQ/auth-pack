@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework import status
 
 from blockauth.models.otp import OTP, OTPSubject
+from blockauth.utils.tests.credential_leak import assert_no_credential_leak
 
 
 BASIC_LOGIN_URL = reverse("basic-login")
@@ -68,6 +69,20 @@ class TestBasicLoginView:
         user_payload = response.data["user"]
         assert user_payload["id"] == str(user.id)
         assert user_payload["wallet_address"] == wallet
+
+    def test_login_user_payload_does_not_leak_credentials(self, api_client, create_user):
+        """Issue #99: basic-login's ``user`` payload must never contain
+        password hash material or private Django attributes. Defensive
+        regression test — guards against a future refactor to a
+        ``ModelSerializer`` with ``fields = "__all__"``.
+        """
+        create_user(email="user@test.com", password=_TEST_PASSWORD)
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert_no_credential_leak(response.data["user"])
 
     def test_login_wrong_password(self, api_client, create_user):
         create_user(email="user@test.com", password="StrongP@ss1!")
@@ -219,6 +234,20 @@ class TestPasswordlessLoginConfirmView:
         assert user_payload["id"] == str(created_user.id)
         assert user_payload["email"] == "fresh@test.com"
         assert user_payload["wallet_address"] is None
+
+    def test_confirm_user_payload_does_not_leak_credentials(self, api_client, create_user, create_otp):
+        """Issue #99: passwordless-login's ``user`` payload must never
+        contain password hash material or private Django attributes.
+        Defensive regression test — see basic-login counterpart.
+        """
+        create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert_no_credential_leak(response.data["user"])
 
     def test_confirm_creates_user_if_not_exists(self, api_client, create_otp):
         """Passwordless login should create a new user if one doesn't exist."""
