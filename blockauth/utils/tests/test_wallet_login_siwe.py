@@ -43,6 +43,26 @@ _TEST_ACCOUNT = Account.from_key(_TEST_PRIVATE_KEY)
 _TEST_ADDRESS = _TEST_ACCOUNT.address  # EIP-55 checksummed
 _TEST_ADDRESS_LC = _TEST_ADDRESS.lower()
 
+# Issue #99: shared allow-list of credential-material keys that must never
+# appear in the login ``user`` payload. Adding a new field only requires
+# updating this set, not rewriting every test.
+FORBIDDEN_USER_PAYLOAD_KEYS = frozenset({"password", "password_hash", "hashed_password"})
+
+
+def _assert_no_credential_leak(user_payload):
+    """Fail loudly if the wallet-login ``user`` object carries secrets.
+
+    Mirrors the basic/passwordless-login helper. Iterates the payload's
+    own keys so a future refactor to ``ModelSerializer(fields="__all__")``
+    can't silently ship private Django attributes (``_state`` etc.) or
+    password hash fields over the wire.
+    """
+    for key in user_payload.keys():
+        assert key not in FORBIDDEN_USER_PAYLOAD_KEYS, (
+            f"Forbidden credential field '{key}' leaked in wallet-login user payload"
+        )
+        assert not key.startswith("_"), f"Private field '{key}' leaked in wallet-login user payload"
+
 
 def _sign(message: str) -> str:
     """Return a 0x-prefixed 65-byte signature from the fixed test key."""
@@ -428,6 +448,35 @@ class TestWalletLoginEndpoints:
         )
         assert replay.status_code == status.HTTP_401_UNAUTHORIZED, replay.content
         assert replay.json()["error"]["code"] == "nonce_invalid"
+
+    def test_login_user_payload_does_not_leak_credentials(self):
+        """Issue #99: wallet-login's ``user`` payload must never contain
+        password hash material or private Django attributes. Guards
+        against a future refactor switching the response to a
+        ``ModelSerializer(fields="__all__")``.
+        """
+        client = APIClient()
+        challenge_resp = client.post(
+            reverse("wallet-login-challenge"),
+            {"address": _TEST_ADDRESS_LC},
+            format="json",
+        )
+        assert challenge_resp.status_code == 200, challenge_resp.content
+        message = challenge_resp.json()["message"]
+        sig = _sign(message)
+
+        cache.clear()
+        login_resp = client.post(
+            reverse("wallet-login"),
+            {
+                "wallet_address": _TEST_ADDRESS_LC,
+                "message": message,
+                "signature": sig,
+            },
+            format="json",
+        )
+        assert login_resp.status_code == 200, login_resp.content
+        _assert_no_credential_leak(login_resp.json()["user"])
 
     def test_login_rejects_forged_domain(self):
         client = APIClient()
