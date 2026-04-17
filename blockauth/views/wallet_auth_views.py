@@ -46,6 +46,8 @@ from blockauth.services.wallet_user_linker import (
     WalletUserLinkError,
     wallet_user_linker,
 )
+from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
+from blockauth.utils.auth_state import build_user_payload, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode, WalletConflictError
 from blockauth.utils.generics import model_to_json, sanitize_log_context
@@ -275,12 +277,26 @@ class WalletEmailAddView(APIView):
             otp_data = {"identifier": data["email"], "method": "email", "verification_type": data["verification_type"]}
             send_otp(otp_data, OTPSubject.WALLET_EMAIL_VERIFICATION)
 
+            # api-optimization #110: issue fresh tokens + user so any
+            # custom-claims provider that pins email into the access token
+            # sees the newly-added address. is_verified flips to False here
+            # — the new tokens correctly carry the unverified state.
+            access_token, refresh_token = issue_auth_tokens(user)
             blockauth_logger.success(
                 "Wallet email added and verification sent", sanitize_log_context(request.data, {"user": user.id})
             )
-
+            auth_state = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": build_user_payload(user),
+                }
+            ).data
             return Response(
-                {"message": f'Email added successfully. {data["verification_type"]} sent via email.'},
+                {
+                    "message": f'Email added successfully. {data["verification_type"]} sent via email.',
+                    **auth_state,
+                },
                 status=status.HTTP_200_OK,
             )
 
@@ -335,14 +351,31 @@ class WalletLinkView(APIView):
             post_wallet_link_trigger = get_config("POST_WALLET_LINK_TRIGGER")()
             post_wallet_link_trigger.trigger(context={"user": user_data, "wallet_address": wallet_address})
 
+            # api-optimization #110: issue fresh tokens + user so any
+            # custom-claims provider that pins wallet_address into the
+            # access token sees the newly-linked address. Token issuance
+            # re-reads the user from the DB (see
+            # blockauth.jwt.token_manager.JWTTokenManager.generate_token)
+            # so the trigger fan-out above can't race the claims read.
+            access_token, refresh_token = issue_auth_tokens(user)
             self.link_throttle.record_success(request, "wallet_link")
             blockauth_logger.success(
                 "Wallet linked successfully",
                 sanitize_log_context(request.data, {"user": user.id}),
             )
-
+            auth_state = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": build_user_payload(user),
+                }
+            ).data
             return Response(
-                data={"message": "Wallet linked successfully.", "wallet_address": wallet_address},
+                data={
+                    "message": "Wallet linked successfully.",
+                    "wallet_address": wallet_address,
+                    **auth_state,
+                },
                 status=status.HTTP_200_OK,
             )
 

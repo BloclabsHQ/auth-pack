@@ -43,6 +43,7 @@ from blockauth.serializers.user_account_serializers import (
     SignUpRequestSerializer,
     SignUpResendOTPSerializer,
 )
+from blockauth.utils.auth_state import build_user_payload, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
@@ -54,34 +55,12 @@ logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
 
 
-def _build_user_payload(user):
-    """Shape the ``user`` block used by every post-auth-state response.
-
-    Kept as a helper so basic-login, passwordless-confirm, wallet-login,
-    signup-confirm, refresh, and password mutation endpoints all emit the
-    same field set — clients can't tell one endpoint's user block from
-    another. ``first_name`` / ``last_name`` use ``getattr`` to stay
-    compatible with downstream user models that never added those fields.
-    """
-    return {
-        "id": user.id,
-        "email": user.email,
-        "is_verified": user.is_verified,
-        "wallet_address": user.wallet_address,
-        "first_name": getattr(user, "first_name", None),
-        "last_name": getattr(user, "last_name", None),
-    }
-
-
-def _issue_auth_tokens(user):
-    """Issue a fresh (access, refresh) pair for ``user`` using the custom-claims
-    path when available. Mirrors the pattern used by login + signup-confirm."""
-    try:
-        from blockauth.utils.token import generate_auth_token_with_custom_claims
-
-        return generate_auth_token_with_custom_claims(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
-    except ImportError:
-        return generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
+# build_user_payload / issue_auth_tokens live in blockauth.utils.auth_state
+# so basic-login, wallet-login, OAuth callbacks, and identity-mutation
+# endpoints all share a single definition of the {access, refresh, user}
+# contract.
+_build_user_payload = build_user_payload
+_issue_auth_tokens = issue_auth_tokens
 
 
 class SignUpView(APIView):
@@ -940,8 +919,24 @@ class EmailChangeConfirmView(APIView):
             communication_class.notify(
                 method="email", event=NotificationEvent.SUCCESS_EMAIL_CHANGE, context={"identifier": old_email}
             )
+
+            # api-optimization #110: issue fresh tokens so any custom-claims
+            # provider that pins email into the access token sees the new
+            # value. The issuance path re-reads the user from the DB by id,
+            # so the post-commit state is what lands in the claims.
+            access_token, refresh_token = _issue_auth_tokens(user)
             blockauth_logger.success("Email change confirmed", sanitize_log_context(request.data, {"user": user.id}))
-            return Response({"message": "Email has been changed successfully."}, status=status.HTTP_200_OK)
+            auth_state = AuthStateResponseSerializer(
+                {
+                    "access": access_token,
+                    "refresh": refresh_token,
+                    "user": _build_user_payload(user),
+                }
+            ).data
+            return Response(
+                {"message": "Email has been changed successfully.", **auth_state},
+                status=status.HTTP_200_OK,
+            )
         except ValidationError as e:
             blockauth_logger.warning(
                 "Email change confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail})

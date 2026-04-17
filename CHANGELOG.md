@@ -17,6 +17,28 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.11.0] - 2026-04-17
+
+### Added
+
+- **`POST /email/change/confirm/` returns fresh `{access, refresh, user}`** alongside the existing `message` field (#110). Any custom `CustomClaimsProvider` that pins `email` into the access token now sees the new value without a follow-up refresh.
+- **`POST /wallet/email/add/` returns fresh `{access, refresh, user}`** alongside the existing `message` field (#110). `is_verified` flips to `False` as before; the new tokens correctly carry that unverified state.
+- **`POST /wallet/link/` returns fresh `{access, refresh, user}`** alongside the existing `{message, wallet_address}` fields (#110). Consumers whose custom claims pin `wallet_address` can stop chaining a follow-up `/token/refresh/`.
+- **`blockauth.utils.auth_state`** — new module housing the shared `build_user_payload` / `issue_auth_tokens` helpers. Consolidates the post-auth-state-change contract into one place; future endpoints that adopt the pattern pick up every field in the `user` payload automatically.
+
+### Changed
+
+- `blockauth.utils.social.social_login()` (OAuth callbacks) and `basic_auth_views.py` now import `build_user_payload` / `issue_auth_tokens` from `blockauth.utils.auth_state` instead of defining them locally. Pure refactor — no behavior change.
+- **Additive wire changes only.** Existing consumers that read `message` (and `wallet_address` on `/wallet/link/`) are unaffected; new consumers can pick up the richer payload without version-gating.
+
+### Notes
+
+- Custom-claims compatibility audit posted to #110. Summary: `JWTTokenManager.generate_token` re-reads the user by id before calling providers, so provider output reflects post-commit state as long as `user.save()` has committed (Django default auto-commit ensures this).
+
+### Fixed
+
+---
+
 ## [0.10.0] - 2026-04-17
 
 ### Added

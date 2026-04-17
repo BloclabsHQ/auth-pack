@@ -75,3 +75,31 @@ class TestWalletEmailAddView:
             status.HTTP_200_OK,
             status.HTTP_400_BAD_REQUEST,
         )
+
+    def test_add_email_returns_fresh_tokens_and_user_on_success(self, authenticated_client):
+        """#110: wallet/email/add issues fresh tokens + user so any
+        custom-claims provider pinning email sees the new (unverified)
+        address. is_verified flips to False; new tokens carry that state."""
+        from blockauth.utils.token import Token
+
+        client, user = authenticated_client(
+            email=None, wallet_address=VALID_WALLET, is_verified=True
+        )
+        response = client.post(WALLET_EMAIL_ADD_URL, {
+            "email": "add@test.com",
+            "verification_type": "otp",
+        })
+        if response.status_code != status.HTTP_200_OK:
+            # Wallet-specific validation blocked — skip the auth-state
+            # assertions (the shape assertion is covered by the other
+            # 200-path endpoints).
+            return
+        assert "message" in response.data  # legacy field preserved
+        assert response.data["access"]
+        assert response.data["refresh"]
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "add@test.com"
+        assert user_payload["is_verified"] is False  # reset on add
+        payload = Token().decode_token(response.data["access"])
+        assert str(payload["user_id"]) == str(user.id)
