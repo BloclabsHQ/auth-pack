@@ -240,6 +240,8 @@ class WalletAuthLoginView(APIView):
                     "email": user.email,
                     "is_verified": user.is_verified,
                     "wallet_address": user.wallet_address,
+                    "first_name": getattr(user, "first_name", None),
+                    "last_name": getattr(user, "last_name", None),
                 },
             }
         )

@@ -28,7 +28,7 @@ Static utilities (no storage needed):
     backup_codes = TOTPService.generate_backup_codes()
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 # =============================================================================
 # Direct imports (Django-independent, no AppRegistryNotReady errors)
