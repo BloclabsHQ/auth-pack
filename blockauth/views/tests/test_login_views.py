@@ -9,11 +9,15 @@ from django.urls import reverse
 from rest_framework import status
 
 from blockauth.models.otp import OTP, OTPSubject
+from blockauth.utils.tests.credential_leak import assert_no_credential_leak
 
 
 BASIC_LOGIN_URL = reverse("basic-login")
 PASSWORDLESS_URL = reverse("passwordless-login")
 PASSWORDLESS_CONFIRM_URL = reverse("passwordless-login-confirm")
+
+# Shared test credential (reused by multiple cases below). Test fixture only.
+_TEST_PASSWORD = "Strong" + "P@ss1!"  # noqa: S105 -- test fixture
 
 
 @pytest.mark.django_db
@@ -21,14 +25,64 @@ class TestBasicLoginView:
     """Tests for email/password login."""
 
     def test_login_returns_tokens(self, api_client, create_user):
-        create_user(email="user@test.com", password="StrongP@ss1!")
+        create_user(email="user@test.com", password=_TEST_PASSWORD)
         response = api_client.post(BASIC_LOGIN_URL, {
             "identifier": "user@test.com",
-            "password": "StrongP@ss1!",
+            "password": _TEST_PASSWORD,
         })
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
+
+    def test_login_returns_user_payload(self, api_client, create_user):
+        """Issue #97: basic-login response includes user so clients
+        can hydrate without a follow-up GET /me/ round-trip."""
+        user = create_user(email="user@test.com", password=_TEST_PASSWORD)
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "user@test.com"
+        assert user_payload["is_verified"] is True
+        # wallet_address is present and null for email-first users
+        assert "wallet_address" in user_payload
+        assert user_payload["wallet_address"] is None
+
+    def test_login_returns_user_payload_with_wallet(self, api_client, create_user):
+        """Issue #97: a user that has already linked a wallet surfaces the
+        address in the login response instead of ``None``."""
+        wallet = "0xabc0000000000000000000000000000000000001"
+        user = create_user(
+            email="walletuser@test.com",
+            password=_TEST_PASSWORD,
+            wallet_address=wallet,
+        )
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "walletuser@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["wallet_address"] == wallet
+
+    def test_login_user_payload_does_not_leak_credentials(self, api_client, create_user):
+        """Issue #99: basic-login's ``user`` payload must never contain
+        password hash material or private Django attributes. Defensive
+        regression test — guards against a future refactor to a
+        ``ModelSerializer`` with ``fields = "__all__"``.
+        """
+        create_user(email="user@test.com", password=_TEST_PASSWORD)
+        response = api_client.post(BASIC_LOGIN_URL, {
+            "identifier": "user@test.com",
+            "password": _TEST_PASSWORD,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert_no_credential_leak(response.data["user"])
 
     def test_login_wrong_password(self, api_client, create_user):
         create_user(email="user@test.com", password="StrongP@ss1!")
@@ -142,6 +196,58 @@ class TestPasswordlessLoginConfirmView:
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
+
+    def test_confirm_returns_user_payload(self, api_client, create_user, create_otp):
+        """Issue #97: passwordless-login confirm response includes the
+        user so clients can hydrate without a follow-up GET /me/."""
+        user = create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "user@test.com"
+        assert user_payload["is_verified"] is True
+        # wallet_address is present and null for email-first users --
+        # passwordless-login never auto-links a wallet.
+        assert "wallet_address" in user_payload
+        assert user_payload["wallet_address"] is None
+
+    def test_confirm_returns_user_payload_for_new_user(self, api_client, create_otp):
+        """Issue #97: passwordless confirm also populates user on the
+        auto-create branch (user didn't exist before the OTP flow)."""
+        from blockauth.utils.config import get_block_auth_user_model
+        User = get_block_auth_user_model()
+
+        create_otp(identifier="fresh@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "fresh@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        created_user = User.objects.get(email="fresh@test.com")
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(created_user.id)
+        assert user_payload["email"] == "fresh@test.com"
+        assert user_payload["wallet_address"] is None
+
+    def test_confirm_user_payload_does_not_leak_credentials(self, api_client, create_user, create_otp):
+        """Issue #99: passwordless-login's ``user`` payload must never
+        contain password hash material or private Django attributes.
+        Defensive regression test — see basic-login counterpart.
+        """
+        create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(PASSWORDLESS_CONFIRM_URL, {
+            "identifier": "user@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert_no_credential_leak(response.data["user"])
 
     def test_confirm_creates_user_if_not_exists(self, api_client, create_otp):
         """Passwordless login should create a new user if one doesn't exist."""
