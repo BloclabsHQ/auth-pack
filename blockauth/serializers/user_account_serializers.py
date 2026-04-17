@@ -295,6 +295,23 @@ class LoginUserSerializer(serializers.Serializer):
         required=False,
         help_text="Ethereum wallet address (null for accounts without a linked wallet)",
     )
+    # first_name / last_name are optional because the abstract BlockUser
+    # model does not define them; concrete downstream user models may.
+    # Callers should pass getattr(user, "first_name", None) when building
+    # the response dict so auth-pack stays compatible with minimal user
+    # models that never added profile fields.
+    first_name = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+        help_text="Given name (null if the downstream user model has no first_name field or it is unset)",
+    )
+    last_name = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+        required=False,
+        help_text="Family name (null if the downstream user model has no last_name field or it is unset)",
+    )
 
 
 class BasicLoginResponseSerializer(serializers.Serializer):
@@ -320,3 +337,18 @@ class PasswordlessLoginResponseSerializer(serializers.Serializer):
     access = serializers.CharField(help_text="JWT access token")
     refresh = serializers.CharField(help_text="JWT refresh token")
     user = LoginUserSerializer(help_text="Authenticated user profile")
+
+
+class SignUpConfirmResponseSerializer(serializers.Serializer):
+    """Response body for successful ``POST /signup/confirm/`` (fabric-auth#420).
+
+    Signup confirmation now issues JWTs so the client is signed in
+    immediately instead of following up with ``POST /login/basic/`` using
+    the just-set password. Same shape as the login responses so the OpenAPI
+    surface stays consistent and shells can share a single post-auth code
+    path.
+    """
+
+    access = serializers.CharField(help_text="JWT access token")
+    refresh = serializers.CharField(help_text="JWT refresh token")
+    user = LoginUserSerializer(help_text="Newly verified user profile")

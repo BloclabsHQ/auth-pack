@@ -38,6 +38,7 @@ from blockauth.serializers.user_account_serializers import (
     PasswordResetRequestSerializer,
     RefreshTokenSerializer,
     SignUpConfirmationSerializer,
+    SignUpConfirmResponseSerializer,
     SignUpRequestSerializer,
     SignUpResendOTPSerializer,
 )
@@ -228,8 +229,36 @@ class SignUpConfirmView(APIView):
                 # Call POST_SIGNUP_TRIGGER with user data
                 post_signup_trigger = get_config("POST_SIGNUP_TRIGGER")()
                 post_signup_trigger.trigger(context={"user": user, "provider_data": data})
+
+                # fabric-auth#420: issue JWTs so the client is signed in
+                # immediately instead of following up with /login/basic/.
+                try:
+                    from blockauth.utils.token import generate_auth_token_with_custom_claims
+
+                    access_token, refresh_token = generate_auth_token_with_custom_claims(
+                        token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id)
+                    )
+                except ImportError:
+                    access_token, refresh_token = generate_auth_token(
+                        token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id)
+                    )
+
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
-                return Response(data={"message": "Sign up success"}, status=status.HTTP_200_OK)
+                response_serializer = SignUpConfirmResponseSerializer(
+                    {
+                        "access": access_token,
+                        "refresh": refresh_token,
+                        "user": {
+                            "id": user.id,
+                            "email": user.email,
+                            "is_verified": user.is_verified,
+                            "wallet_address": user.wallet_address,
+                            "first_name": getattr(user, "first_name", None),
+                            "last_name": getattr(user, "last_name", None),
+                        },
+                    }
+                )
+                return Response(data=response_serializer.data, status=status.HTTP_200_OK)
             else:
                 # No valid OTP found for either subject
                 raise ValidationError(
@@ -317,6 +346,8 @@ class BasicAuthLoginView(APIView):
                         "email": user.email,
                         "is_verified": user.is_verified,
                         "wallet_address": user.wallet_address,
+                        "first_name": getattr(user, "first_name", None),
+                        "last_name": getattr(user, "last_name", None),
                     },
                 }
             )
@@ -463,6 +494,8 @@ class PasswordlessLoginConfirmView(APIView):
                         "email": user.email,
                         "is_verified": user.is_verified,
                         "wallet_address": user.wallet_address,
+                        "first_name": getattr(user, "first_name", None),
+                        "last_name": getattr(user, "last_name", None),
                     },
                 }
             )

@@ -17,6 +17,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.8.0] - 2026-04-17
+
+### Added
+
+- **Login response user payload now includes `first_name` and `last_name`** (fabric-auth#420). `LoginUserSerializer` — shared by basic-login, passwordless-login confirm, and wallet-login — now exposes both fields so consumer shells can drop the follow-up `GET /me/` round-trip for profile hydration. Both fields are nullable and tolerant of downstream user models that do not define them (views read via `getattr(user, "first_name", None)`).
+- **`POST /signup/confirm/` issues JWTs and returns the user payload** on successful signup confirmation (fabric-auth#420). New response shape `{access, refresh, user}` mirrors the login endpoints so the client is signed in immediately instead of following up with `POST /login/basic/` using the just-set password. `POST_SIGNUP_TRIGGER` fires before tokens are issued; its signature is unchanged. Added `SignUpConfirmResponseSerializer` for OpenAPI documentation.
+
+### Changed
+
+- `POST /signup/confirm/` success response body changes from `{"message": "Sign up success"}` to `{"access, refresh, user}`. Existing clients that only inspected the HTTP status code are unaffected; clients that parsed the `message` field must switch to the new shape or ignore extra keys.
+
+### Fixed
+
+---
+
 ## [0.7.0] - 2026-04-17
 
 ### Breaking Changes
