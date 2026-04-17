@@ -1,5 +1,6 @@
 # Import TOTP models (they use app_label='blockauth' so no separate app needed)
 # Models are always imported for Django migration discovery.
+from blockauth.models.wallet_login_nonce import WalletLoginNonce  # noqa: F401
 from blockauth.totp.models import TOTP2FA, TOTPVerificationLog  # noqa: F401
 
 # Import passkey models (they use app_label='blockauth' so no separate app needed)
