@@ -250,8 +250,13 @@ class SignUpConfirmView(APIView):
 
 
 class BasicAuthLoginView(APIView):
-    """
-    Login via identifier(email/phone number) & password and get access token & refresh token.
+    """``POST /login/basic/`` -- email/phone + password login.
+
+    Returns ``{access, refresh, user}``. The ``user`` payload carries
+    ``id``, ``email``, ``is_verified``, and ``wallet_address`` so clients
+    hydrate without a follow-up ``GET /me/`` round-trip (issue #97).
+    ``wallet_address`` is null for email-first accounts until they run
+    the ``wallet/link/`` flow.
     """
 
     permission_classes = (AllowAny,)
@@ -377,8 +382,12 @@ class PasswordlessLoginView(APIView):
 
 
 class PasswordlessLoginConfirmView(APIView):
-    """
-    Verify otp for login & get access token & refresh token.
+    """``POST /login/passwordless/confirm/`` -- verify OTP and issue tokens.
+
+    Mirrors :class:`BasicAuthLoginView`'s response shape:
+    ``{access, refresh, user}``. Auto-creates an account if the identifier
+    is new (issue #97 -- clients hydrate profile state in a single
+    round-trip regardless of the create-vs-existing branch).
     """
 
     permission_classes = (AllowAny,)
