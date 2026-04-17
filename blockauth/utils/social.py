@@ -11,10 +11,25 @@ from blockauth.utils.generics import model_to_json
 _User = get_block_auth_user_model()
 
 
+def _user_model_has_field(field_name: str) -> bool:
+    """True if the configured user model declares `field_name`. Cached
+    result is fine — we never swap the user model mid-process."""
+    try:
+        _User._meta.get_field(field_name)
+        return True
+    except Exception:
+        return False
+
+
 def social_login(email: str, name: str, provider_data: dict) -> Response:
-    user, created = _User.objects.get_or_create(
-        email=email, defaults={"first_name": name, "email": email, "is_verified": True}
-    )
+    # Only include `first_name` in defaults if the configured user model
+    # actually defines it. Otherwise get_or_create raises FieldError on
+    # the create path (first OAuth signup for a new email). See #109.
+    defaults = {"email": email, "is_verified": True}
+    if _user_model_has_field("first_name"):
+        defaults["first_name"] = name
+
+    user, created = _User.objects.get_or_create(email=email, defaults=defaults)
     user.last_login = timezone.now()
 
     # Add authentication type based on provider
