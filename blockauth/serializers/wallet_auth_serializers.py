@@ -9,6 +9,7 @@ default URLconf.
 
 from rest_framework import serializers
 
+from blockauth.serializers.user_account_serializers import LoginUserSerializer
 from blockauth.utils.siwe import MAX_SIWE_MESSAGE_LENGTH
 
 
@@ -81,26 +82,14 @@ class WalletLoginRequestSerializer(serializers.Serializer):
     )
 
 
-class WalletLoginUserSerializer(serializers.Serializer):
-    """User payload nested inside the wallet-login response.
-
-    Matches the shape described in issue #97 so clients get parity with
-    basic-login without a second ``GET /me/`` round-trip.  ``email`` is
-    nullable because wallet-first Creators may not have one yet.
-    """
-
-    id = serializers.UUIDField(help_text="User UUID")
-    email = serializers.EmailField(
-        allow_null=True,
-        required=False,
-        help_text="Email address (null for wallet-first accounts)",
-    )
-    is_verified = serializers.BooleanField(help_text="Whether the account is verified")
-    wallet_address = serializers.CharField(
-        allow_null=True,
-        required=False,
-        help_text="Ethereum wallet address",
-    )
+# Backwards-compat alias. The wallet-login response used to embed a
+# ``WalletLoginUserSerializer`` declared here. Issue #97 generalised the
+# payload to basic-login and passwordless-login, at which point the
+# serializer was promoted to the shared ``LoginUserSerializer`` in
+# ``user_account_serializers``. Keeping the alias avoids breaking any
+# external consumer that imported the old name before the rename was
+# released; remove in a future major bump.
+WalletLoginUserSerializer = LoginUserSerializer
 
 
 class WalletLoginResponseSerializer(serializers.Serializer):
@@ -108,4 +97,4 @@ class WalletLoginResponseSerializer(serializers.Serializer):
 
     access = serializers.CharField(help_text="JWT access token")
     refresh = serializers.CharField(help_text="JWT refresh token")
-    user = WalletLoginUserSerializer(help_text="Authenticated user profile")
+    user = LoginUserSerializer(help_text="Authenticated user profile")
