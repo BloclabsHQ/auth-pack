@@ -11,8 +11,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Breaking Changes
 
-- **Wallet login now requires a server-issued SIWE (EIP-4361) challenge** (#90). Clients must call `POST /login/wallet/challenge/` to obtain a signed plaintext before calling `POST /login/wallet/`. The login response shape (`{access, refresh}`) is unchanged, and the error envelope is now `{"error": {"code": "...", "message": "..."}}` with distinct codes for each failure mode. Consumers that were passing raw JSON-body payloads to the old endpoint must migrate to the two-round-trip flow. See the "Migration notes" section below.
-- `error_code` in wallet login responses changed from integer `4009` to string `"INVALID_SIGNATURE"`. Update any client code that checks this field by value.
+- **Wallet login now requires a server-issued SIWE (EIP-4361) challenge** (#90). Clients must call `POST /login/wallet/challenge/` to obtain a signed plaintext before calling `POST /login/wallet/`. The login response shape (`{access, refresh}`) is unchanged, and the error envelope is now `{"error": {"code": "...", "message": "..."}}` with distinct string codes (e.g. `invalid_signature`, `nonce_invalid`, `domain_mismatch`) for each failure mode. Consumers that were passing raw JSON-body payloads to the old endpoint must migrate to the two-round-trip flow. See the "Migration notes" section below.
 
 ### Added
 

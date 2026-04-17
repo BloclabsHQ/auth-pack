@@ -398,6 +398,18 @@ class WalletLoginService:
             parsed_sig = EthKeysSignature(parsed_sig_bytes)
         except (ValueError, TypeError) as exc:
             raise WalletLoginError("invalid_signature", f"signature could not be parsed: {exc}") from exc
+        except Exception as exc:  # pragma: no cover - defensive
+            # ``eth_utils.ValidationError`` inherits directly from ``Exception``
+            # rather than ``ValueError``/``TypeError``, so the narrow catch
+            # above leaks it as a 500. Mirror the ``recover_message`` block
+            # below: log the unexpected crash and surface the neutral
+            # ``signature_internal_error`` envelope so the alert doesn't get
+            # mis-bucketed as attacker input.
+            logger.exception("Unexpected failure parsing wallet signature: %s", exc)
+            raise WalletLoginError(
+                "signature_internal_error",
+                "internal error verifying signature",
+            ) from exc
 
         if parsed_sig.s > _SECP256K1_N_HALF:
             raise WalletLoginError(

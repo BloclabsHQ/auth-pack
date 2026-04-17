@@ -138,12 +138,20 @@ class WalletUserLinker:
             created=created,
         )
 
+        # NOTE: ``created`` is a reserved ``logging.LogRecord`` attribute (the
+        # record's creation timestamp). Passing it via ``extra`` raises
+        # ``KeyError: "Attempt to overwrite 'created' in LogRecord"`` on any
+        # handler that actually formats the record, so the key is renamed to
+        # ``user_created`` here. Other reserved LogRecord attrs to avoid:
+        # msg/args/levelname/levelno/pathname/filename/module/exc_info/
+        # exc_text/stack_info/lineno/funcName/msecs/relativeCreated/thread/
+        # threadName/processName/process/message/asctime.
         logger.info(
             "Wallet login linked to user",
             extra={
                 "user_id": str(user.id),
                 "wallet_address": normalized,
-                "created": created,
+                "user_created": created,
             },
         )
 

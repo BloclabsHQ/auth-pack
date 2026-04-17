@@ -558,7 +558,7 @@ class WalletLoginThrottle(BaseThrottle):
 
         if len(history) >= self.num_requests:
             blockauth_logger.warning(
-                f"Wallet throttle exceeded for {self.scope}",
+                "Wallet throttle exceeded",
                 sanitize_log_context(
                     {
                         "scope": self.scope,

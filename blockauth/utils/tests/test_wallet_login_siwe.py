@@ -151,6 +151,30 @@ class TestSignatureVerify:
                 svc._verify_signature(address=_TEST_ADDRESS_LC, message=message, signature=sig)
         assert exc_info.value.code == "signature_internal_error"
 
+    def test_eth_keys_validation_error_surfaces_as_internal_error(self, svc, siwe_and_sig):
+        """Regression: ``eth_utils.ValidationError`` inherits from ``Exception``,
+        not ``ValueError`` / ``TypeError``. A narrow catch on those two leaked
+        the raw exception as a 500 instead of the neutral
+        ``signature_internal_error`` envelope that the sibling
+        ``recover_message`` block surfaces. This test pins the behaviour so
+        a future narrowing of the catch regresses loudly.
+        """
+        from eth_utils import ValidationError as EthUtilsValidationError
+
+        message, sig, _ = siwe_and_sig
+
+        with patch(
+            "blockauth.services.wallet_login_service.EthKeysSignature",
+            side_effect=EthUtilsValidationError("bad sig"),
+        ):
+            with pytest.raises(WalletLoginError) as exc_info:
+                svc._verify_signature(
+                    address=_TEST_ADDRESS_LC,
+                    message=message,
+                    signature=sig,
+                )
+        assert exc_info.value.code == "signature_internal_error"
+
 
 # =============================================================================
 # Service layer — challenge + verify lifecycle
@@ -590,3 +614,58 @@ class TestTriggerFanOut:
         # POST_LOGIN_TRIGGER must still have fired even though POST_SIGNUP
         # blew up -- the linker wraps each trigger in its own try/except.
         assert calls["post_login"] == 1
+
+
+# =============================================================================
+# LogRecord attribute-collision regression
+# =============================================================================
+
+
+@pytest.mark.django_db
+class TestLinkerLoggingDoesNotCollide:
+    """Regression: ``logger.info(extra={"created": ...})`` blows up because
+    ``created`` is a reserved ``LogRecord`` attribute (the record's creation
+    timestamp). Any handler that actually formats the record raises
+    ``KeyError: "Attempt to overwrite 'created' in LogRecord"``. The fix
+    renames the extra key to ``user_created``. This test wires a real
+    ``StreamHandler`` + ``Formatter`` onto the linker's logger and asserts
+    the successful-link path emits a record without raising.
+    """
+
+    def test_successful_link_emits_record_without_collision(self):
+        import io
+        import logging
+
+        from blockauth.services import wallet_user_linker as linker_mod
+        from blockauth.services.wallet_user_linker import WalletUserLinker
+
+        buf = io.StringIO()
+        handler = logging.StreamHandler(buf)
+        # The default Formatter calls ``LogRecord.getMessage`` and touches
+        # the reserved attribute names during ``%(created)s``-style interp
+        # when something attempts to overwrite them in ``extra=``. Use a
+        # format string that forces attribute access on ``created`` so we
+        # get the KeyError on pre-fix code. ``makeRecord`` itself also
+        # refuses to overwrite reserved attrs in ``extra`` on any modern
+        # Python, so even the default formatter is enough to trip the bug
+        # -- belt and braces.
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+
+        linker_logger = linker_mod.logger
+        prior_level = linker_logger.level
+        linker_logger.addHandler(handler)
+        linker_logger.setLevel(logging.INFO)
+        try:
+            linker = WalletUserLinker()
+            linked = linker.link(wallet_address=_TEST_ADDRESS_LC)
+            handler.flush()
+        finally:
+            linker_logger.removeHandler(handler)
+            linker_logger.setLevel(prior_level)
+
+        # Sanity: the happy path actually ran.
+        assert linked.user_id
+        # And the handler captured the line (non-empty ==> no raise during
+        # emit). On pre-fix code ``makeRecord`` raises before anything
+        # lands in the buffer.
+        assert "Wallet login linked to user" in buf.getvalue()
