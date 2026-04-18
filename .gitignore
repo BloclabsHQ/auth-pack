@@ -45,3 +45,7 @@ site/
 # Legacy
 main.py
 identifier.sqlite
+
+# E2E test artifacts
+tests_e2e/*.sqlite3
+tests_e2e/*.sqlite3-*
