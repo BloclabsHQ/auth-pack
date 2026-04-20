@@ -414,3 +414,75 @@ class WalletLinkView(APIView):
             blockauth_logger.error("Wallet link failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Wallet link request failed: {e}", exc_info=True)
             raise APIException()
+
+
+class WalletUnlinkView(APIView):
+    """``POST /wallet/unlink/`` — clear the caller's linked wallet.
+
+    Symmetric primitive to :class:`WalletLinkView`. The wallet to unlink is
+    derived from the authenticated user (one linked wallet per user today) —
+    no request body. On success, clears ``wallet_address`` and drops the
+    ``WALLET`` authentication-type marker.
+
+    Policy decisions (last-auth-method safeguard, event publication, audit
+    logging) are deliberately left to the consumer layer — this is the
+    credential-wipe primitive only. See issue #122.
+    """
+
+    permission_classes = (IsAuthenticated,)
+    unlink_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
+
+    @extend_schema(
+        operation_id="wallet-unlink",
+        summary="Wallet unlink — clear linked wallet for authenticated user",
+        description=(
+            "Clears the authenticated user's linked wallet address and drops "
+            "the `WALLET` authentication-type marker. Idempotent: returns "
+            "`404 no_wallet_linked` if the user has no wallet linked. No "
+            "request body — the wallet to unlink is derived from the "
+            "authenticated user."
+        ),
+        request=None,
+        responses={
+            200: {"type": "object", "properties": {"status": {"type": "string"}}},
+            401: {"description": "Unauthenticated"},
+            404: {"description": "No wallet linked"},
+        },
+        tags=["Wallet"],
+    )
+    def post(self, request):
+        if not self.unlink_throttle.allow_request(request, "wallet_unlink"):
+            reason = self.unlink_throttle.get_block_reason()
+            msg = (
+                "Too many failed attempts. Please try again later."
+                if reason == "cooldown"
+                else "Rate limit exceeded. Please try again later."
+            )
+            return Response(data={"detail": msg}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        user = request.user
+        blockauth_logger.info("Wallet unlink attempt", sanitize_log_context({"user": user.id}))
+
+        if not getattr(user, "wallet_address", None):
+            self.unlink_throttle.record_failure(request, "wallet_unlink")
+            return Response(
+                data={"error": {"code": "no_wallet_linked", "message": "No wallet linked to this account."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            user.wallet_address = None
+            user.save(update_fields=["wallet_address"])
+            user.remove_authentication_type(AuthenticationType.WALLET)
+
+            self.unlink_throttle.record_success(request, "wallet_unlink")
+            blockauth_logger.success(
+                "Wallet unlinked successfully",
+                sanitize_log_context({"user": user.id}),
+            )
+            return Response(data={"status": "unlinked"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            self.unlink_throttle.record_failure(request, "wallet_unlink")
+            blockauth_logger.error("Wallet unlink failed", sanitize_log_context({"user": user.id, "error": str(e)}))
+            logger.error(f"Wallet unlink request failed: {e}", exc_info=True)
+            raise APIException()

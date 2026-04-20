@@ -240,6 +240,7 @@ class URLNames:
     # Wallet
     WALLET_EMAIL_ADD = "wallet-email-add"
     WALLET_LINK = "wallet-link"
+    WALLET_UNLINK = "wallet-unlink"
 
     # Social Auth
     GOOGLE_LOGIN = "google-login"

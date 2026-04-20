@@ -17,6 +17,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.13.0] - 2026-04-20
+
+### Added
+
+- **`POST /wallet/unlink/`** (#122). Symmetric primitive to `POST /wallet/link/` that clears the authenticated user's linked wallet. No request body — the wallet to unlink is derived from the authenticated user (one linked wallet per user today). Clears `wallet_address` and drops the `WALLET` authentication-type marker. Response: `{"status": "unlinked"}`. Idempotent: returns `404 no_wallet_linked` when the user has no wallet linked (or on a second call after a successful unlink). Gated by the existing `Features.WALLET_LINK` flag — link and unlink enable together. Policy decisions (last-auth-method safeguard, event publication, audit logging) are deliberately left to the consumer layer, matching how `WalletLinkView` works.
+
+---
+
 ## [0.12.0] - 2026-04-20
 
 ### Added
