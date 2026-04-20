@@ -15,6 +15,7 @@ Background: issue #90 (upstream port of fabric-auth #401 / #402).
 """
 
 import logging
+import time
 from typing import Union
 
 from drf_spectacular.utils import extend_schema
@@ -28,6 +29,8 @@ from blockauth.docs.wallet_auth_docs import wallet_email_add_docs
 from blockauth.enums import AuthenticationType
 from blockauth.models.otp import OTPSubject
 from blockauth.notification import send_otp
+from blockauth.observability import emit as emit_metric
+from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.serializers.wallet_auth_serializers import (
     WalletChallengeRequestSerializer,
     WalletChallengeResponseSerializer,
@@ -46,7 +49,6 @@ from blockauth.services.wallet_user_linker import (
     WalletUserLinkError,
     wallet_user_linker,
 )
-from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.utils.auth_state import build_user_payload, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode, WalletConflictError
@@ -147,6 +149,8 @@ class WalletChallengeView(APIView):
             )
             return _reject(exc)
 
+        emit_metric("wallet_login.challenge_issued")
+
         response_serializer = WalletChallengeResponseSerializer(
             {
                 "message": result.message,
@@ -198,56 +202,70 @@ class WalletAuthLoginView(APIView):
         tags=["Wallet"],
     )
     def post(self, request):
-        serializer = WalletLoginRequestSerializer(data=request.data)
+        started = time.perf_counter()
+        outcome = "failure"
         try:
-            serializer.is_valid(raise_exception=True)
-        except ValidationError as exc:
-            raise ValidationErrorWithCode(detail=exc.detail)
+            serializer = WalletLoginRequestSerializer(data=request.data)
+            try:
+                serializer.is_valid(raise_exception=True)
+            except ValidationError as exc:
+                emit_metric("wallet_login.failure", {"code": "validation_error"})
+                raise ValidationErrorWithCode(detail=exc.detail)
 
-        service = get_wallet_login_service()
-        try:
-            verified = service.verify_login(
-                wallet_address=serializer.validated_data["wallet_address"],
-                message=serializer.validated_data["message"],
-                signature=serializer.validated_data["signature"],
+            service = get_wallet_login_service()
+            try:
+                verified = service.verify_login(
+                    wallet_address=serializer.validated_data["wallet_address"],
+                    message=serializer.validated_data["message"],
+                    signature=serializer.validated_data["signature"],
+                )
+            except WalletLoginError as exc:
+                blockauth_logger.warning(
+                    "Wallet login rejected",
+                    sanitize_log_context({"error_code": exc.code}),
+                )
+                emit_metric("wallet_login.failure", {"code": exc.code})
+                return _reject(exc)
+
+            try:
+                linked = wallet_user_linker.link(wallet_address=verified.address)
+            except WalletUserLinkError as exc:
+                blockauth_logger.warning(
+                    "Wallet login link rejected",
+                    sanitize_log_context({"error_code": exc.code}),
+                )
+                emit_metric("wallet_login.failure", {"code": exc.code})
+                return _reject(exc)
+
+            blockauth_logger.success(
+                "Wallet login successful",
+                sanitize_log_context({"user": linked.user_id, "created": linked.created}),
             )
-        except WalletLoginError as exc:
-            blockauth_logger.warning(
-                "Wallet login rejected",
-                sanitize_log_context({"error_code": exc.code}),
+            emit_metric("wallet_login.success", {"flow": "siwe"})
+            outcome = "success"
+
+            user = linked.user
+            response_serializer = WalletLoginResponseSerializer(
+                {
+                    "access": linked.access_token,
+                    "refresh": linked.refresh_token,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "is_verified": user.is_verified,
+                        "wallet_address": user.wallet_address,
+                        "first_name": getattr(user, "first_name", None),
+                        "last_name": getattr(user, "last_name", None),
+                    },
+                }
             )
-            return _reject(exc)
-
-        try:
-            linked = wallet_user_linker.link(wallet_address=verified.address)
-        except WalletUserLinkError as exc:
-            blockauth_logger.warning(
-                "Wallet login link rejected",
-                sanitize_log_context({"error_code": exc.code}),
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        finally:
+            emit_metric(
+                "wallet_login.latency",
+                {"outcome": outcome},
+                duration_s=time.perf_counter() - started,
             )
-            return _reject(exc)
-
-        blockauth_logger.success(
-            "Wallet login successful",
-            sanitize_log_context({"user": linked.user_id, "created": linked.created}),
-        )
-
-        user = linked.user
-        response_serializer = WalletLoginResponseSerializer(
-            {
-                "access": linked.access_token,
-                "refresh": linked.refresh_token,
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "is_verified": user.is_verified,
-                    "wallet_address": user.wallet_address,
-                    "first_name": getattr(user, "first_name", None),
-                    "last_name": getattr(user, "last_name", None),
-                },
-            }
-        )
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
 class WalletEmailAddView(APIView):

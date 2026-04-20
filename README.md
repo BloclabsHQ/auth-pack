@@ -1204,6 +1204,150 @@ The rate limit can be configured in the settings.
 
 ---
 
+## Observability / Metrics
+
+BlockAuth emits observability events from the wallet-login flow via a
+single callback hook — it does **not** take a dependency on any
+particular metrics backend. Consumers wire the events into Prometheus,
+StatsD, OpenTelemetry, structured logs, or nothing at all.
+
+Set `BLOCK_AUTH_SETTINGS["METRICS_CALLBACK"]` to the dotted path of a
+callable with signature:
+
+```python
+def emit(
+    event: str,
+    tags: dict | None = None,
+    *,
+    duration_s: float | None = None,
+    count: int = 1,
+) -> None: ...
+```
+
+If the setting is absent, events are dropped. Any exception raised by
+the callback is caught and logged — a broken metrics pipe will never
+fail an auth request.
+
+### Events
+
+| Event | When | Tags | Extra |
+|---|---|---|---|
+| `wallet_login.challenge_issued` | `POST /login/wallet/challenge/` success | — | — |
+| `wallet_login.success` | `POST /login/wallet/` success | `flow` (`"siwe"`) | — |
+| `wallet_login.failure` | `POST /login/wallet/` rejection | `code` (e.g. `nonce_invalid`, `domain_mismatch`, `uri_host_mismatch`, `signature_mismatch`, `validation_error`, ...) | — |
+| `wallet_login.latency` | Every `POST /login/wallet/` (both outcomes) | `outcome` (`"success"` / `"failure"`) | `duration_s` |
+| `wallet_nonce.pruned` | Per batch in `prune_wallet_nonces` | — | `count` = rows deleted |
+
+Event names are a stable public contract; adding new events is
+non-breaking, renaming existing ones is not.
+
+### Example: Prometheus
+
+```python
+# myapp/observability.py
+from prometheus_client import Counter, Histogram
+
+_CHAL = Counter("wallet_login_challenge_issued_total", "...")
+_SUCCESS = Counter("wallet_login_success_total", "...", ["flow"])
+_FAIL = Counter("wallet_login_failure_total", "...", ["code"])
+_LAT = Histogram("wallet_login_latency_seconds", "...", ["outcome"])
+_PRUNED = Counter("wallet_nonce_pruned_total", "...")
+
+
+def emit(event, tags=None, *, duration_s=None, count=1):
+    tags = tags or {}
+    if event == "wallet_login.challenge_issued":
+        _CHAL.inc(count)
+    elif event == "wallet_login.success":
+        _SUCCESS.labels(**tags).inc(count)
+    elif event == "wallet_login.failure":
+        _FAIL.labels(**tags).inc(count)
+    elif event == "wallet_login.latency":
+        _LAT.labels(**tags).observe(duration_s or 0.0)
+    elif event == "wallet_nonce.pruned":
+        _PRUNED.inc(count)
+```
+
+```python
+# settings.py
+BLOCK_AUTH_SETTINGS = {
+    # ...
+    "METRICS_CALLBACK": "myapp.observability.emit",
+}
+```
+
+The host service owns the `/metrics` exposition endpoint (via
+`django-prometheus`, `prometheus_client.make_wsgi_app`, or a custom
+middleware). The default Prometheus registry is process-wide, so any
+counter the callback increments is scraped automatically.
+
+### Example: StatsD / OTel / logs
+
+The same callback works for any backend — translate the event in the
+consumer. For structured logging:
+
+```python
+import logging
+
+log = logging.getLogger("blockauth.metrics")
+
+def emit(event, tags=None, *, duration_s=None, count=1):
+    log.info(event, extra={"tags": tags or {}, "duration_s": duration_s, "count": count})
+```
+
+### Scheduling `prune_wallet_nonces`
+
+The `wallet_nonce.pruned` counter is only useful if the reaper actually
+runs. BlockAuth does **not** ship a scheduler — the consumer decides.
+Recommended cadence: every 5–15 minutes. Example invocations:
+
+```bash
+# cron / systemd timer
+*/10 * * * *  python manage.py prune_wallet_nonces
+
+# Celery Beat
+from celery import shared_task
+from django.core.management import call_command
+
+@shared_task
+def prune_wallet_nonces():
+    call_command("prune_wallet_nonces")
+```
+
+```yaml
+# Kubernetes CronJob (excerpt)
+apiVersion: batch/v1
+kind: CronJob
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: prune
+            image: my-auth-service:latest
+            command: ["python", "manage.py", "prune_wallet_nonces"]
+          restartPolicy: OnFailure
+```
+
+```hcl
+# ECS scheduled task (Terraform sketch)
+resource "aws_cloudwatch_event_rule" "prune_nonces" {
+  schedule_expression = "rate(10 minutes)"
+}
+# Target: RunTask on the auth-service task-definition with command
+# override ["python", "manage.py", "prune_wallet_nonces"]
+```
+
+Default behaviour deletes every expired row plus every consumed row
+older than 1 hour. `--older-than` (seconds), `--batch-size`, and
+`--dry-run` flags are available; see `python manage.py
+prune_wallet_nonces --help`. Failure mode if the command is never run:
+unbounded nonce-table growth and replay-window memory pressure.
+
+---
+
 ## 🧪 KDF Development & Testing
 
 ### Development Setup
