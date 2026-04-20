@@ -86,3 +86,29 @@ class TestEmailChangeConfirmView:
             "code": "ABC123",
         })
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_confirm_returns_fresh_tokens_and_user(self, authenticated_client, create_otp):
+        """#110: email change confirmation issues fresh tokens + user so
+        any custom-claims provider that pins email into the access token
+        sees the new value. `message` is preserved for back-compat."""
+        from blockauth.utils.token import Token
+
+        client, user = authenticated_client(email="old@test.com", password=STRONG_PASS)
+        create_otp(identifier="new@test.com", subject=OTPSubject.EMAIL_CHANGE, code="ABC123")
+
+        response = client.post(EMAIL_CHANGE_CONFIRM_URL, {
+            "identifier": "new@test.com",
+            "code": "ABC123",
+        })
+        assert response.status_code == status.HTTP_200_OK
+        # Additive: legacy `message` still there
+        assert "message" in response.data
+        # New: full auth state
+        assert response.data["access"]
+        assert response.data["refresh"]
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "new@test.com"
+        # Access token decodes to the correct user
+        payload = Token().decode_token(response.data["access"])
+        assert str(payload["user_id"]) == str(user.id)

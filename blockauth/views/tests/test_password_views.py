@@ -98,6 +98,33 @@ class TestPasswordResetConfirmView:
         })
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_reset_confirm_auto_signs_in(self, api_client, create_user, create_otp):
+        """api-optimization v0.9.0: reset confirmation issues tokens + user
+        so the client is signed in immediately instead of following up
+        with /login/basic/."""
+        from blockauth.utils.token import Token
+
+        user = create_user(email="auto@test.com", password=STRONG_PASS)
+        create_otp(identifier="auto@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
+
+        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
+            "identifier": "auto@test.com",
+            "code": "ABC123",
+            "new_password": STRONG_PASS_NEW,
+            "confirm_password": STRONG_PASS_NEW,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert response.data["access"]
+        assert response.data["refresh"]
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["email"] == "auto@test.com"
+        # Issued token is usable for the newly verified user
+        payload = Token().decode_token(response.data["access"])
+        assert str(payload["user_id"]) == str(user.id)
+
 
 @pytest.mark.django_db
 class TestPasswordChangeView:
@@ -138,3 +165,25 @@ class TestPasswordChangeView:
             "confirm_password": WEAK_PASS,
         })
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_change_returns_fresh_tokens_and_user(self, authenticated_client):
+        """api-optimization v0.9.0: password change returns fresh tokens
+        so the client doesn't have to re-login or run an extra refresh
+        round-trip. Critical when ROTATE_REFRESH_TOKENS is enabled."""
+        from blockauth.utils.token import Token
+
+        client, user = authenticated_client(password=STRONG_PASS)
+        response = client.post(PASSWORD_CHANGE_URL, {
+            "old_password": STRONG_PASS,
+            "new_password": STRONG_PASS_NEW,
+            "confirm_password": STRONG_PASS_NEW,
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert response.data["access"]
+        assert response.data["refresh"]
+        user_payload = response.data["user"]
+        assert user_payload["id"] == str(user.id)
+        payload = Token().decode_token(response.data["access"])
+        assert str(payload["user_id"]) == str(user.id)

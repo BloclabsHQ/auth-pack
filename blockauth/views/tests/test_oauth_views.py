@@ -1,17 +1,18 @@
 """
 Tests for OAuth views: Google, Facebook, LinkedIn login + callback.
 
-Only external HTTP calls (requests.get/post) are mocked.
-
-Note: OAuth callback tests that use social_login() may return 500 due to a
-pre-existing bug where social_login passes first_name to get_or_create but
-BlockUser doesn't have that field. The redirect tests work fine.
+Only external HTTP calls (requests.get/post) are mocked. social_login()
+is field-aware since #109 (v0.11.1): `first_name` is only included in the
+`get_or_create` defaults when the configured user model declares it, so
+OAuth-signup works against minimal user models like TestBlockUser.
 """
 
 import pytest
 from unittest.mock import MagicMock, patch
 from django.urls import reverse
 from rest_framework import status
+
+from blockauth.utils.social import social_login
 
 
 @pytest.mark.django_db
@@ -127,3 +128,88 @@ class TestLinkedInAuthCallbackView:
         response = api_client.get(reverse("linkedin-login-callback"), {"code": "auth-code"})
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
+
+
+@pytest.mark.django_db
+class TestSocialLoginResponseShape:
+    """Issue #107 — all three OAuth callbacks funnel through social_login(),
+    so one shape assertion per endpoint-equivalent exercise proves the
+    {access, refresh, user} parity with /login/basic/ is in place without
+    re-mocking requests.* three times.
+
+    Since #109 (v0.11.1) social_login() is safe to call against user
+    models that don't define `first_name`; the provider-specific tests
+    still pre-seed to keep them focused on the shape contract, but the
+    first_oauth_signup_* tests below exercise the real create path."""
+
+    def _assert_full_auth_state_shape(self, response):
+        assert response.status_code == 200
+        assert "access" in response.data
+        assert "refresh" in response.data
+        assert response.data["access"]
+        assert response.data["refresh"]
+        assert "user" in response.data
+        user_payload = response.data["user"]
+        for field in ("id", "email", "is_verified", "wallet_address", "first_name", "last_name"):
+            assert field in user_payload, f"OAuth response missing {field}"
+
+    def test_google_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="g@test.com")
+        response = social_login(
+            email="g@test.com", name="Google User", provider_data={"provider": "google"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
+        assert response.data["user"]["email"] == "g@test.com"
+
+    def test_facebook_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="f@test.com")
+        response = social_login(
+            email="f@test.com", name="FB User", provider_data={"provider": "facebook"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
+
+    def test_linkedin_callback_returns_full_auth_state(self, create_user):
+        user = create_user(email="l@test.com")
+        response = social_login(
+            email="l@test.com", name="LI User", provider_data={"provider": "linkedin"}
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["id"] == str(user.id)
+
+    def test_first_oauth_signup_does_not_crash_on_model_without_first_name(self, db):
+        """#109: social_login()'s get_or_create previously passed
+        `first_name=name` in defaults, which blows up on user models
+        (like TestBlockUser) that don't define that field. The create
+        path — i.e. the very first OAuth signup for a new email — must
+        not crash.
+
+        This test intentionally does NOT pre-seed the user so the
+        `defaults` branch of get_or_create fires."""
+        response = social_login(
+            email="first-oauth@test.com",
+            name="First OAuth User",
+            provider_data={"provider": "google"},
+        )
+        self._assert_full_auth_state_shape(response)
+        assert response.data["user"]["email"] == "first-oauth@test.com"
+        # User was created and is verified (OAuth default)
+        assert response.data["user"]["is_verified"] is True
+
+    def test_first_oauth_signup_populates_first_name_when_field_exists(self, db):
+        """If the user model defines `first_name`, the passed `name`
+        should still be populated on first signup — don't regress the
+        feature while fixing the compatibility bug."""
+        from blockauth.utils.config import get_block_auth_user_model
+
+        User = get_block_auth_user_model()
+        response = social_login(
+            email="named@test.com",
+            name="Ada Lovelace",
+            provider_data={"provider": "google"},
+        )
+        self._assert_full_auth_state_shape(response)
+        user = User.objects.get(email="named@test.com")
+        if hasattr(user, "first_name"):
+            assert user.first_name == "Ada Lovelace"

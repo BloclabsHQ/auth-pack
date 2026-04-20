@@ -73,6 +73,35 @@ class TestSuccessPath:
         assert response.data["wallet_address"] == VALID_ADDRESS
         assert "message" in response.data
 
+    def test_valid_request_returns_fresh_auth_state(self):
+        """#110: wallet link response now carries {access, refresh, user}
+        alongside the legacy {message, wallet_address} keys so consumers can
+        refresh custom JWT claims that pin wallet_address."""
+        user = _make_user()
+        request = factory.post("/wallet/link/", data=_make_payload(), format="json")
+        request._force_auth_user = user
+
+        with (
+            patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth,
+            patch("blockauth.serializers.wallet_serializers._User") as mock_user_model,
+            patch("blockauth.views.wallet_auth_views.get_config") as mock_config,
+            patch("blockauth.views.wallet_auth_views.model_to_json", return_value={}),
+        ):
+            mock_auth.return_value.verify_signature.return_value = True
+            mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+            mock_config.return_value.return_value = MagicMock()
+            response = VIEW(request)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Legacy keys preserved for back-compat
+        assert response.data["wallet_address"] == VALID_ADDRESS
+        assert response.data["message"] == "Wallet linked successfully."
+        # New auth-state keys
+        assert response.data["access"]
+        assert response.data["refresh"]
+        assert "user" in response.data
+        assert response.data["user"]["wallet_address"] == VALID_ADDRESS
+
     def test_valid_request_saves_wallet_address_on_user(self):
         user = _make_user()
         request = factory.post("/wallet/link/", data=_make_payload(), format="json")

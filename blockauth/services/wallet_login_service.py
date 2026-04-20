@@ -237,6 +237,18 @@ class WalletLoginService:
                 f"SIWE domain {parsed.domain!r} is not in the allowed set",
             )
 
+        # Issue #117: wallets typically display ``uri`` to the user, not
+        # ``domain``. A SIWE message can carry a trusted domain but a URI
+        # pointing at an attacker-controlled host; the user sees the
+        # phisher origin and signs anyway. Enforce strict host equality
+        # (no subdomain leniency — matches the domain allow-list policy).
+        uri_host = urlparse(parsed.uri).hostname if parsed.uri else None
+        if uri_host is None or uri_host.lower() != parsed.domain.lower():
+            raise WalletLoginError(
+                "uri_host_mismatch",
+                f"SIWE URI host {uri_host!r} does not match domain {parsed.domain!r}",
+            )
+
         if parsed.version != "1":
             raise WalletLoginError(
                 "unsupported_version",

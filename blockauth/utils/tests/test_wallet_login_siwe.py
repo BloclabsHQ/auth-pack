@@ -367,6 +367,107 @@ class TestVerifyLogin:
             )
         assert exc_info.value.code == "not_yet_valid"
 
+    def test_rejects_uri_host_mismatch(self, svc):
+        """Issue #117 — URI host must match SIWE domain.
+
+        A phisher domain whose URI points at a different host can pass the
+        domain allow-list but authorize a different origin. The wallet UI
+        typically shows the URI, not the domain, so the user sees the
+        phisher origin and signs anyway. Reject with ``uri_host_mismatch``
+        before the signature check so the metric bucket is distinct from
+        the pre-existing ``domain_mismatch``.
+        """
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="https://phisher.example/path",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
+    def test_accepts_uri_host_matching_domain(self, svc):
+        """Issue #117 — matching URI host must continue to pass.
+
+        Also covers port-only differences: ``https://example.com:8443/``
+        has the same hostname as ``example.com`` and must not be rejected.
+        """
+        challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC)
+        # Rebuild the SIWE message reusing the server nonce but with a
+        # port on the URI. Same host -> must still pass.
+        tampered_uri = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="https://example.com:8443/",
+            chain_id=1,
+            nonce=challenge.nonce,
+            issued_at=challenge.issued_at,
+            expiration_time=challenge.expires_at,
+        )
+        result = svc.verify_login(
+            wallet_address=_TEST_ADDRESS_LC,
+            message=tampered_uri,
+            signature=_sign(tampered_uri),
+        )
+        assert result.address == _TEST_ADDRESS_LC
+
+    def test_rejects_uri_without_host(self, svc):
+        """Issue #117 — URIs without a host (e.g. ``urn:...``) cannot be
+        bound to a domain at all. Reject rather than silently accepting.
+        """
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="urn:example:sign-in",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
+    def test_rejects_uri_subdomain_of_domain(self, svc):
+        """Issue #117 — strict equality: subdomains are not the same host.
+
+        Mirrors the existing "no wildcard suffixes" stance on
+        ``WALLET_LOGIN_EXPECTED_DOMAINS``. If a deployment wants
+        ``sub.example.com`` it must appear explicitly in the SIWE domain
+        field (and the allow-list), not be implied by URI subdomaining.
+        """
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="https://sub.example.com/",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
     def test_rejects_nonce_chain_mismatch(self, svc):
         """Server minted a chain-1 nonce; signed message claims chain 137."""
         challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC, chain_id=1)
