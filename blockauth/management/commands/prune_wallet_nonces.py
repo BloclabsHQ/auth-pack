@@ -39,6 +39,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from blockauth.models.wallet_login_nonce import WalletLoginNonce
+from blockauth.observability import emit as emit_metric
 
 
 class Command(BaseCommand):
@@ -102,5 +103,6 @@ class Command(BaseCommand):
                 # Safety belt against an infinite loop if something goes
                 # wrong with the filter predicate.
                 break
+            emit_metric("wallet_nonce.pruned", count=batch_deleted)
 
         self.stdout.write(self.style.SUCCESS(f"Deleted {deleted} wallet login nonce(s)."))
