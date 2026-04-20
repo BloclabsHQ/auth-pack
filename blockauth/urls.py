@@ -60,6 +60,7 @@ from blockauth.views.wallet_auth_views import (
     WalletChallengeView,
     WalletEmailAddView,
     WalletLinkView,
+    WalletUnlinkView,
 )
 
 # Note: All endpoints include trailing slashes for consistency.
@@ -117,6 +118,7 @@ URL_PATTERN_MAPPINGS = {
     ],
     Features.WALLET_LINK: [
         ("wallet/link/", WalletLinkView, URLNames.WALLET_LINK),
+        ("wallet/unlink/", WalletUnlinkView, URLNames.WALLET_UNLINK),
     ],
     # Passkey/WebAuthn authentication endpoints
     Features.PASSKEY_AUTH: [
