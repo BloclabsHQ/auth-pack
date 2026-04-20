@@ -11,11 +11,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Added
 
-- **`POST /wallet/unlink/`** (#122). Symmetric primitive to `POST /wallet/link/` that clears the authenticated user's linked wallet. No request body — the wallet to unlink is derived from the authenticated user (one linked wallet per user today). Clears `wallet_address` and drops the `WALLET` authentication-type marker. Response: `{"status": "unlinked"}`. Idempotent: returns `404 no_wallet_linked` when the user has no wallet linked (or on a second call after a successful unlink). Gated by the existing `Features.WALLET_LINK` flag — link and unlink enable together. Policy decisions (last-auth-method safeguard, event publication, audit logging) are deliberately left to the consumer layer, matching how `WalletLinkView` works.
-
 ### Changed
 
 ### Fixed
+
+---
+
+## [0.13.0] - 2026-04-20
+
+### Added
+
+- **`POST /wallet/unlink/`** (#122). Symmetric primitive to `POST /wallet/link/` that clears the authenticated user's linked wallet. No request body — the wallet to unlink is derived from the authenticated user (one linked wallet per user today). Clears `wallet_address` and drops the `WALLET` authentication-type marker. Response: `{"status": "unlinked"}`. Idempotent: returns `404 no_wallet_linked` when the user has no wallet linked (or on a second call after a successful unlink). Gated by the existing `Features.WALLET_LINK` flag — link and unlink enable together. Policy decisions (last-auth-method safeguard, event publication, audit logging) are deliberately left to the consumer layer, matching how `WalletLinkView` works.
+
+---
+
+## [0.12.0] - 2026-04-20
+
+### Added
+
+- **Pluggable observability hook** (#118). New `BLOCK_AUTH_SETTINGS["METRICS_CALLBACK"]` setting takes a dotted path to a callable that receives wallet-login events — `wallet_login.challenge_issued`, `wallet_login.success` (tag: `flow=siwe`), `wallet_login.failure` (tag: `code=<machine-readable>`), `wallet_login.latency` (tag: `outcome`, carries `duration_s`), and `wallet_nonce.pruned` (carries `count`). Backend-agnostic — consumers translate events into Prometheus / StatsD / OpenTelemetry / structured logs / nothing. Missing setting = no-op. Callback exceptions are caught and logged so a broken metrics pipe cannot fail login. Event names are a stable public contract.
+- **`prune_wallet_nonces` scheduling guidance** in the README (#116). Cadence, batch size, failure mode, and example invocations for cron / Celery Beat / Kubernetes CronJob / ECS scheduled tasks.
+- **SIWE wiki rewrite** (#115). Security, Authentication-Flows Flow 4, and Wallet-Models Model A now describe the EIP-4361 two-round-trip flow and the 11 hardening items shipped in PR #91.
+
+### Changed
+
+- **SIWE URI-domain consistency check** (#117). `WalletLoginService.verify_login` now enforces that the SIWE `uri` hostname matches the SIWE `domain` (strict equality — no subdomain leniency). Rejected with a new error code `uri_host_mismatch`. Prevents phishing domains whose URI points at an attacker-controlled host from passing the domain allow-list (wallets display the URI, not the domain). Existing `domain_mismatch` bucket is unchanged; the new code lets observability distinguish "wrong domain claim" from "URI/domain desync inside a valid claim".
 
 ---
 
