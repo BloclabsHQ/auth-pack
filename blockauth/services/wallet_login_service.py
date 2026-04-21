@@ -132,8 +132,13 @@ class WalletLoginService:
             # ``blockauth.apps``) enforces that at startup.
             block_auth_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {})
             client_url = block_auth_settings.get("CLIENT_APP_URL", "") if isinstance(block_auth_settings, dict) else ""
-            host = _host_from_url(client_url)
-            configured_domains = (host,) if host else ()
+            # Issue #125: preserve the full ``host[:port]`` authority (and IPv6
+            # bracket notation) so a dev ``CLIENT_APP_URL=http://localhost:5173``
+            # mints a SIWE message bound to ``localhost:5173`` -- the value
+            # MetaMask compares against ``window.location.host``. Stripping the
+            # port here would force the wallet to refuse to sign.
+            authority = _url_authority(client_url)
+            configured_domains = (authority,) if authority else ()
         # Issue #125: EIP-4361 §3.2 ``domain`` is the authority (``host[:port]``)
         # and wallets bind it to ``window.location.host`` -- ports included.
         # Membership tests run against the port-stripped host so the allow-list
@@ -501,6 +506,26 @@ def _host_from_url(url: str) -> str:
     except ValueError:
         return ""
     return parsed.hostname or ""
+
+
+def _url_authority(url: str) -> str:
+    """Extract the EIP-4361 authority (``host[:port]``) of ``url``.
+
+    Like :func:`_host_from_url` but preserves the port and IPv6 bracket
+    notation (``[::1]:5173``) so the ``CLIENT_APP_URL`` fallback in the
+    SIWE allow-list seeds the full authority a wallet binds to (issue
+    #125 follow-up). Userinfo (``user[:pass]@``) is stripped so an
+    unexpected component in the configured URL can't smuggle bytes into
+    the SIWE plaintext.
+    """
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return ""
+    netloc = parsed.netloc or ""
+    return netloc.rsplit("@", 1)[-1]
 
 
 def _authority_host(authority: str) -> str:

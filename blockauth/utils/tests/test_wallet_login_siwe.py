@@ -553,6 +553,30 @@ class TestVerifyLogin:
             svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=":5173")
         assert exc_info.value.code == "domain_not_allowed"
 
+    def test_fallback_from_client_app_url_preserves_port(self, settings):
+        """Issue #125 / CodeRabbit follow-up — when the allow-list is unset,
+        the dev fallback that derives ``configured_domains`` from
+        ``CLIENT_APP_URL`` must keep the port so SIWE messages bind to the
+        same authority the browser exposes (``localhost:5173``).
+        """
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.BLOCK_AUTH_SETTINGS = {"CLIENT_APP_URL": "http://localhost:5173"}
+        svc = WalletLoginService(default_chain_id=1)
+        assert svc.expected_domains == ("localhost:5173",)
+        challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC)
+        assert challenge.domain == "localhost:5173"
+
+    def test_fallback_from_client_app_url_preserves_ipv6_brackets(self, settings):
+        """Issue #125 / CodeRabbit follow-up — IPv6 ``CLIENT_APP_URL`` must
+        keep the bracket form so ``_authority_host`` parses it (a bare
+        ``::1`` would be malformed and the allow-list would end up empty).
+        """
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.BLOCK_AUTH_SETTINGS = {"CLIENT_APP_URL": "http://[::1]:5173"}
+        svc = WalletLoginService(default_chain_id=1)
+        assert svc.expected_domains == ("[::1]:5173",)
+        assert "::1" in svc._expected_hosts
+
     def test_default_domain_skips_invalid_allowlist_entries(self):
         """Issue #125 / CodeRabbit follow-up — when the allow-list is
         ``(":5173", "example.com")``, the default domain selection must
