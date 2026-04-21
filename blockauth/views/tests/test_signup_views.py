@@ -189,11 +189,15 @@ class TestSignUpConfirmView:
         assert user_payload["email"] == "new@test.com"
         assert user_payload["is_verified"] is True
         assert user_payload["wallet_address"] is None
-        # first_name / last_name are present and null on TestBlockUser
-        # (the abstract model doesn't define them; concrete downstream
-        # models may).
-        assert user_payload["first_name"] is None
-        assert user_payload["last_name"] is None
+        # Issue #131: AuthUser shell schema requires is_active, date_joined,
+        # wallets[] in every login-shaped response. first_name / last_name
+        # are intentionally omitted when unset (z.optional() rejects null)
+        # — TestBlockUser doesn't define them.
+        assert user_payload["is_active"] is True
+        assert "date_joined" in user_payload
+        assert user_payload["wallets"] == []
+        assert "first_name" not in user_payload
+        assert "last_name" not in user_payload
 
     def test_confirm_access_token_decodes_for_new_user(self, api_client, create_user, create_otp):
         """The access token issued on signup confirm must decode with the
