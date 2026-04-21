@@ -577,6 +577,26 @@ class TestVerifyLogin:
         assert svc.expected_domains == ("[::1]:5173",)
         assert "::1" in svc._expected_hosts
 
+    def test_emitted_domain_is_lowercase_when_caller_uses_uppercase(self):
+        """Issue #125 / CodeRabbit follow-up — ``window.location.host`` is
+        serialized lowercase per the WHATWG URL spec, so a SIWE message we
+        emitted with ``LOCALHOST:5173`` would mismatch the browser origin
+        and the wallet would refuse to sign. Both the stored allow-list
+        entry and the value returned to callers must canonicalize to
+        lowercase.
+        """
+        svc = WalletLoginService(
+            expected_domains=("LOCALHOST:5173",),
+            default_chain_id=1,
+        )
+        assert svc.expected_domains == ("localhost:5173",)
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="LOCALHOST:5173",
+            uri="https://localhost:5173",
+        )
+        assert challenge.domain == "localhost:5173"
+
     def test_default_domain_skips_invalid_allowlist_entries(self):
         """Issue #125 / CodeRabbit follow-up — when the allow-list is
         ``(":5173", "example.com")``, the default domain selection must

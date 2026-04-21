@@ -148,7 +148,14 @@ class WalletLoginService:
         # ``":5173"``, ``example.com/path``) so they can't seed an empty-host
         # bucket *and* can't be picked up as the default by ``_resolve_domain``
         # via ``self.expected_domains[0]``.
-        valid_domains = tuple((d, host) for d in configured_domains if d for host in (_authority_host(d),) if host)
+        # Lowercase the stored authority too. ``window.location.host`` is
+        # serialized lowercase per the WHATWG URL spec, so a wallet binding to
+        # ``localhost:5173`` would refuse to sign a SIWE message we emitted as
+        # ``LOCALHOST:5173``. Ports are digits, brackets/colons unchanged --
+        # ``str.lower`` on the whole authority is safe.
+        valid_domains = tuple(
+            (d.lower(), host) for d in configured_domains if d for host in (_authority_host(d),) if host
+        )
         self.expected_domains = tuple(d for d, _host in valid_domains)
         self._expected_hosts = frozenset(host for _d, host in valid_domains)
         self.default_chain_id = default_chain_id or int(getattr(settings, "WALLET_LOGIN_DEFAULT_CHAIN_ID", 1))
@@ -370,14 +377,16 @@ class WalletLoginService:
         # returned value preserves the port so the SIWE message the wallet
         # signs carries the same authority the browser exposes. Reject inputs
         # whose authority parses to an empty host (matches the verify_login
-        # guard) so malformed input can't slip through.
+        # guard) so malformed input can't slip through. Lowercase the returned
+        # authority to match ``window.location.host`` -- the wallet refuses to
+        # sign when ``siwe.domain`` differs in case from the browser origin.
         domain_host = _authority_host(domain)
         if not domain_host or domain_host not in self._expected_hosts:
             raise WalletLoginError(
                 "domain_not_allowed",
                 f"domain {domain!r} is not in the allowed set",
             )
-        return domain
+        return domain.lower()
 
     def _lock_unconsumed_nonce(self, *, address: str, nonce: str) -> Optional[WalletLoginNonce]:
         """Return the matching unconsumed nonce row, holding a row lock.
