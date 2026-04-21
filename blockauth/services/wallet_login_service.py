@@ -134,18 +134,18 @@ class WalletLoginService:
             client_url = block_auth_settings.get("CLIENT_APP_URL", "") if isinstance(block_auth_settings, dict) else ""
             host = _host_from_url(client_url)
             configured_domains = (host,) if host else ()
-        self.expected_domains = configured_domains
         # Issue #125: EIP-4361 §3.2 ``domain`` is the authority (``host[:port]``)
         # and wallets bind it to ``window.location.host`` -- ports included.
         # Membership tests run against the port-stripped host so the allow-list
         # stays host-only and dev ports (Vite/Webpack/Next) don't need their
         # own entries. Strict host equality on both sides preserves the binding.
-        # Filter empty parsed hosts so a malformed configured entry (e.g.
-        # ``":5173"``) can't seed an empty-host bucket that would then accept
-        # malformed inputs whose authority also parses to ``""``.
-        self._expected_hosts = frozenset(
-            host for d in configured_domains if d for host in (_authority_host(d),) if host
-        )
+        # Drop entries whose authority doesn't parse to a clean host (e.g.
+        # ``":5173"``, ``example.com/path``) so they can't seed an empty-host
+        # bucket *and* can't be picked up as the default by ``_resolve_domain``
+        # via ``self.expected_domains[0]``.
+        valid_domains = tuple((d, host) for d in configured_domains if d for host in (_authority_host(d),) if host)
+        self.expected_domains = tuple(d for d, _host in valid_domains)
+        self._expected_hosts = frozenset(host for _d, host in valid_domains)
         self.default_chain_id = default_chain_id or int(getattr(settings, "WALLET_LOGIN_DEFAULT_CHAIN_ID", 1))
         # Web3 instance only used for ``recover_message``. No network I/O --
         # ``Web3()`` without a provider is fine.
@@ -514,12 +514,29 @@ def _authority_host(authority: str) -> str:
     check both run on the bare host so port handling stays out of those
     comparisons. IPv6 (``[::1]:5173``) routes through ``urlparse`` so the
     bracket form parses correctly.
+
+    Returns ``""`` for anything that isn't a clean ``host[:port]`` --
+    inputs carrying userinfo, a path, query, fragment, or an invalid
+    port (``localhost:notaport``, ``example.com/path``,
+    ``user@example.com``) are rejected so a malformed configured entry
+    or attacker-supplied ``domain`` cannot smuggle non-authority bytes
+    into the membership comparison and the signed SIWE plaintext.
     """
     if not authority:
         return ""
     try:
         parsed = urlparse(f"http://{authority}")
+        _ = parsed.port  # validate range; raises ValueError on garbage ports
     except ValueError:
+        return ""
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
         return ""
     return (parsed.hostname or "").lower()
 

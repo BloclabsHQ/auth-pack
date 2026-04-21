@@ -553,6 +553,41 @@ class TestVerifyLogin:
             svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=":5173")
         assert exc_info.value.code == "domain_not_allowed"
 
+    def test_default_domain_skips_invalid_allowlist_entries(self):
+        """Issue #125 / CodeRabbit follow-up — when the allow-list is
+        ``(":5173", "example.com")``, the default domain selection must
+        not pick the malformed entry verbatim. Drop invalid entries from
+        ``expected_domains`` itself so ``self.expected_domains[0]`` can
+        only ever return a clean authority.
+        """
+        svc = WalletLoginService(
+            expected_domains=(":5173", "example.com"),
+            default_chain_id=1,
+        )
+        challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC)
+        assert challenge.domain == "example.com"
+
+    @pytest.mark.parametrize(
+        "bad_domain",
+        [
+            "example.com/path",
+            "example.com?x=1",
+            "example.com#frag",
+            "user@example.com",
+            "localhost:notaport",
+            "localhost:99999",
+        ],
+    )
+    def test_rejects_non_authority_domain_inputs(self, svc, bad_domain):
+        """Issue #125 / CodeRabbit follow-up — EIP-4361 §3.2 ``domain`` is a
+        clean ``host[:port]``. Inputs carrying a path, query, fragment,
+        userinfo, or invalid port must be rejected so they can't be smuggled
+        into the SIWE plaintext that the wallet signs.
+        """
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=bad_domain)
+        assert exc_info.value.code == "domain_not_allowed"
+
     def test_rejects_authority_port_mismatch_against_different_host(self):
         """Issue #125 — port normalization must not weaken host binding.
 
