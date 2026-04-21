@@ -140,7 +140,12 @@ class WalletLoginService:
         # Membership tests run against the port-stripped host so the allow-list
         # stays host-only and dev ports (Vite/Webpack/Next) don't need their
         # own entries. Strict host equality on both sides preserves the binding.
-        self._expected_hosts = frozenset(_authority_host(d) for d in configured_domains if d)
+        # Filter empty parsed hosts so a malformed configured entry (e.g.
+        # ``":5173"``) can't seed an empty-host bucket that would then accept
+        # malformed inputs whose authority also parses to ``""``.
+        self._expected_hosts = frozenset(
+            host for d in configured_domains if d for host in (_authority_host(d),) if host
+        )
         self.default_chain_id = default_chain_id or int(getattr(settings, "WALLET_LOGIN_DEFAULT_CHAIN_ID", 1))
         # Web3 instance only used for ``recover_message``. No network I/O --
         # ``Web3()`` without a provider is fine.
@@ -358,8 +363,11 @@ class WalletLoginService:
         # Issue #125: callers pass the full authority (``localhost:5173``).
         # Match on the bare host so the allow-list stays host-only -- the
         # returned value preserves the port so the SIWE message the wallet
-        # signs carries the same authority the browser exposes.
-        if _authority_host(domain) not in self._expected_hosts:
+        # signs carries the same authority the browser exposes. Reject inputs
+        # whose authority parses to an empty host (matches the verify_login
+        # guard) so malformed input can't slip through.
+        domain_host = _authority_host(domain)
+        if not domain_host or domain_host not in self._expected_hosts:
             raise WalletLoginError(
                 "domain_not_allowed",
                 f"domain {domain!r} is not in the allowed set",

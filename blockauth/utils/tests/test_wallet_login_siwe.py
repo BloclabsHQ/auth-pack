@@ -540,6 +540,19 @@ class TestVerifyLogin:
         )
         assert result.address == _TEST_ADDRESS_LC
 
+    def test_rejects_malformed_domain_when_allowlist_entry_has_no_host(self):
+        """Issue #125 / CodeRabbit follow-up — a malformed allow-list entry
+        whose authority parses to an empty host (e.g. ``":5173"``) must not
+        seed an empty-host bucket that would then accept malformed inputs.
+        """
+        svc = WalletLoginService(
+            expected_domains=(":5173",),
+            default_chain_id=1,
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=":5173")
+        assert exc_info.value.code == "domain_not_allowed"
+
     def test_rejects_authority_port_mismatch_against_different_host(self):
         """Issue #125 — port normalization must not weaken host binding.
 
