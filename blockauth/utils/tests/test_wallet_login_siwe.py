@@ -492,6 +492,84 @@ class TestVerifyLogin:
             )
         assert exc_info.value.code == "nonce_chain_mismatch"
 
+    def test_accepts_authority_with_port(self):
+        """Issue #125 — EIP-4361 §3.2 lets ``domain`` carry ``host:port``.
+
+        MetaMask and other wallets bind ``siwe.domain`` to
+        ``window.location.host`` which keeps the port. ``urlparse(uri).hostname``
+        strips it. The pre-fix uri-host equality check therefore rejected
+        every dapp on a non-default port (Vite/Webpack/Next dev servers,
+        Docker host-forwarded ports, preview deploys on ``:8443``).
+        """
+        svc = WalletLoginService(
+            expected_domains=("localhost",),
+            default_chain_id=1,
+        )
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="localhost:5173",
+            uri="https://localhost:5173",
+        )
+        assert challenge.domain == "localhost:5173"
+        result = svc.verify_login(
+            wallet_address=_TEST_ADDRESS_LC,
+            message=challenge.message,
+            signature=_sign(challenge.message),
+        )
+        assert result.address == _TEST_ADDRESS_LC
+
+    def test_accepts_authority_with_port_when_allowlist_has_port(self):
+        """Issue #125 — existing deployments with port-equipped allow-list
+        entries (``localhost:5173``) keep working. Both sides of the
+        membership test get port-stripped, so the entry matches the
+        signed authority.
+        """
+        svc = WalletLoginService(
+            expected_domains=("localhost:5173",),
+            default_chain_id=1,
+        )
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="localhost:5173",
+            uri="https://localhost:5173",
+        )
+        result = svc.verify_login(
+            wallet_address=_TEST_ADDRESS_LC,
+            message=challenge.message,
+            signature=_sign(challenge.message),
+        )
+        assert result.address == _TEST_ADDRESS_LC
+
+    def test_rejects_authority_port_mismatch_against_different_host(self):
+        """Issue #125 — port normalization must not weaken host binding.
+
+        A signed message with domain ``localhost:5173`` and a URI on a
+        different host but the same port (``https://attacker.example:5173/``)
+        must still be rejected as ``uri_host_mismatch``. Stripping the port
+        only affects the port comparison; the host comparison stays strict.
+        """
+        svc = WalletLoginService(
+            expected_domains=("localhost",),
+            default_chain_id=1,
+        )
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="localhost:5173",
+            address=_TEST_ADDRESS,
+            uri="https://attacker.example:5173/",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
 
 # =============================================================================
 # HTTP round-trip
