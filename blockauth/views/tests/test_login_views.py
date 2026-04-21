@@ -78,11 +78,12 @@ class TestBasicLoginView:
         assert user_payload["id"] == str(user.id)
         assert user_payload["wallet_address"] == wallet
 
-    def test_login_user_payload_includes_first_last_name_keys(self, api_client, create_user):
-        """fabric-auth#420: login response user payload exposes first_name /
-        last_name keys so consumer shells can hydrate profile state without
-        a follow-up /me/ round-trip. Values are null on user models that do
-        not define the fields (BlockUser abstract base)."""
+    def test_login_user_payload_omits_first_last_name_when_unset(self, api_client, create_user):
+        """Issue #131: first_name / last_name are omitted from the response
+        when the underlying user has no value, matching the shell's AuthUser
+        Zod schema which models these fields with ``z.optional()`` (rejects
+        ``null``). BlockUser abstract base does not define the fields, so
+        the test fixture exercises the unset branch."""
         create_user(email="user@test.com", password=_TEST_PASSWORD)
         response = api_client.post(
             BASIC_LOGIN_URL,
@@ -93,10 +94,60 @@ class TestBasicLoginView:
         )
         assert response.status_code == status.HTTP_200_OK
         user_payload = response.data["user"]
-        assert "first_name" in user_payload
-        assert "last_name" in user_payload
-        assert user_payload["first_name"] is None
-        assert user_payload["last_name"] is None
+        assert "first_name" not in user_payload
+        assert "last_name" not in user_payload
+
+    def test_login_user_payload_full_shape(self, api_client, create_user):
+        """Issue #131: pin the full top-level key set of the user payload
+        so the shell's AuthUser Zod schema (is_active, date_joined,
+        wallets) cannot silently regress. Wallet-first / email-first
+        variants are covered by dedicated cases below."""
+        user = create_user(email="user@test.com", password=_TEST_PASSWORD)
+        response = api_client.post(
+            BASIC_LOGIN_URL,
+            {
+                "identifier": "user@test.com",
+                "password": _TEST_PASSWORD,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        user_payload = response.data["user"]
+        # Required keys (issue #131)
+        assert set(user_payload.keys()) == {
+            "id",
+            "email",
+            "is_verified",
+            "is_active",
+            "date_joined",
+            "wallet_address",
+            "wallets",
+        }
+        assert user_payload["id"] == str(user.id)
+        assert user_payload["is_active"] is True
+        assert user_payload["wallets"] == []  # email-first user has no wallet
+
+    def test_login_user_payload_wallets_populated_when_linked(self, api_client, create_user):
+        """Issue #131: a user with a linked wallet surfaces the address
+        inside ``wallets`` as a single-row array, alongside the legacy
+        ``wallet_address`` scalar (kept for transitional compatibility)."""
+        wallet = "0xabc0000000000000000000000000000000000002"
+        create_user(
+            email="bothwallet@test.com",
+            password=_TEST_PASSWORD,
+            wallet_address=wallet,
+        )
+        response = api_client.post(
+            BASIC_LOGIN_URL,
+            {
+                "identifier": "bothwallet@test.com",
+                "password": _TEST_PASSWORD,
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        user_payload = response.data["user"]
+        assert user_payload["wallet_address"] == wallet
+        assert user_payload["wallets"] == [wallet]
+        assert user_payload["email"] == "bothwallet@test.com"
 
     def test_login_user_payload_does_not_leak_credentials(self, api_client, create_user):
         """Issue #99: basic-login's ``user`` payload must never contain
@@ -308,6 +359,33 @@ class TestPasswordlessLoginConfirmView:
         assert user_payload["id"] == str(created_user.id)
         assert user_payload["email"] == "fresh@test.com"
         assert user_payload["wallet_address"] is None
+
+    def test_confirm_user_payload_full_shape(self, api_client, create_user, create_otp):
+        """Issue #131: passwordless-confirm pins the same {is_active,
+        date_joined, wallets} keys as basic-login so the shell's AuthUser
+        Zod schema can ``parseAuthUser()`` either response interchangeably."""
+        create_user(email="user@test.com")
+        create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
+        response = api_client.post(
+            PASSWORDLESS_CONFIRM_URL,
+            {
+                "identifier": "user@test.com",
+                "code": "ABC123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        user_payload = response.data["user"]
+        assert set(user_payload.keys()) == {
+            "id",
+            "email",
+            "is_verified",
+            "is_active",
+            "date_joined",
+            "wallet_address",
+            "wallets",
+        }
+        assert user_payload["is_active"] is True
+        assert user_payload["wallets"] == []
 
     def test_confirm_user_payload_does_not_leak_credentials(self, api_client, create_user, create_otp):
         """Issue #99: passwordless-login's ``user`` payload must never

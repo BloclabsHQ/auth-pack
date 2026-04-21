@@ -40,8 +40,14 @@ class TestAuthRefreshTokenView:
         assert user_payload["email"] == "ref@test.com"
         assert user_payload["is_verified"] is True
         assert "wallet_address" in user_payload
-        assert "first_name" in user_payload
-        assert "last_name" in user_payload
+        # Issue #131: AuthUser shell schema requires is_active, date_joined,
+        # wallets in every login-shaped response. first_name / last_name are
+        # intentionally omitted when unset (z.optional() rejects null).
+        assert user_payload["is_active"] is True
+        assert "date_joined" in user_payload
+        assert user_payload["wallets"] == []
+        assert "first_name" not in user_payload
+        assert "last_name" not in user_payload
 
     def test_refresh_with_access_token_fails(self, api_client, create_user):
         """Access tokens should not be usable as refresh tokens."""

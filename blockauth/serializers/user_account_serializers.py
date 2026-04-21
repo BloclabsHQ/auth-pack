@@ -281,6 +281,14 @@ class LoginUserSerializer(serializers.Serializer):
     ``WalletLoginResponseSerializer`` so the three endpoints stay in lock-step.
     Do not add anything here that isn't safe to surface to the client --
     this object goes into the success response of an unauthenticated call.
+
+    Shape mirrors the ``@bloclabshq/auth`` shell ``AuthUser`` Zod schema
+    (issue #131): ``is_active``, ``date_joined``, ``wallets`` are always
+    present so the shell can ``parseAuthUser()`` without a follow-up
+    ``GET /me/`` round-trip. ``first_name`` / ``last_name`` are
+    ``required=False`` (Zod's ``.optional()`` rejects ``null``) — callers
+    must omit the keys entirely when the underlying value is unset, which
+    ``build_user_payload`` already does.
     """
 
     id = serializers.UUIDField(help_text="User UUID")
@@ -290,27 +298,42 @@ class LoginUserSerializer(serializers.Serializer):
         help_text="Email address (null for wallet-first accounts)",
     )
     is_verified = serializers.BooleanField(help_text="Whether the account is verified")
+    is_active = serializers.BooleanField(
+        help_text="Whether the account is active (defaults to True for AbstractBaseUser-derived models)",
+    )
+    date_joined = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text=(
+            "ISO-8601 timestamp of account creation. Null when the downstream "
+            "user model does not define ``date_joined`` (BlockUser abstract base)."
+        ),
+    )
     wallet_address = serializers.CharField(
         allow_null=True,
         required=False,
         help_text="Ethereum wallet address (null for accounts without a linked wallet)",
     )
+    wallets = serializers.ListField(
+        child=serializers.CharField(),
+        help_text=(
+            "Linked wallet addresses. Single-row array derived from "
+            "``wallet_address`` until the user model supports multiples; "
+            "empty when no wallet is linked."
+        ),
+    )
     # first_name / last_name are optional because the abstract BlockUser
     # model does not define them; concrete downstream user models may.
-    # Callers should pass getattr(user, "first_name", None) when building
-    # the response dict so auth-pack stays compatible with minimal user
-    # models that never added profile fields.
+    # build_user_payload omits the keys entirely when the underlying value
+    # is null — required=False keeps the serializer from synthesizing a
+    # null entry, matching the shell's z.optional() contract.
     first_name = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
         required=False,
-        help_text="Given name (null if the downstream user model has no first_name field or it is unset)",
+        help_text="Given name (omitted entirely when unset)",
     )
     last_name = serializers.CharField(
-        allow_null=True,
-        allow_blank=True,
         required=False,
-        help_text="Family name (null if the downstream user model has no last_name field or it is unset)",
+        help_text="Family name (omitted entirely when unset)",
     )
 
 

@@ -7,8 +7,9 @@ is field-aware since #109 (v0.11.1): `first_name` is only included in the
 OAuth-signup works against minimal user models like TestBlockUser.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from django.urls import reverse
 from rest_framework import status
 
@@ -40,6 +41,7 @@ class TestGoogleAuthCallbackView:
             json=lambda: {"email": "google@test.com", "name": "Google User"},
         )
         from rest_framework.response import Response
+
         mock_social_login.return_value = Response(
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
@@ -85,6 +87,7 @@ class TestFacebookAuthCallbackView:
             MagicMock(status_code=200, json=lambda: {"email": "fb@test.com", "name": "FB User"}),
         ]
         from rest_framework.response import Response
+
         mock_social_login.return_value = Response(
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
@@ -120,6 +123,7 @@ class TestLinkedInAuthCallbackView:
             json=lambda: {"email": "li@test.com", "name": "LI User"},
         )
         from rest_framework.response import Response
+
         mock_social_login.return_value = Response(
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
@@ -150,31 +154,28 @@ class TestSocialLoginResponseShape:
         assert response.data["refresh"]
         assert "user" in response.data
         user_payload = response.data["user"]
-        for field in ("id", "email", "is_verified", "wallet_address", "first_name", "last_name"):
+        # Issue #131: AuthUser shell schema requires these to always be
+        # present; first_name / last_name are intentionally omitted when
+        # unset (z.optional() rejects null) and are covered separately.
+        for field in ("id", "email", "is_verified", "is_active", "date_joined", "wallet_address", "wallets"):
             assert field in user_payload, f"OAuth response missing {field}"
 
     def test_google_callback_returns_full_auth_state(self, create_user):
         user = create_user(email="g@test.com")
-        response = social_login(
-            email="g@test.com", name="Google User", provider_data={"provider": "google"}
-        )
+        response = social_login(email="g@test.com", name="Google User", provider_data={"provider": "google"})
         self._assert_full_auth_state_shape(response)
         assert response.data["user"]["id"] == str(user.id)
         assert response.data["user"]["email"] == "g@test.com"
 
     def test_facebook_callback_returns_full_auth_state(self, create_user):
         user = create_user(email="f@test.com")
-        response = social_login(
-            email="f@test.com", name="FB User", provider_data={"provider": "facebook"}
-        )
+        response = social_login(email="f@test.com", name="FB User", provider_data={"provider": "facebook"})
         self._assert_full_auth_state_shape(response)
         assert response.data["user"]["id"] == str(user.id)
 
     def test_linkedin_callback_returns_full_auth_state(self, create_user):
         user = create_user(email="l@test.com")
-        response = social_login(
-            email="l@test.com", name="LI User", provider_data={"provider": "linkedin"}
-        )
+        response = social_login(email="l@test.com", name="LI User", provider_data={"provider": "linkedin"})
         self._assert_full_auth_state_shape(response)
         assert response.data["user"]["id"] == str(user.id)
 
