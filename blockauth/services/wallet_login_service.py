@@ -148,13 +148,20 @@ class WalletLoginService:
         # ``":5173"``, ``example.com/path``) so they can't seed an empty-host
         # bucket *and* can't be picked up as the default by ``_resolve_domain``
         # via ``self.expected_domains[0]``.
-        # Lowercase the stored authority too. ``window.location.host`` is
-        # serialized lowercase per the WHATWG URL spec, so a wallet binding to
-        # ``localhost:5173`` would refuse to sign a SIWE message we emitted as
-        # ``LOCALHOST:5173``. Ports are digits, brackets/colons unchanged --
-        # ``str.lower`` on the whole authority is safe.
+        # Canonicalize stored authorities to match what a WHATWG-compliant
+        # browser emits as ``window.location.host``: lowercase, default
+        # HTTP/HTTPS port (80, 443) stripped, IPv6 bracketed. A wallet binding
+        # to ``example.com`` would refuse to sign a SIWE message we minted as
+        # ``EXAMPLE.COM:443`` -- canonicalizing here keeps the wire form
+        # byte-equal to the browser origin.
         valid_domains = tuple(
-            (d.lower(), host) for d in configured_domains if d for host in (_authority_host(d),) if host
+            (canonical, host)
+            for d in configured_domains
+            if d
+            for canonical in (_canonical_authority(d),)
+            if canonical
+            for host in (_authority_host(d),)
+            if host
         )
         self.expected_domains = tuple(d for d, _host in valid_domains)
         self._expected_hosts = frozenset(host for _d, host in valid_domains)
@@ -272,7 +279,17 @@ class WalletLoginService:
         # Issue #125: compare host-to-host so a non-default port on the
         # authority (``localhost:5173``) doesn't trip the check against
         # ``urlparse(uri).hostname`` (which strips the port by design).
-        uri_host = (urlparse(parsed.uri).hostname or "").lower() if parsed.uri else ""
+        # Force ``parsed_uri.port`` evaluation so a malformed port
+        # (``https://example.com:notaport/``, ``:99999``) raises ``ValueError``
+        # and we reject rather than silently accepting the hostname.
+        uri_host = ""
+        if parsed.uri:
+            try:
+                parsed_uri = urlparse(parsed.uri)
+                _ = parsed_uri.port  # validate range; raises on garbage ports
+                uri_host = (parsed_uri.hostname or "").lower()
+            except ValueError:
+                uri_host = ""
         if not uri_host or uri_host != domain_host:
             raise WalletLoginError(
                 "uri_host_mismatch",
@@ -373,20 +390,17 @@ class WalletLoginService:
                 )
             return self.expected_domains[0]
         # Issue #125: callers pass the full authority (``localhost:5173``).
-        # Match on the bare host so the allow-list stays host-only -- the
-        # returned value preserves the port so the SIWE message the wallet
-        # signs carries the same authority the browser exposes. Reject inputs
-        # whose authority parses to an empty host (matches the verify_login
-        # guard) so malformed input can't slip through. Lowercase the returned
-        # authority to match ``window.location.host`` -- the wallet refuses to
-        # sign when ``siwe.domain`` differs in case from the browser origin.
-        domain_host = _authority_host(domain)
-        if not domain_host or domain_host not in self._expected_hosts:
+        # Match on the bare host so the allow-list stays host-only. Return the
+        # canonical form (lowercase, default port stripped, IPv6 bracketed) so
+        # the SIWE message we mint matches ``window.location.host`` byte-for-
+        # byte -- the wallet refuses to sign when ``siwe.domain`` differs.
+        canonical = _canonical_authority(domain)
+        if not canonical or _authority_host(domain) not in self._expected_hosts:
             raise WalletLoginError(
                 "domain_not_allowed",
                 f"domain {domain!r} is not in the allowed set",
             )
-        return domain.lower()
+        return canonical
 
     def _lock_unconsumed_nonce(self, *, address: str, nonce: str) -> Optional[WalletLoginNonce]:
         """Return the matching unconsumed nonce row, holding a row lock.
@@ -535,6 +549,43 @@ def _url_authority(url: str) -> str:
         return ""
     netloc = parsed.netloc or ""
     return netloc.rsplit("@", 1)[-1]
+
+
+def _canonical_authority(authority: str) -> str:
+    """Return the canonical lowercased ``host[:port]`` for an EIP-4361 authority.
+
+    Matches what a WHATWG-compliant browser emits as ``window.location.host``:
+    lowercased host, IPv6 in bracket form, port omitted when it matches the
+    HTTP/HTTPS default (80, 443). Returns ``""`` for anything
+    :func:`_authority_host` rejects (path, userinfo, invalid port) so callers
+    can use the empty result as a "skip this entry" signal (issue #125).
+    """
+    if not authority:
+        return ""
+    try:
+        parsed = urlparse(f"http://{authority}")
+        port = parsed.port
+    except ValueError:
+        return ""
+    if (
+        parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        return ""
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return ""
+    # ``urlparse.hostname`` strips IPv6 brackets; put them back so the canonical
+    # form is a valid authority a wallet can re-parse.
+    if ":" in host:
+        host = f"[{host}]"
+    if port is None or port in (80, 443):
+        return host
+    return f"{host}:{port}"
 
 
 def _authority_host(authority: str) -> str:

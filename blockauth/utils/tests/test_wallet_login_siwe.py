@@ -577,6 +577,50 @@ class TestVerifyLogin:
         assert svc.expected_domains == ("[::1]:5173",)
         assert "::1" in svc._expected_hosts
 
+    def test_emitted_domain_strips_default_port_for_https(self):
+        """Issue #125 / CodeRabbit follow-up — ``window.location.host`` omits
+        the port when it matches the scheme default (443 for HTTPS, 80 for
+        HTTP) per WHATWG. The stored allow-list and the resolver must do
+        the same so a SIWE message we emit matches the browser origin
+        byte-for-byte and the wallet signs.
+        """
+        svc = WalletLoginService(
+            expected_domains=("example.com:443",),
+            default_chain_id=1,
+        )
+        assert svc.expected_domains == ("example.com",)
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="example.com:443",
+            uri="https://example.com",
+        )
+        assert challenge.domain == "example.com"
+
+    def test_rejects_uri_with_invalid_port(self, svc):
+        """Issue #125 / CodeRabbit follow-up — ``urlparse(uri).hostname`` does
+        not validate the port, so ``https://example.com:notaport/`` would
+        otherwise sneak past the URI-host equality check as long as the
+        hostname matches. Force ``parsed_uri.port`` evaluation and reject
+        on ``ValueError``.
+        """
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="https://example.com:notaport/",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
     def test_emitted_domain_is_lowercase_when_caller_uses_uppercase(self):
         """Issue #125 / CodeRabbit follow-up — ``window.location.host`` is
         serialized lowercase per the WHATWG URL spec, so a SIWE message we
