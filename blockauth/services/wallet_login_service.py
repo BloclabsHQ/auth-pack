@@ -135,6 +135,12 @@ class WalletLoginService:
             host = _host_from_url(client_url)
             configured_domains = (host,) if host else ()
         self.expected_domains = configured_domains
+        # Issue #125: EIP-4361 §3.2 ``domain`` is the authority (``host[:port]``)
+        # and wallets bind it to ``window.location.host`` -- ports included.
+        # Membership tests run against the port-stripped host so the allow-list
+        # stays host-only and dev ports (Vite/Webpack/Next) don't need their
+        # own entries. Strict host equality on both sides preserves the binding.
+        self._expected_hosts = frozenset(_authority_host(d) for d in configured_domains if d)
         self.default_chain_id = default_chain_id or int(getattr(settings, "WALLET_LOGIN_DEFAULT_CHAIN_ID", 1))
         # Web3 instance only used for ``recover_message``. No network I/O --
         # ``Web3()`` without a provider is fine.
@@ -231,7 +237,11 @@ class WalletLoginService:
                 "wallet_address does not match the address embedded in the signed message",
             )
 
-        if parsed.domain not in self.expected_domains:
+        # Issue #125: ``parsed.domain`` is the EIP-4361 authority and may carry
+        # a port (``localhost:5173``). The allow-list is matched on host only --
+        # see ``_expected_hosts`` for why.
+        domain_host = _authority_host(parsed.domain)
+        if not domain_host or domain_host not in self._expected_hosts:
             raise WalletLoginError(
                 "domain_mismatch",
                 f"SIWE domain {parsed.domain!r} is not in the allowed set",
@@ -241,9 +251,12 @@ class WalletLoginService:
         # ``domain``. A SIWE message can carry a trusted domain but a URI
         # pointing at an attacker-controlled host; the user sees the
         # phisher origin and signs anyway. Enforce strict host equality
-        # (no subdomain leniency — matches the domain allow-list policy).
-        uri_host = urlparse(parsed.uri).hostname if parsed.uri else None
-        if uri_host is None or uri_host.lower() != parsed.domain.lower():
+        # (no subdomain leniency -- matches the domain allow-list policy).
+        # Issue #125: compare host-to-host so a non-default port on the
+        # authority (``localhost:5173``) doesn't trip the check against
+        # ``urlparse(uri).hostname`` (which strips the port by design).
+        uri_host = (urlparse(parsed.uri).hostname or "").lower() if parsed.uri else ""
+        if not uri_host or uri_host != domain_host:
             raise WalletLoginError(
                 "uri_host_mismatch",
                 f"SIWE URI host {uri_host!r} does not match domain {parsed.domain!r}",
@@ -342,7 +355,11 @@ class WalletLoginService:
                     "No allowed domains configured for wallet login",
                 )
             return self.expected_domains[0]
-        if domain not in self.expected_domains:
+        # Issue #125: callers pass the full authority (``localhost:5173``).
+        # Match on the bare host so the allow-list stays host-only -- the
+        # returned value preserves the port so the SIWE message the wallet
+        # signs carries the same authority the browser exposes.
+        if _authority_host(domain) not in self._expected_hosts:
             raise WalletLoginError(
                 "domain_not_allowed",
                 f"domain {domain!r} is not in the allowed set",
@@ -476,6 +493,27 @@ def _host_from_url(url: str) -> str:
     except ValueError:
         return ""
     return parsed.hostname or ""
+
+
+def _authority_host(authority: str) -> str:
+    """Return the lowercased host of an EIP-4361 ``domain`` authority.
+
+    EIP-4361 §3.2 lets ``domain`` carry the full ``host[:port]``. Wallets
+    bind it to ``window.location.host`` so dapps on a non-default port
+    (Vite/Webpack/Next dev servers, Docker host-forwarded ports, preview
+    deploys on ``:8443``) sign messages whose authority includes the port.
+    Membership tests against the allow-list and the URI-host equality
+    check both run on the bare host so port handling stays out of those
+    comparisons. IPv6 (``[::1]:5173``) routes through ``urlparse`` so the
+    bracket form parses correctly.
+    """
+    if not authority:
+        return ""
+    try:
+        parsed = urlparse(f"http://{authority}")
+    except ValueError:
+        return ""
+    return (parsed.hostname or "").lower()
 
 
 _singleton: Optional[WalletLoginService] = None
