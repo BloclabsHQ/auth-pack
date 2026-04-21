@@ -15,18 +15,39 @@ from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 def build_user_payload(user) -> dict:
     """Shape the ``user`` block used by every post-auth-state response.
 
-    ``first_name`` / ``last_name`` use ``getattr`` so downstream user
-    models that never added those fields stay compatible. The field set
-    matches ``blockauth.serializers.user_account_serializers.LoginUserSerializer``.
+    Matches the ``@bloclabshq/auth`` shell ``AuthUser`` schema:
+    ``is_active`` and ``date_joined`` (ISO-8601) are always present;
+    ``wallets`` is an array (empty when unlinked) so the model can grow
+    to many-wallet-per-user without another payload change;
+    ``wallet_address`` stays alongside ``wallets`` for transitional
+    compatibility. ``first_name`` / ``last_name`` are omitted when
+    unset (the shell models these as ``z.optional``, which rejects
+    ``null``) and use ``getattr`` so downstream user models that never
+    added those fields stay compatible.
+
+    ``is_active`` and ``date_joined`` are also read via ``getattr`` —
+    ``BlockUser`` extends ``AbstractBaseUser``, which exposes
+    ``is_active`` only as a class-attribute default and does not define
+    ``date_joined`` at all. Defensive reads keep the helper safe across
+    downstream user models that don't define these fields.
     """
-    return {
+    date_joined = getattr(user, "date_joined", None)
+    payload = {
         "id": user.id,
         "email": user.email,
         "is_verified": user.is_verified,
+        "is_active": getattr(user, "is_active", True),
+        "date_joined": date_joined.isoformat() if date_joined else None,
         "wallet_address": user.wallet_address,
-        "first_name": getattr(user, "first_name", None),
-        "last_name": getattr(user, "last_name", None),
+        "wallets": [user.wallet_address] if user.wallet_address else [],
     }
+    first_name = getattr(user, "first_name", None)
+    if first_name:
+        payload["first_name"] = first_name
+    last_name = getattr(user, "last_name", None)
+    if last_name:
+        payload["last_name"] = last_name
+    return payload
 
 
 def issue_auth_tokens(user) -> Tuple[str, str]:
