@@ -540,6 +540,142 @@ class TestVerifyLogin:
         )
         assert result.address == _TEST_ADDRESS_LC
 
+    def test_rejects_malformed_domain_when_allowlist_entry_has_no_host(self):
+        """Issue #125 / CodeRabbit follow-up — a malformed allow-list entry
+        whose authority parses to an empty host (e.g. ``":5173"``) must not
+        seed an empty-host bucket that would then accept malformed inputs.
+        """
+        svc = WalletLoginService(
+            expected_domains=(":5173",),
+            default_chain_id=1,
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=":5173")
+        assert exc_info.value.code == "domain_not_allowed"
+
+    def test_fallback_from_client_app_url_preserves_port(self, settings):
+        """Issue #125 / CodeRabbit follow-up — when the allow-list is unset,
+        the dev fallback that derives ``configured_domains`` from
+        ``CLIENT_APP_URL`` must keep the port so SIWE messages bind to the
+        same authority the browser exposes (``localhost:5173``).
+        """
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.BLOCK_AUTH_SETTINGS = {"CLIENT_APP_URL": "http://localhost:5173"}
+        svc = WalletLoginService(default_chain_id=1)
+        assert svc.expected_domains == ("localhost:5173",)
+        challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC)
+        assert challenge.domain == "localhost:5173"
+
+    def test_fallback_from_client_app_url_preserves_ipv6_brackets(self, settings):
+        """Issue #125 / CodeRabbit follow-up — IPv6 ``CLIENT_APP_URL`` must
+        keep the bracket form so ``_authority_host`` parses it (a bare
+        ``::1`` would be malformed and the allow-list would end up empty).
+        """
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.BLOCK_AUTH_SETTINGS = {"CLIENT_APP_URL": "http://[::1]:5173"}
+        svc = WalletLoginService(default_chain_id=1)
+        assert svc.expected_domains == ("[::1]:5173",)
+        assert "::1" in svc._expected_hosts
+
+    def test_emitted_domain_strips_default_port_for_https(self):
+        """Issue #125 / CodeRabbit follow-up — ``window.location.host`` omits
+        the port when it matches the scheme default (443 for HTTPS, 80 for
+        HTTP) per WHATWG. The stored allow-list and the resolver must do
+        the same so a SIWE message we emit matches the browser origin
+        byte-for-byte and the wallet signs.
+        """
+        svc = WalletLoginService(
+            expected_domains=("example.com:443",),
+            default_chain_id=1,
+        )
+        assert svc.expected_domains == ("example.com",)
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="example.com:443",
+            uri="https://example.com",
+        )
+        assert challenge.domain == "example.com"
+
+    def test_rejects_uri_with_invalid_port(self, svc):
+        """Issue #125 / CodeRabbit follow-up — ``urlparse(uri).hostname`` does
+        not validate the port, so ``https://example.com:notaport/`` would
+        otherwise sneak past the URI-host equality check as long as the
+        hostname matches. Force ``parsed_uri.port`` evaluation and reject
+        on ``ValueError``.
+        """
+        issued = django_timezone.now()
+        tampered = build_siwe_message(
+            domain="example.com",
+            address=_TEST_ADDRESS,
+            uri="https://example.com:notaport/",
+            chain_id=1,
+            nonce="abcdef1234567890abcdef1234567890",
+            issued_at=issued,
+            expiration_time=issued + timedelta(minutes=5),
+        )
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.verify_login(
+                wallet_address=_TEST_ADDRESS_LC,
+                message=tampered,
+                signature=_sign(tampered),
+            )
+        assert exc_info.value.code == "uri_host_mismatch"
+
+    def test_emitted_domain_is_lowercase_when_caller_uses_uppercase(self):
+        """Issue #125 / CodeRabbit follow-up — ``window.location.host`` is
+        serialized lowercase per the WHATWG URL spec, so a SIWE message we
+        emitted with ``LOCALHOST:5173`` would mismatch the browser origin
+        and the wallet would refuse to sign. Both the stored allow-list
+        entry and the value returned to callers must canonicalize to
+        lowercase.
+        """
+        svc = WalletLoginService(
+            expected_domains=("LOCALHOST:5173",),
+            default_chain_id=1,
+        )
+        assert svc.expected_domains == ("localhost:5173",)
+        challenge = svc.issue_challenge(
+            address=_TEST_ADDRESS_LC,
+            domain="LOCALHOST:5173",
+            uri="https://localhost:5173",
+        )
+        assert challenge.domain == "localhost:5173"
+
+    def test_default_domain_skips_invalid_allowlist_entries(self):
+        """Issue #125 / CodeRabbit follow-up — when the allow-list is
+        ``(":5173", "example.com")``, the default domain selection must
+        not pick the malformed entry verbatim. Drop invalid entries from
+        ``expected_domains`` itself so ``self.expected_domains[0]`` can
+        only ever return a clean authority.
+        """
+        svc = WalletLoginService(
+            expected_domains=(":5173", "example.com"),
+            default_chain_id=1,
+        )
+        challenge = svc.issue_challenge(address=_TEST_ADDRESS_LC)
+        assert challenge.domain == "example.com"
+
+    @pytest.mark.parametrize(
+        "bad_domain",
+        [
+            "example.com/path",
+            "example.com?x=1",
+            "example.com#frag",
+            "user@example.com",
+            "localhost:notaport",
+            "localhost:99999",
+        ],
+    )
+    def test_rejects_non_authority_domain_inputs(self, svc, bad_domain):
+        """Issue #125 / CodeRabbit follow-up — EIP-4361 §3.2 ``domain`` is a
+        clean ``host[:port]``. Inputs carrying a path, query, fragment,
+        userinfo, or invalid port must be rejected so they can't be smuggled
+        into the SIWE plaintext that the wallet signs.
+        """
+        with pytest.raises(WalletLoginError) as exc_info:
+            svc.issue_challenge(address=_TEST_ADDRESS_LC, domain=bad_domain)
+        assert exc_info.value.code == "domain_not_allowed"
+
     def test_rejects_authority_port_mismatch_against_different_host(self):
         """Issue #125 — port normalization must not weaken host binding.
 
