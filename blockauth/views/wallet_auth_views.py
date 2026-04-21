@@ -245,18 +245,15 @@ class WalletAuthLoginView(APIView):
             outcome = "success"
 
             user = linked.user
+            # issue #131: route the user payload through build_user_payload so
+            # wallet-login emits the same {is_active, date_joined, wallets}
+            # shape as basic-login / passwordless-login. The shell's AuthUser
+            # Zod schema rejects responses missing these fields.
             response_serializer = WalletLoginResponseSerializer(
                 {
                     "access": linked.access_token,
                     "refresh": linked.refresh_token,
-                    "user": {
-                        "id": user.id,
-                        "email": user.email,
-                        "is_verified": user.is_verified,
-                        "wallet_address": user.wallet_address,
-                        "first_name": getattr(user, "first_name", None),
-                        "last_name": getattr(user, "last_name", None),
-                    },
+                    "user": build_user_payload(user),
                 }
             )
             return Response(response_serializer.data, status=status.HTTP_200_OK)

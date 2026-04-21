@@ -254,18 +254,15 @@ class SignUpConfirmView(APIView):
                     )
 
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
+                # issue #131: route through build_user_payload so signup-confirm
+                # emits the same {is_active, date_joined, wallets} shape as the
+                # login endpoints — the shell's AuthUser Zod schema rejects
+                # responses missing these fields.
                 response_serializer = SignUpConfirmResponseSerializer(
                     {
                         "access": access_token,
                         "refresh": refresh_token,
-                        "user": {
-                            "id": user.id,
-                            "email": user.email,
-                            "is_verified": user.is_verified,
-                            "wallet_address": user.wallet_address,
-                            "first_name": getattr(user, "first_name", None),
-                            "last_name": getattr(user, "last_name", None),
-                        },
+                        "user": _build_user_payload(user),
                     }
                 )
                 return Response(data=response_serializer.data, status=status.HTTP_200_OK)
@@ -343,22 +340,17 @@ class BasicAuthLoginView(APIView):
                 access_token, refresh_token = generate_auth_token(token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id))
             self.login_throttle.record_success(request, "basic_login")
             blockauth_logger.success("Basic login successful", sanitize_log_context(request.data, {"user": user.id}))
-            # Issue #97: return user payload so clients can hydrate profile
-            # state without a second ``GET /me/`` round-trip. Same shape as
-            # wallet-login. ``wallet_address`` is null for email-first users
-            # until they run the ``wallet/link/`` flow.
+            # Issue #97 / #131: return user payload so clients can hydrate
+            # profile state without a second ``GET /me/`` round-trip. Routed
+            # through build_user_payload so basic-login, passwordless-login,
+            # and wallet-login emit the same {is_active, date_joined,
+            # wallets} shape — the shell's AuthUser Zod schema rejects
+            # responses missing these fields.
             response_serializer = BasicLoginResponseSerializer(
                 {
                     "access": access_token,
                     "refresh": refresh_token,
-                    "user": {
-                        "id": user.id,
-                        "email": user.email,
-                        "is_verified": user.is_verified,
-                        "wallet_address": user.wallet_address,
-                        "first_name": getattr(user, "first_name", None),
-                        "last_name": getattr(user, "last_name", None),
-                    },
+                    "user": _build_user_payload(user),
                 }
             )
             return Response(data=response_serializer.data, status=status.HTTP_200_OK)
@@ -491,22 +483,15 @@ class PasswordlessLoginConfirmView(APIView):
             blockauth_logger.success(
                 "Passwordless login confirmed", sanitize_log_context(request.data, {"user": user.id})
             )
-            # Issue #97: mirror basic-login / wallet-login by returning the
-            # authenticated user so clients can hydrate profile state in one
-            # round-trip. ``wallet_address`` is null for email / SMS users
-            # that haven't linked a wallet yet.
+            # Issue #97 / #131: mirror basic-login / wallet-login by routing
+            # the user through build_user_payload so all three login paths
+            # emit the same {is_active, date_joined, wallets} shape that the
+            # shell's AuthUser Zod schema requires.
             response_serializer = PasswordlessLoginResponseSerializer(
                 {
                     "access": access_token,
                     "refresh": refresh_token,
-                    "user": {
-                        "id": user.id,
-                        "email": user.email,
-                        "is_verified": user.is_verified,
-                        "wallet_address": user.wallet_address,
-                        "first_name": getattr(user, "first_name", None),
-                        "last_name": getattr(user, "last_name", None),
-                    },
+                    "user": _build_user_payload(user),
                 }
             )
             return Response(data=response_serializer.data, status=status.HTTP_200_OK)
