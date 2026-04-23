@@ -5,6 +5,11 @@ Only external HTTP calls (requests.get/post) are mocked. social_login()
 is field-aware since #109 (v0.11.1): `first_name` is only included in the
 `get_or_create` defaults when the configured user model declares it, so
 OAuth-signup works against minimal user models like TestBlockUser.
+
+State/CSRF hardening (RFC 6749 §10.12): every init sets an HttpOnly
+`blockauth_oauth_state` cookie and mirrors the token in `state=`; every
+callback requires the cookie and query param to match via
+`hmac.compare_digest` before the provider's token endpoint is hit.
 """
 
 from unittest.mock import MagicMock, patch
@@ -13,7 +18,16 @@ import pytest
 from django.urls import reverse
 from rest_framework import status
 
+from blockauth.utils.oauth_state import OAUTH_STATE_COOKIE_NAME
 from blockauth.utils.social import social_login
+
+
+def _prime_state(api_client, value="valid-state-token"):
+    """Seed the state cookie so a callback request looks like it came from a
+    browser that actually started the flow. Returns the state value so tests
+    can pass it as the query param."""
+    api_client.cookies[OAUTH_STATE_COOKIE_NAME] = value
+    return value
 
 
 @pytest.mark.django_db
@@ -23,6 +37,25 @@ class TestGoogleAuthLoginView:
         response = api_client.get(reverse("google-login"))
         assert response.status_code == status.HTTP_302_FOUND
         assert "accounts.google.com" in response.url
+
+    def test_init_sets_state_cookie_and_query_param(self, api_client):
+        """Init must bind the browser session: cookie set + state= in the
+        redirect URL + the two values must match."""
+        response = api_client.get(reverse("google-login"))
+
+        assert OAUTH_STATE_COOKIE_NAME in response.cookies
+        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        assert cookie.value, "state cookie must carry a token"
+        assert cookie["httponly"]
+        assert cookie["secure"]
+        assert cookie["samesite"].lower() == "lax"
+        assert cookie["max-age"] == 600
+
+        assert "state=" in response.url
+        from urllib.parse import parse_qs, urlparse
+
+        query_state = parse_qs(urlparse(response.url).query)["state"][0]
+        assert query_state == cookie.value
 
 
 @pytest.mark.django_db
@@ -46,12 +79,20 @@ class TestGoogleAuthCallbackView:
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
         )
+        state = _prime_state(api_client)
 
-        response = api_client.get(reverse("google-login-callback"), {"code": "auth-code"})
+        response = api_client.get(
+            reverse("google-login-callback"),
+            {"code": "auth-code", "state": state},
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
         mock_social_login.assert_called_once()
+        # Success clears the state cookie so it can't be replayed.
+        cleared = response.cookies.get(OAUTH_STATE_COOKIE_NAME)
+        assert cleared is not None
+        assert cleared["max-age"] == 0
 
     @patch("blockauth.views.google_auth_views.requests.post")
     def test_callback_token_exchange_failure(self, mock_post, api_client):
@@ -59,12 +100,48 @@ class TestGoogleAuthCallbackView:
             status_code=401,
             json=lambda: {"error": "invalid_grant"},
         )
-        response = api_client.get(reverse("google-login-callback"), {"code": "bad-code"})
+        state = _prime_state(api_client)
+        response = api_client.get(
+            reverse("google-login-callback"),
+            {"code": "bad-code", "state": state},
+        )
         assert response.status_code == 401
 
     def test_callback_missing_code(self, api_client):
         response = api_client.get(reverse("google-login-callback"))
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @patch("blockauth.views.google_auth_views.requests.post")
+    def test_callback_missing_state_cookie_rejects(self, mock_post, api_client):
+        """No cookie → the request didn't originate from this browser. Must
+        400 without ever calling the provider's token endpoint."""
+        response = api_client.get(
+            reverse("google-login-callback"),
+            {"code": "auth-code", "state": "anything"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
+
+    @patch("blockauth.views.google_auth_views.requests.post")
+    def test_callback_missing_state_query_rejects(self, mock_post, api_client):
+        """Cookie present but no `state=` in the URL → provider didn't echo
+        our token. Reject before burning a real code."""
+        _prime_state(api_client)
+        response = api_client.get(reverse("google-login-callback"), {"code": "auth-code"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
+
+    @patch("blockauth.views.google_auth_views.requests.post")
+    def test_callback_mismatched_state_rejects(self, mock_post, api_client):
+        """Classic CSRF shape: attacker controls `state=` in the URL but
+        can't forge the victim's cookie. Must 400."""
+        _prime_state(api_client, value="victim-state")
+        response = api_client.get(
+            reverse("google-login-callback"),
+            {"code": "auth-code", "state": "attacker-state"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -74,6 +151,14 @@ class TestFacebookAuthLoginView:
         response = api_client.get(reverse("facebook-login"))
         assert response.status_code == status.HTTP_302_FOUND
         assert "facebook.com" in response.url
+
+    def test_init_sets_state_cookie_and_query_param(self, api_client):
+        response = api_client.get(reverse("facebook-login"))
+        assert OAUTH_STATE_COOKIE_NAME in response.cookies
+        from urllib.parse import parse_qs, urlparse
+
+        query_state = parse_qs(urlparse(response.url).query)["state"][0]
+        assert query_state == response.cookies[OAUTH_STATE_COOKIE_NAME].value
 
 
 @pytest.mark.django_db
@@ -92,10 +177,24 @@ class TestFacebookAuthCallbackView:
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
         )
+        state = _prime_state(api_client)
 
-        response = api_client.get(reverse("facebook-login-callback"), {"code": "auth-code"})
+        response = api_client.get(
+            reverse("facebook-login-callback"),
+            {"code": "auth-code", "state": state},
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
+
+    @patch("blockauth.views.facebook_auth_views.requests.get")
+    def test_callback_mismatched_state_rejects(self, mock_get, api_client):
+        _prime_state(api_client, value="victim-state")
+        response = api_client.get(
+            reverse("facebook-login-callback"),
+            {"code": "auth-code", "state": "attacker-state"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_get.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -105,6 +204,14 @@ class TestLinkedInAuthLoginView:
         response = api_client.get(reverse("linkedin-login"))
         assert response.status_code == status.HTTP_302_FOUND
         assert "linkedin.com" in response.url
+
+    def test_init_sets_state_cookie_and_query_param(self, api_client):
+        response = api_client.get(reverse("linkedin-login"))
+        assert OAUTH_STATE_COOKIE_NAME in response.cookies
+        from urllib.parse import parse_qs, urlparse
+
+        query_state = parse_qs(urlparse(response.url).query)["state"][0]
+        assert query_state == response.cookies[OAUTH_STATE_COOKIE_NAME].value
 
 
 @pytest.mark.django_db
@@ -128,10 +235,24 @@ class TestLinkedInAuthCallbackView:
             {"access": "test-access", "refresh": "test-refresh"},
             status=200,
         )
+        state = _prime_state(api_client)
 
-        response = api_client.get(reverse("linkedin-login-callback"), {"code": "auth-code"})
+        response = api_client.get(
+            reverse("linkedin-login-callback"),
+            {"code": "auth-code", "state": state},
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
+
+    @patch("blockauth.views.linkedin_auth_views.requests.post")
+    def test_callback_mismatched_state_rejects(self, mock_post, api_client):
+        _prime_state(api_client, value="victim-state")
+        response = api_client.get(
+            reverse("linkedin-login-callback"),
+            {"code": "auth-code", "state": "attacker-state"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
 
 
 @pytest.mark.django_db

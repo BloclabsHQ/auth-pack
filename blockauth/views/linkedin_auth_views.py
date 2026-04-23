@@ -1,8 +1,8 @@
 import logging
+import urllib.parse
 
 import requests
 from django.shortcuts import redirect
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny
@@ -18,6 +18,7 @@ from blockauth.schemas.examples.social_auth import (
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.oauth_state import clear_state_cookie, generate_state, set_state_cookie, verify_state
 from blockauth.utils.social import social_login
 
 logger = logging.getLogger(__name__)
@@ -40,15 +41,19 @@ class LinkedInAuthLoginView(APIView):
         if not all([linkedin_client_id, callback_url]):
             raise ValidationError({"detail": "Auth provider settings for linkedin is not properly configured"}, 4020)
 
-        linkein_auth_url = (
-            f"https://www.linkedin.com/oauth/v2/authorization?response_type=code"
-            f"&client_id={linkedin_client_id}"
-            f"&redirect_uri={callback_url}"
-            f"&scope=profile email openid"
-            f"&state=blockauth#{timezone.now().timestamp()}"
-        )
+        state = generate_state()
+        params = {
+            "response_type": "code",
+            "client_id": linkedin_client_id,
+            "redirect_uri": callback_url,
+            "scope": "profile email openid",
+            "state": state,
+        }
+        linkein_auth_url = "https://www.linkedin.com/oauth/v2/authorization?" + urllib.parse.urlencode(params)
         blockauth_logger.info("LinkedIn login attempt", sanitize_log_context(request.GET))
-        return redirect(linkein_auth_url)
+        response = redirect(linkein_auth_url)
+        set_state_cookie(response, state)
+        return response
 
 
 class LinkedInAuthCallbackView(APIView):
@@ -71,6 +76,10 @@ class LinkedInAuthCallbackView(APIView):
 
         if not all([linkedin_client_id, linkedin_client_secret, callback_url]):
             raise ValidationError(social_invalid_auth_config.value, 4020)
+
+        # CSRF protection — must run BEFORE the token exchange so a probe
+        # cannot consume a real authorization code.
+        verify_state(request)
 
         # Exchange authorization code for access token
         token_url = "https://www.linkedin.com/oauth/v2/accessToken"
@@ -113,7 +122,9 @@ class LinkedInAuthCallbackView(APIView):
         try:
             provider_data = {"provider": "linkedin", "user_info": user_info}
             blockauth_logger.success("LinkedIn login successful", {"email": email, "name": name})
-            return social_login(email=email, name=name, provider_data=provider_data)
+            response = social_login(email=email, name=name, provider_data=provider_data)
+            clear_state_cookie(response)
+            return response
         except ValidationError as ve:
             blockauth_logger.error(
                 "LinkedIn login validation error", {"error": str(ve), "data": sanitize_log_context(request.data)}
