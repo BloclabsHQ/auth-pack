@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -83,17 +84,19 @@ class SignUpView(APIView):
             pre_signup_trigger = get_config("PRE_SIGNUP_TRIGGER")()
             pre_signup_trigger.trigger(context=data)
 
-            if data.get("email"):
-                user = _User.objects.create(email=data["email"])
-            else:
-                user = _User.objects.create(phone_number=data["phone_number"])
-            user.set_password(data["password"])
-            user.add_authentication_type(AuthenticationType.EMAIL)
-            user.save()
+            # Hash password now and carry it in the OTP payload so the
+            # fabric_user row is only created after inbox ownership is proven
+            # in SignUpConfirmView. If send_otp raises here, no orphan row
+            # is left behind and the same email can be retried immediately
+            # (fabric-auth#516).
+            signup_payload = {
+                "hashed_password": make_password(data["password"]),
+                "authentication_types": [AuthenticationType.EMAIL],
+            }
 
-            send_otp(data=data, subject=OTPSubject.SIGNUP)
+            send_otp(data=data, subject=OTPSubject.SIGNUP, payload=signup_payload)
             blockauth_logger.success(
-                f"User signup {data['verification_type']} sent", sanitize_log_context(request.data, {"user": user.id})
+                f"User signup {data['verification_type']} sent", sanitize_log_context(request.data)
             )
             return Response(
                 {"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK
@@ -136,13 +139,15 @@ class SignUpResendOTPView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
 
-            # Serializer stores _should_send and _user — only send OTP when appropriate,
-            # but always return the same response to prevent user enumeration (OWASP).
+            # Serializer stores _should_send, _user, and _otp_payload — only send
+            # OTP when appropriate, but always return the same response to prevent
+            # user enumeration (OWASP).
             if data.get("_should_send"):
                 user = data["_user"]
-                is_wallet_verification = user.wallet_address is not None
+                otp_payload = data.get("_otp_payload")
 
-                if is_wallet_verification:
+                if user is not None and user.wallet_address is not None:
+                    # Wallet email verification — user row exists, has a linked wallet
                     if not self.rate_limit_handler.allow_request(request, OTPSubject.WALLET_EMAIL_VERIFICATION):
                         error_message = self.rate_limit_handler.get_error_message()
                         blockauth_logger.warning(
@@ -156,7 +161,9 @@ class SignUpResendOTPView(APIView):
                         sanitize_log_context(request.data),
                     )
                 else:
-                    send_otp(data, OTPSubject.SIGNUP)
+                    # Regular signup resend — carry OTP payload forward so the
+                    # hashed password survives the new OTP (fabric-auth#516).
+                    send_otp(data, OTPSubject.SIGNUP, payload=otp_payload)
                     blockauth_logger.success(
                         f"Signup {data['verification_type']} sent", sanitize_log_context(request.data)
                     )
@@ -224,15 +231,30 @@ class SignUpConfirmView(APIView):
                 return Response({"message": "Email verified successfully."}, status=status.HTTP_200_OK)
             elif signup_otp_exists:
                 # Regular signup confirmation
-                OTP.validate_otp(identifier=identifier, code=code, subject=OTPSubject.SIGNUP)
+                otp_payload = OTP.validate_otp(identifier=identifier, code=code, subject=OTPSubject.SIGNUP)
 
                 email, phone_number = data.get("email"), data.get("phone_number")
-                if email:
-                    user = _User.objects.get(email=email)
+
+                if otp_payload:
+                    # Ghost-free path (fabric-auth#516): user row deferred to here.
+                    # Password was hashed at signup time and carried in the OTP payload.
+                    if email:
+                        user = _User.objects.create(email=email)
+                    else:
+                        user = _User.objects.create(phone_number=phone_number)
+                    user.password = otp_payload["hashed_password"]
+                    for auth_type in otp_payload.get("authentication_types", []):
+                        user.add_authentication_type(auth_type)
+                    user.is_verified = True
+                    user.save()
                 else:
-                    user = _User.objects.get(phone_number=phone_number)
-                user.is_verified = True
-                user.save()
+                    # Legacy path: user row was created at signup time (pre-fix OTPs).
+                    if email:
+                        user = _User.objects.get(email=email)
+                    else:
+                        user = _User.objects.get(phone_number=phone_number)
+                    user.is_verified = True
+                    user.save()
 
                 user_data = model_to_json(user, remove_fields=("password",))
 
