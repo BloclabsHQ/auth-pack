@@ -5,6 +5,7 @@ from django.utils.text import format_lazy
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
+from blockauth.models.otp import OTP, OTPSubject
 from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import get_password_help_text
@@ -61,14 +62,24 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
 
         # Store validation results for the view — never expose to the client
         data["_user"] = user
+        data["_otp_payload"] = None
         data["_should_send"] = False
 
-        if not user:
-            logger.info("OTP resend requested for non-existent account.")
-        elif user.is_verified:
+        if user and not user.is_verified:
+            data["_should_send"] = True
+        elif user:
             logger.info("OTP resend requested for already verified account.")
         else:
-            data["_should_send"] = True
+            # Ghost-free signup flow (fabric-auth#516): no user row exists yet.
+            # Check for a pending SIGNUP OTP so we can resend with the same payload.
+            pending_otp = OTP.objects.filter(
+                identifier=identifier, subject=OTPSubject.SIGNUP, is_used=False
+            ).first()
+            if pending_otp:
+                data["_otp_payload"] = pending_otp.payload
+                data["_should_send"] = True
+            else:
+                logger.info("OTP resend requested for non-existent account.")
 
         return data
 
