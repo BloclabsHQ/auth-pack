@@ -354,7 +354,9 @@ class TestRateLimiting(TestCase):
         """Set up test fixtures"""
         self.factory = APIRequestFactory()
         User = get_user_model()
-        self.user = User.objects.create_user(username="ratelimituser", email="ratelimit@example.com", password="testpass123")
+        self.user = User.objects.create_user(
+            username="ratelimituser", email="ratelimit@example.com", password="testpass123"
+        )
 
     def test_rate_limit_throttles_exist(self):
         """Test that rate limit throttles are defined"""
