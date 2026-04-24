@@ -6,8 +6,9 @@ Handles loading and validating passkey configuration from BLOCK_AUTH_SETTINGS.
 Configuration is read from BLOCK_AUTH_SETTINGS["PASSKEY_CONFIG"].
 """
 
+import importlib
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .constants import (
     PASSKEY_CONFIG_KEY,
@@ -67,9 +68,42 @@ class PasskeyConfiguration:
     # Feature flags
     features: dict = field(default_factory=dict)
 
+    # Optional per-request RP_ID resolution (for multi-origin backends).
+    # See `resolve_rp_id` for precedence rules.
+    rp_id_resolver: Optional[Callable[[str], Optional[str]]] = None
+    rp_id_by_origin: Dict[str, str] = field(default_factory=dict)
+
     def is_feature_enabled(self, feature: str) -> bool:
         """Check if a feature flag is enabled"""
         return self.features.get(feature, False)
+
+    def resolve_rp_id(self, origin: Optional[str]) -> str:
+        """
+        Resolve the RP_ID for a request origin.
+
+        Precedence:
+        1. ``rp_id_resolver(origin)`` if configured and returns a non-empty string
+        2. ``rp_id_by_origin[origin]`` if present
+        3. ``rp_id`` (static fallback)
+
+        The resolver MUST be safe to call on untrusted input. If the resolver raises,
+        the error propagates - callers are responsible for treating resolution
+        failures as unauthenticated requests.
+
+        Args:
+            origin: The request origin (e.g., ``"https://app.example.com"``).
+                May be ``None`` if the request had no Origin header.
+
+        Returns:
+            The RP_ID to use for this request.
+        """
+        if origin and self.rp_id_resolver is not None:
+            resolved = self.rp_id_resolver(origin)
+            if resolved:
+                return resolved
+        if origin and origin in self.rp_id_by_origin:
+            return self.rp_id_by_origin[origin]
+        return self.rp_id
 
     @property
     def discoverable_credentials_enabled(self) -> bool:
@@ -122,6 +156,35 @@ class PasskeyConfigManager:
         """Get setting from PASSKEY_CONFIG with default from PASSKEY_DEFAULTS"""
         default = PASSKEY_DEFAULTS.get(key)
         return passkey_config.get(key, default)
+
+    def _resolve_callable(self, value: Any, key: str) -> Optional[Callable[[str], Optional[str]]]:
+        """
+        Resolve a callable from a dotted-path string or a callable object.
+
+        Returns None if value is None/empty. Raises ConfigurationError if the
+        value can't be resolved to a callable.
+        """
+        if value is None or value == "":
+            return None
+        if callable(value):
+            return value
+        if not isinstance(value, str):
+            raise ConfigurationError(
+                f"PASSKEY_CONFIG.{key} must be a callable or a dotted-path string, got {type(value).__name__}"
+            )
+        module_path, _, attr_name = value.rpartition(".")
+        if not module_path or not attr_name:
+            raise ConfigurationError(
+                f"PASSKEY_CONFIG.{key} must be a fully-qualified dotted path (e.g., 'myapp.passkey.resolve_rp_id'), got '{value}'"
+            )
+        try:
+            module = importlib.import_module(module_path)
+            resolved = getattr(module, attr_name)
+        except (ImportError, AttributeError) as e:
+            raise ConfigurationError(f"PASSKEY_CONFIG.{key} could not be imported: {e}") from e
+        if not callable(resolved):
+            raise ConfigurationError(f"PASSKEY_CONFIG.{key} ('{value}') is not callable")
+        return resolved
 
     def get_config(self, force_reload: bool = False) -> PasskeyConfiguration:
         """
@@ -249,6 +312,23 @@ class PasskeyConfigManager:
         # Get feature flags
         features = self._get_with_default(PasskeyConfigKeys.FEATURES, passkey_config)
 
+        # Multi-origin RP_ID resolution (optional)
+        rp_id_resolver_raw = self._get_with_default(PasskeyConfigKeys.RP_ID_RESOLVER, passkey_config)
+        rp_id_resolver = self._resolve_callable(rp_id_resolver_raw, PasskeyConfigKeys.RP_ID_RESOLVER)
+
+        rp_id_by_origin = self._get_with_default(PasskeyConfigKeys.RP_ID_BY_ORIGIN, passkey_config) or {}
+        if not isinstance(rp_id_by_origin, dict):
+            raise ConfigurationError(
+                f"PASSKEY_CONFIG.RP_ID_BY_ORIGIN must be a dict, got {type(rp_id_by_origin).__name__}"
+            )
+        for origin_key, mapped_rp_id in rp_id_by_origin.items():
+            if not isinstance(origin_key, str) or not origin_key.startswith(("http://", "https://")):
+                raise ConfigurationError(
+                    f"PASSKEY_CONFIG.RP_ID_BY_ORIGIN keys must be full origins starting with http:// or https:// (got '{origin_key}')"
+                )
+            if not isinstance(mapped_rp_id, str) or not mapped_rp_id:
+                raise ConfigurationError(f"PASSKEY_CONFIG.RP_ID_BY_ORIGIN['{origin_key}'] must be a non-empty string")
+
         return PasskeyConfiguration(
             rp_id=rp_id,
             rp_name=rp_name,
@@ -266,6 +346,8 @@ class PasskeyConfigManager:
             storage_backend=storage_backend,
             rate_limits=rate_limits,
             features=features,
+            rp_id_resolver=rp_id_resolver,
+            rp_id_by_origin=rp_id_by_origin,
         )
 
     def reload(self):

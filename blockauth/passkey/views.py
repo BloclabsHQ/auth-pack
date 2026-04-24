@@ -20,8 +20,41 @@ from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.rate_limiter import EnhancedThrottle
 
 from . import is_enabled
+from .config import get_passkey_config
 from .exceptions import CredentialNotFoundError, MaxCredentialsReachedError, PasskeyError, PasskeyNotEnabledError
 from .services.passkey_service import PasskeyService
+
+
+def _request_origin(request) -> str:
+    """
+    Extract the request Origin for per-request RP_ID resolution.
+
+    Uses only the ``Origin`` header. Browsers send it on every same-origin and
+    cross-origin POST (including every WebAuthn endpoint here) and servers
+    cannot forge it across a CORS boundary. We deliberately do NOT fall back
+    to ``Referer``: it is not CORS-controlled and can be set to any value by
+    non-browser clients, which would feed untrusted input into the resolver.
+
+    Returns ``""`` when the Origin header is missing; ``resolve_rp_id`` treats
+    that as "use the static RP_ID fallback".
+    """
+    return request.META.get("HTTP_ORIGIN", "") or ""
+
+
+def _resolve_rp_id(request):
+    """
+    Resolve the RP_ID for the current request.
+
+    Returns ``None`` only when the passkey feature is disabled. All other
+    errors (``ConfigurationError`` from a bad resolver or malformed
+    ``RP_ID_BY_ORIGIN`` map, etc.) propagate so misconfiguration surfaces
+    loudly instead of silently falling back to the static ``RP_ID``.
+    """
+    try:
+        config = get_passkey_config()
+    except PasskeyNotEnabledError:
+        return None
+    return config.resolve_rp_id(_request_origin(request))
 
 
 # Passkey rate limiting subjects
@@ -134,6 +167,7 @@ class PasskeyRegistrationOptionsView(PasskeyBaseView):
                 user_id=user.id,
                 username=username,
                 display_name=display_name,
+                rp_id=_resolve_rp_id(request),
             )
 
             blockauth_logger.info("Passkey registration options generated", {"user_id": str(request.user.id)})
@@ -180,6 +214,7 @@ class PasskeyRegistrationVerifyView(PasskeyBaseView):
                 credential_data=request.data,
                 user_id=request.user.id,
                 credential_name=credential_name,
+                expected_rp_id=_resolve_rp_id(request),
             )
 
             # Record success and emit event
@@ -260,6 +295,7 @@ class PasskeyAuthenticationOptionsView(PasskeyBaseView):
             options = service.generate_authentication_options(
                 user_id=user_id,
                 username=username,
+                rp_id=_resolve_rp_id(request),
             )
 
             blockauth_logger.info("Passkey authentication options generated", {"username": username or "discoverable"})
@@ -299,6 +335,7 @@ class PasskeyAuthenticationVerifyView(PasskeyBaseView):
 
             result = service.verify_authentication(
                 credential_data=request.data,
+                expected_rp_id=_resolve_rp_id(request),
             )
 
             # Get user and generate tokens

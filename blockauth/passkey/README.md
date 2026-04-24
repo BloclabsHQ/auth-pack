@@ -59,6 +59,64 @@ urlpatterns = [
 ]
 ```
 
+## Multi-Origin Backends (Per-Request RP_ID)
+
+A single WebAuthn credential is bound to one RP_ID (a registrable domain). That
+matches most deployments: one shell origin per backend. Two common topologies
+break it:
+
+1. **Local dev shell against a deployed backend** — `https://localhost:5173`
+   hitting `https://api.dev.example.com`. The browser requires `rp.id` to be a
+   registrable suffix of `localhost`, not `dev.example.com`.
+2. **Multiple shell origins sharing one backend** — e.g., a staging environment
+   serving `app.staging.example.com` and `app.preview.example.com` with
+   different registrable suffixes.
+
+BlockAuth supports this via two optional settings in `PASSKEY_CONFIG`. Both are
+evaluated per request; the static `RP_ID` is the fallback.
+
+```python
+BLOCK_AUTH_SETTINGS["PASSKEY_CONFIG"] = {
+    "RP_ID": "example.com",  # Static fallback (required)
+
+    # Option 1: static map from request origin to RP_ID.
+    "RP_ID_BY_ORIGIN": {
+        "https://localhost:5173": "localhost",
+        "https://app.example.com": "example.com",
+    },
+
+    # Option 2: dotted path to a callable (origin: str) -> Optional[str].
+    # Runs before the map so it can override it. Return None to fall through.
+    "RP_ID_RESOLVER": "myapp.passkey.resolve_rp_id",
+
+    "ALLOWED_ORIGINS": [
+        "https://localhost:5173",
+        "https://app.example.com",
+    ],
+}
+```
+
+```python
+# myapp/passkey.py
+def resolve_rp_id(origin: str) -> str | None:
+    if origin.endswith(".preview.example.com"):
+        return "preview.example.com"
+    return None  # fall through to RP_ID_BY_ORIGIN / RP_ID
+```
+
+**Resolution precedence:** `RP_ID_RESOLVER(origin)` > `RP_ID_BY_ORIGIN[origin]` >
+`RP_ID` fallback. Views derive the origin from the request's `Origin` header
+(falling back to `Referer`).
+
+**Credential scoping:** Passkeys registered under different RP_IDs are
+separate credentials. A user who registers on `localhost` won't see that
+credential when they visit `app.example.com`. Keep your `RP_ID` consistent
+per environment; use per-request resolution only where the shell origin
+legitimately differs from the deployed RP.
+
+**`ALLOWED_ORIGINS` is unchanged.** Origin verification still uses the
+configured list — the resolver only controls the `rp.id` value.
+
 ## API Endpoints Overview
 
 | Endpoint | Method | Auth | Description |
