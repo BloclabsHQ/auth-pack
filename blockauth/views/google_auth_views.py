@@ -1,4 +1,5 @@
 import logging
+import urllib.parse
 
 import requests
 from django.shortcuts import redirect
@@ -17,6 +18,7 @@ from blockauth.schemas.examples.social_auth import (
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.oauth_state import clear_state_cookie, generate_state, set_state_cookie, verify_state
 from blockauth.utils.social import social_login
 
 logger = logging.getLogger(__name__)
@@ -39,16 +41,20 @@ class GoogleAuthLoginView(APIView):
         if not all([google_client_id, callback_url]):
             raise ValidationError(social_invalid_auth_config.value, 4020)
 
-        google_auth_url = (
-            "https://accounts.google.com/o/oauth2/v2/auth?"
-            "response_type=code&"
-            f"client_id={google_client_id}&"
-            f"redirect_uri={callback_url}&"
-            "scope=email profile&"
-            "prompt=consent"
-        )
+        state = generate_state()
+        params = {
+            "response_type": "code",
+            "client_id": google_client_id,
+            "redirect_uri": callback_url,
+            "scope": "email profile",
+            "prompt": "consent",
+            "state": state,
+        }
+        google_auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
         blockauth_logger.info("Google login attempt", sanitize_log_context(request.GET))
-        return redirect(google_auth_url)
+        response = redirect(google_auth_url)
+        set_state_cookie(response, state)
+        return response
 
 
 class GoogleAuthCallbackView(APIView):
@@ -71,6 +77,10 @@ class GoogleAuthCallbackView(APIView):
 
         if not all([google_client_id, google_client_secret, callback_url]):
             raise ValidationError(social_invalid_auth_config.value, 4020)
+
+        # CSRF protection — must run BEFORE the token exchange so a probe
+        # cannot consume a real authorization code.
+        verify_state(request)
 
         # Exchange authorization code for access token
         token_url = "https://www.googleapis.com/oauth2/v4/token"
@@ -118,7 +128,9 @@ class GoogleAuthCallbackView(APIView):
         try:
             provider_data = {"provider": "google", "user_info": user_info}
             blockauth_logger.success("Google login successful", {"email": email, "name": name})
-            return social_login(email=email, name=name, provider_data=provider_data)
+            response = social_login(email=email, name=name, provider_data=provider_data)
+            clear_state_cookie(response)
+            return response
         except ValidationError as ve:
             blockauth_logger.error(
                 "Google login validation error", {"error": str(ve), "data": sanitize_log_context(request.data)}

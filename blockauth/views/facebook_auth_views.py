@@ -3,7 +3,6 @@ import urllib.parse
 
 import requests
 from django.shortcuts import redirect
-from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.permissions import AllowAny
@@ -19,6 +18,7 @@ from blockauth.schemas.examples.social_auth import (
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.oauth_state import clear_state_cookie, generate_state, set_state_cookie, verify_state
 from blockauth.utils.social import social_login
 
 logger = logging.getLogger(__name__)
@@ -41,18 +41,21 @@ class FacebookAuthLoginView(APIView):
         if not all([facebook_client_id, callback_url]):
             raise ValidationError(social_invalid_auth_config.value, 4020)
 
+        state = generate_state()
         facebook_login_url = "https://www.facebook.com/v11.0/dialog/oauth?"
         params = {
             "client_id": facebook_client_id,
             "redirect_uri": callback_url,
             "scope": "email,public_profile",
             "response_type": "code",
-            "state": f"blockauth#{timezone.now().timestamp()}",
+            "state": state,
             "response_mode": "form_post",
         }
         url = facebook_login_url + urllib.parse.urlencode(params)
         blockauth_logger.info("Facebook login attempt", {"client_id": facebook_client_id, "redirect_uri": callback_url})
-        return redirect(url)
+        response = redirect(url)
+        set_state_cookie(response, state)
+        return response
 
 
 class FacebookAuthCallbackView(APIView):
@@ -75,6 +78,10 @@ class FacebookAuthCallbackView(APIView):
 
         if not all([facebook_client_id, facebook_client_secret, callback_url]):
             raise ValidationError(social_invalid_auth_config.value)
+
+        # CSRF protection — must run BEFORE the token exchange so a probe
+        # cannot consume a real authorization code.
+        verify_state(request)
 
         # Exchange authorization code for access token
         token_url = "https://graph.facebook.com/v11.0/oauth/access_token"
@@ -125,7 +132,9 @@ class FacebookAuthCallbackView(APIView):
             blockauth_logger.success(
                 "Facebook login successful", {"user_id": user_info.get("id"), "email": email, "name": name}
             )
-            return social_login(email=email, name=name, provider_data=provider_data)
+            response = social_login(email=email, name=name, provider_data=provider_data)
+            clear_state_cookie(response)
+            return response
         except ValidationError as ve:
             blockauth_logger.error(
                 "Facebook login validation error", {"error": str(ve), "data": sanitize_log_context(request.data)}
