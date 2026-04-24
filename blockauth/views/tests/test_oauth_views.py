@@ -319,6 +319,39 @@ class TestSocialLoginResponseShape:
         # User was created and is verified (OAuth default)
         assert response.data["user"]["is_verified"] is True
 
+    def test_google_promotes_existing_unverified_user_to_verified(self, create_user):
+        """#533/#537 side-bug: a user who signed up via email/password and
+        never clicked the verification link must get promoted to
+        ``is_verified=True`` when they authenticate via Google, because
+        Google's OIDC response carries an OIDC-verified email claim.
+        Facebook and LinkedIn don't guarantee verified email, so they
+        stay unmodified."""
+        user = create_user(email="existing@test.com", is_verified=False)
+        assert user.is_verified is False
+
+        response = social_login(
+            email="existing@test.com",
+            name="Existing User",
+            provider_data={"provider": "google"},
+        )
+        assert response.status_code == 200
+        user.refresh_from_db()
+        assert user.is_verified is True
+
+    def test_facebook_does_not_promote_unverified_user(self, create_user):
+        """Facebook does not guarantee an OIDC-verified email claim.
+        Leave ``is_verified`` as-is rather than over-trusting the
+        provider."""
+        user = create_user(email="fbunverified@test.com", is_verified=False)
+
+        social_login(
+            email="fbunverified@test.com",
+            name="FB User",
+            provider_data={"provider": "facebook"},
+        )
+        user.refresh_from_db()
+        assert user.is_verified is False
+
     def test_first_oauth_signup_populates_first_name_when_field_exists(self, db):
         """If the user model defines `first_name`, the passed `name`
         should still be populated on first signup — don't regress the

@@ -127,9 +127,13 @@ class TestBasicLoginView:
         assert user_payload["wallets"] == []  # email-first user has no wallet
 
     def test_login_user_payload_wallets_populated_when_linked(self, api_client, create_user):
-        """Issue #131: a user with a linked wallet surfaces the address
-        inside ``wallets`` as a single-row array, alongside the legacy
-        ``wallet_address`` scalar (kept for transitional compatibility)."""
+        """Issue #131 + #537: a user with a linked wallet surfaces the
+        address inside ``wallets`` as a single-row array of
+        ``WalletItem`` objects, alongside the legacy ``wallet_address``
+        scalar (kept for transitional compatibility). The shell's
+        ``@bloclabshq/auth`` Zod schema expects objects, not bare
+        strings — before #537 this endpoint returned ``[address]`` and
+        the schema rejected it."""
         wallet = "0xabc0000000000000000000000000000000000002"
         create_user(
             email="bothwallet@test.com",
@@ -146,7 +150,13 @@ class TestBasicLoginView:
         assert response.status_code == status.HTTP_200_OK
         user_payload = response.data["user"]
         assert user_payload["wallet_address"] == wallet
-        assert user_payload["wallets"] == [wallet]
+        assert len(user_payload["wallets"]) == 1
+        wallet_item = user_payload["wallets"][0]
+        assert wallet_item["address"] == wallet
+        assert wallet_item["chain_id"] == 1
+        assert wallet_item["primary"] is True
+        assert wallet_item["label"] is None
+        assert "linked_at" in wallet_item
         assert user_payload["email"] == "bothwallet@test.com"
 
     def test_login_user_payload_does_not_leak_credentials(self, api_client, create_user):

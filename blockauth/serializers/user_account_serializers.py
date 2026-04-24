@@ -284,6 +284,33 @@ and clients can share a single generated type.
 """
 
 
+class WalletItemSerializer(serializers.Serializer):
+    """One row in the ``user.wallets`` array.
+
+    Shape matches the ``@bloclabshq/auth`` shell ``WalletItem`` Zod schema.
+    ``label`` is nullable because a wallet has no label until the user sets
+    one in dashboard; ``chain_id`` is required (defaults to mainnet = 1 at
+    the builder layer); ``primary`` is always present so the shell can pick
+    a default wallet when multiple rows land. Issue #537: before this row
+    existed, wallets were serialised as bare address strings and the shell
+    schema rejected every login response as a result.
+    """
+
+    address = serializers.CharField(help_text="Ethereum address, 0x-prefixed, lowercase")
+    chain_id = serializers.IntegerField(help_text="EIP-155 chain id (1 = Ethereum mainnet)")
+    linked_at = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="ISO-8601 timestamp the wallet was linked to this account",
+    )
+    label = serializers.CharField(
+        allow_null=True,
+        required=False,
+        help_text="User-set wallet label; null until set in dashboard",
+    )
+    primary = serializers.BooleanField(help_text="True for the account's default wallet")
+
+
 class LoginUserSerializer(serializers.Serializer):
     """User payload embedded in every login response.
 
@@ -326,11 +353,13 @@ class LoginUserSerializer(serializers.Serializer):
         help_text="Ethereum wallet address (null for accounts without a linked wallet)",
     )
     wallets = serializers.ListField(
-        child=serializers.CharField(),
+        child=WalletItemSerializer(),
         help_text=(
-            "Linked wallet addresses. Single-row array derived from "
-            "``wallet_address`` until the user model supports multiples; "
-            "empty when no wallet is linked."
+            "Linked wallets as ``WalletItem`` objects — matches the shell's "
+            "``@bloclabshq/auth`` Zod schema. Single-element array derived "
+            "from ``wallet_address`` until the user model supports multiples; "
+            "empty when no wallet is linked. Issue #537: previously serialised "
+            "as ``string[]``, which the shell schema rejected."
         ),
     )
     # first_name / last_name are optional because the abstract BlockUser

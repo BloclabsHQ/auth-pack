@@ -98,7 +98,12 @@ class TestWalletAuthLoginView:
         assert user_payload["id"] == str(user.id)
         assert user_payload["email"] is None  # wallet-first user
         assert user_payload["wallet_address"] == wallet
-        assert user_payload["wallets"] == [wallet]
+        # #537: wallets is ``WalletItem[]``, not ``string[]``
+        assert len(user_payload["wallets"]) == 1
+        wallet_item = user_payload["wallets"][0]
+        assert wallet_item["address"] == wallet
+        assert wallet_item["chain_id"] == 1
+        assert wallet_item["primary"] is True
         assert user_payload["is_active"] is True
 
     def test_wallet_login_invalid_address_rejected(self, api_client):
