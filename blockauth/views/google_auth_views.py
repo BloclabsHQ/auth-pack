@@ -19,7 +19,10 @@ from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.oauth_state import clear_state_cookie, generate_state, set_state_cookie, verify_state
-from blockauth.utils.social import social_login
+from blockauth.utils.social import SocialLoginResult, social_login_data
+from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
+from blockauth.utils.auth_state import build_user_payload
+from rest_framework import status as drf_status
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -60,10 +63,32 @@ class GoogleAuthLoginView(APIView):
 class GoogleAuthCallbackView(APIView):
     """
     Handles Google OAuth2 callback, exchanges the code for a Google token, and returns JWT tokens.
+
+    Subclass and override :meth:`build_success_response` to ship
+    tokens via HttpOnly cookies + a 302 to the shell origin instead of
+    the default JSON body (BFF pattern — fabric-auth#533).
     """
 
     permission_classes = (AllowAny,)
     authentication_classes = []
+
+    def build_success_response(self, request, result: SocialLoginResult) -> Response:
+        """Default: return the `{access, refresh, user}` JSON body.
+
+        Integrator override (fabric-auth): set HttpOnly cookies carrying
+        the JWTs and return a redirect to the shell origin, so tokens
+        never reach JavaScript or the URL bar. The base implementation
+        is kept for backwards compatibility and for deployments where
+        the callback is consumed programmatically (e.g. mobile SDK).
+        """
+        response_serializer = AuthStateResponseSerializer(
+            {
+                "access": result.access_token,
+                "refresh": result.refresh_token,
+                "user": build_user_payload(result.user),
+            }
+        )
+        return Response(data=response_serializer.data, status=drf_status.HTTP_200_OK)
 
     @extend_schema(**google_auth_callback_schema)
     def get(self, request):
@@ -128,7 +153,8 @@ class GoogleAuthCallbackView(APIView):
         try:
             provider_data = {"provider": "google", "user_info": user_info}
             blockauth_logger.success("Google login successful", {"email": email, "name": name})
-            response = social_login(email=email, name=name, provider_data=provider_data)
+            result = social_login_data(email=email, name=name, provider_data=provider_data)
+            response = self.build_success_response(request, result)
             clear_state_cookie(response)
             return response
         except ValidationError as ve:
