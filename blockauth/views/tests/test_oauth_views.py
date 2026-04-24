@@ -61,10 +61,10 @@ class TestGoogleAuthLoginView:
 @pytest.mark.django_db
 class TestGoogleAuthCallbackView:
 
-    @patch("blockauth.views.google_auth_views.social_login")
+    @patch("blockauth.views.google_auth_views.social_login_data")
     @patch("blockauth.views.google_auth_views.requests.get")
     @patch("blockauth.views.google_auth_views.requests.post")
-    def test_callback_returns_tokens(self, mock_post, mock_get, mock_social_login, api_client):
+    def test_callback_returns_tokens(self, mock_post, mock_get, mock_social_login_data, api_client):
         mock_post.return_value = MagicMock(
             status_code=200,
             json=lambda: {"access_token": "google-token"},
@@ -73,11 +73,21 @@ class TestGoogleAuthCallbackView:
             status_code=200,
             json=lambda: {"email": "google@test.com", "name": "Google User"},
         )
-        from rest_framework.response import Response
 
-        mock_social_login.return_value = Response(
-            {"access": "test-access", "refresh": "test-refresh"},
-            status=200,
+        from blockauth.utils.social import SocialLoginResult
+
+        mock_user = MagicMock()
+        mock_user.id = "01936f4e-1234-7abc-8def-0123456789ab"
+        mock_user.email = "google@test.com"
+        mock_user.is_verified = True
+        mock_user.is_active = True
+        mock_user.wallet_address = None
+        mock_user.date_joined = None
+        mock_social_login_data.return_value = SocialLoginResult(
+            user=mock_user,
+            access_token="test-access",
+            refresh_token="test-refresh",
+            created=False,
         )
         state = _prime_state(api_client)
 
@@ -88,7 +98,7 @@ class TestGoogleAuthCallbackView:
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
-        mock_social_login.assert_called_once()
+        mock_social_login_data.assert_called_once()
         # Success clears the state cookie so it can't be replayed.
         cleared = response.cookies.get(OAUTH_STATE_COOKIE_NAME)
         assert cleared is not None
@@ -164,18 +174,27 @@ class TestFacebookAuthLoginView:
 @pytest.mark.django_db
 class TestFacebookAuthCallbackView:
 
-    @patch("blockauth.views.facebook_auth_views.social_login")
+    @patch("blockauth.views.facebook_auth_views.social_login_data")
     @patch("blockauth.views.facebook_auth_views.requests.get")
-    def test_callback_returns_tokens(self, mock_get, mock_social_login, api_client):
+    def test_callback_returns_tokens(self, mock_get, mock_social_login_data, api_client):
         mock_get.side_effect = [
             MagicMock(status_code=200, json=lambda: {"access_token": "fb-token"}),
             MagicMock(status_code=200, json=lambda: {"email": "fb@test.com", "name": "FB User"}),
         ]
-        from rest_framework.response import Response
+        from blockauth.utils.social import SocialLoginResult
 
-        mock_social_login.return_value = Response(
-            {"access": "test-access", "refresh": "test-refresh"},
-            status=200,
+        mock_user = MagicMock()
+        mock_user.id = "01936f4e-1234-7abc-8def-0123456789ab"
+        mock_user.email = "fb@test.com"
+        mock_user.is_verified = False
+        mock_user.is_active = True
+        mock_user.wallet_address = None
+        mock_user.date_joined = None
+        mock_social_login_data.return_value = SocialLoginResult(
+            user=mock_user,
+            access_token="test-access",
+            refresh_token="test-refresh",
+            created=False,
         )
         state = _prime_state(api_client)
 
@@ -217,10 +236,10 @@ class TestLinkedInAuthLoginView:
 @pytest.mark.django_db
 class TestLinkedInAuthCallbackView:
 
-    @patch("blockauth.views.linkedin_auth_views.social_login")
+    @patch("blockauth.views.linkedin_auth_views.social_login_data")
     @patch("blockauth.views.linkedin_auth_views.requests.get")
     @patch("blockauth.views.linkedin_auth_views.requests.post")
-    def test_callback_returns_tokens(self, mock_post, mock_get, mock_social_login, api_client):
+    def test_callback_returns_tokens(self, mock_post, mock_get, mock_social_login_data, api_client):
         mock_post.return_value = MagicMock(
             status_code=200,
             json=lambda: {"access_token": "li-token"},
@@ -229,11 +248,20 @@ class TestLinkedInAuthCallbackView:
             status_code=200,
             json=lambda: {"email": "li@test.com", "name": "LI User"},
         )
-        from rest_framework.response import Response
+        from blockauth.utils.social import SocialLoginResult
 
-        mock_social_login.return_value = Response(
-            {"access": "test-access", "refresh": "test-refresh"},
-            status=200,
+        mock_user = MagicMock()
+        mock_user.id = "01936f4e-1234-7abc-8def-0123456789ab"
+        mock_user.email = "li@test.com"
+        mock_user.is_verified = False
+        mock_user.is_active = True
+        mock_user.wallet_address = None
+        mock_user.date_joined = None
+        mock_social_login_data.return_value = SocialLoginResult(
+            user=mock_user,
+            access_token="test-access",
+            refresh_token="test-refresh",
+            created=False,
         )
         state = _prime_state(api_client)
 
@@ -253,6 +281,99 @@ class TestLinkedInAuthCallbackView:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_post.assert_not_called()
+
+
+@pytest.mark.django_db
+class TestCallbackSuccessResponseHook:
+    """The BFF-cookie integration (fabric-auth#533) subclasses these
+    callback views and overrides ``build_success_response`` to ship tokens
+    via HttpOnly cookies + a 302 to the shell origin, instead of the
+    default JSON body. These tests pin the hook surface so the override
+    point doesn't silently disappear in a future refactor.
+    """
+
+    @patch("blockauth.views.google_auth_views.social_login_data")
+    @patch("blockauth.views.google_auth_views.requests.get")
+    @patch("blockauth.views.google_auth_views.requests.post")
+    def test_integrator_override_receives_result_and_request(
+        self, mock_post, mock_get, mock_social_login_data, api_client
+    ):
+        """``build_success_response(request, result)`` must receive the
+        full ``SocialLoginResult`` so integrators can read user + tokens
+        and build whatever response shape they need."""
+        from blockauth.utils.social import SocialLoginResult
+        from blockauth.views.google_auth_views import GoogleAuthCallbackView
+
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"access_token": "t"})
+        mock_get.return_value = MagicMock(
+            status_code=200, json=lambda: {"email": "g@test.com", "name": "Google User"}
+        )
+        mock_user = MagicMock(id="01936f4e-0000-7abc-8def-000000000001", email="g@test.com")
+        mock_social_login_data.return_value = SocialLoginResult(
+            user=mock_user,
+            access_token="override-access",
+            refresh_token="override-refresh",
+            created=False,
+        )
+
+        captured = {}
+        original = GoogleAuthCallbackView.build_success_response
+
+        def override(self, request, result):
+            captured["result"] = result
+            captured["request"] = request
+            from django.http import HttpResponseRedirect
+
+            return HttpResponseRedirect("https://shell.example/auth/callback")
+
+        GoogleAuthCallbackView.build_success_response = override
+        try:
+            state = _prime_state(api_client)
+            response = api_client.get(
+                reverse("google-login-callback"),
+                {"code": "c", "state": state},
+            )
+        finally:
+            GoogleAuthCallbackView.build_success_response = original
+
+        assert response.status_code == 302
+        assert response.url == "https://shell.example/auth/callback"
+        assert captured["result"].access_token == "override-access"
+        assert captured["result"].refresh_token == "override-refresh"
+        # The override is a good place to attach cookies — confirm the
+        # state cookie still gets cleared by the view wrapper after the
+        # override returns (belt-and-braces).
+        cleared = response.cookies.get(OAUTH_STATE_COOKIE_NAME)
+        assert cleared is not None
+        assert cleared["max-age"] == 0
+
+
+@pytest.mark.django_db
+class TestStateCookiePolicyConfigurable:
+    """``set_state_cookie`` reads ``BLOCK_AUTH_SETTINGS['OAUTH_STATE_COOKIE_SECURE']``
+    and ``['OAUTH_STATE_COOKIE_SAMESITE']`` so integrators can run over
+    plain http in local dev without patching the library. Defaults stay
+    secure (``secure=True``, ``samesite=Lax``) for deployed TLS envs.
+    """
+
+    def test_default_secure_and_samesite(self, api_client):
+        response = api_client.get(reverse("google-login"))
+        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        assert cookie["secure"]
+        assert cookie["samesite"].lower() == "lax"
+
+    def test_local_dev_can_disable_secure(self, api_client, settings):
+        """Firefox doesn't treat ``http://localhost`` as a secure context,
+        so hardcoded ``secure=True`` breaks local dev on non-Chromium.
+        ``OAUTH_STATE_COOKIE_SECURE=False`` in ``BLOCK_AUTH_SETTINGS``
+        downgrades the cookie for that env."""
+        settings.BLOCK_AUTH_SETTINGS = {
+            **settings.BLOCK_AUTH_SETTINGS,
+            "OAUTH_STATE_COOKIE_SECURE": False,
+        }
+        response = api_client.get(reverse("google-login"))
+        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        assert not cookie["secure"]
 
 
 @pytest.mark.django_db
