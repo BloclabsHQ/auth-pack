@@ -17,6 +17,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.14.0] - 2026-04-24
+
+### Added
+
+- **OAuth `state` parameter for CSRF protection** (#138, fabric-auth#523). Google/Facebook/LinkedIn init flows now generate a 32-byte random token, set it as an HttpOnly `blockauth_oauth_state` cookie (Secure/SameSite env-gated), and mirror it in the `state=` query param. Callbacks verify cookie vs query via `hmac.compare_digest` **before** touching the provider's token endpoint — CSRF probes cannot burn real authorization codes. Cookie cleared on success to prevent replay.
+- **`social_login_data()`** — data-returning variant that returns `SocialLoginResult(user, access, refresh, created)` without building a Response. Enables integrators to BFF-ify the OAuth callback (HttpOnly cookies + 302 to shell) without forking the view.
+- **`build_success_response(request, result)`** hook on Google/Facebook/LinkedIn callback views. Subclass and override to swap the JSON-body default for a redirect + cookies. Base `social_login()` stays as a thin wrapper for backwards compatibility.
+- **`WalletItemSerializer`** — shapes `user.wallets` as `[{address, chain_id, linked_at, label, primary}]`.
+
+### Changed
+
+- **BREAKING: `user.wallets` is now `WalletItem[]` instead of `string[]`** (#139, fabric-auth#537). Bare-string array was rejected by the shell's `@bloclabshq/auth` Zod schema. Every auth endpoint (basic / passwordless / wallet / OAuth) now returns the object shape. Clients reading `wallets[0]` as a string must migrate to `wallets[0].address`.
+- **SIWE wallet-first accounts created as `is_verified=True`** (#139, fabric-auth#537). Cryptographic proof of key control is a stronger ownership guarantee than email click-through verification. Legacy unverified wallet rows self-heal on next SIWE login.
+- **Google OAuth promotes existing unverified users to `is_verified=True`** (#139, fabric-auth#533 side-bug). Google's OIDC response carries a verified-email claim. Facebook and LinkedIn are NOT promoted — no OIDC guarantee there.
+- **`OAUTH_STATE_COOKIE_SECURE` / `OAUTH_STATE_COOKIE_SAMESITE` configurable via `BLOCK_AUTH_SETTINGS`** (#141). Previously hardcoded `secure=True` broke Firefox local http dev (Chrome treats localhost as secure, Firefox doesn't). Defaults remain strict.
+
+### Fixed
+
+- CSRF gap on Google OAuth init (missing `state` param, fabric-auth#523)
+- Predictable-state-never-verified gap on Facebook / LinkedIn callbacks (fabric-auth#523)
+- Shell validation error on wallet-first signup due to `wallets` shape mismatch (fabric-auth#537)
+- `is_verified=False` on wallet-first accounts despite SIWE proof (fabric-auth#537)
+- `is_verified=False` on email-first users who later sign in with Google (fabric-auth#533 side-bug)
+
+---
+
 ## [0.13.0] - 2026-04-20
 
 ### Added
