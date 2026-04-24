@@ -96,10 +96,22 @@ class WalletUserLinker:
         # IntegrityError.
         if auto_create:
             with transaction.atomic():
+                # #537: SIWE proves cryptographic control of the private
+                # key behind this address — that's a stronger ownership
+                # guarantee than email click-through verification. Create
+                # wallet-first accounts as ``is_verified=True`` so
+                # downstream gates on the flag don't bounce the user.
                 user, created = user_model.objects.get_or_create(
                     wallet_address=normalized,
-                    defaults={"is_verified": False},
+                    defaults={"is_verified": True},
                 )
+                # Existing wallet-first accounts created before this
+                # change have ``is_verified=False`` stuck on their row;
+                # promote on any subsequent SIWE login so the legacy
+                # rows heal without a data migration.
+                if not created and not user.is_verified:
+                    user.is_verified = True
+                    user.save(update_fields=["is_verified"])
         else:
             existing = user_model.objects.filter(wallet_address=normalized).first()
             if existing is None:

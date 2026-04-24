@@ -759,6 +759,22 @@ class TestWalletLoginEndpoints:
         # email may be null for wallet-first accounts
         assert "email" in user_payload
 
+        # #537: wallets must be WalletItem[], not string[]. The shell's
+        # @bloclabshq/auth Zod schema rejects bare address strings and
+        # surfaces a "user payload failed validation" error to the user.
+        assert isinstance(user_payload["wallets"], list)
+        assert len(user_payload["wallets"]) == 1
+        wallet_item = user_payload["wallets"][0]
+        assert wallet_item["address"] == _TEST_ADDRESS_LC
+        assert wallet_item["chain_id"] == 1
+        assert wallet_item["primary"] is True
+        assert "linked_at" in wallet_item
+
+        # #537: SIWE proves control of the private key — stronger than
+        # email verification. Wallet-first accounts must be created as
+        # is_verified=True so downstream gates don't bounce them.
+        assert user_payload["is_verified"] is True
+
         replay = client.post(
             reverse("wallet-login"),
             {

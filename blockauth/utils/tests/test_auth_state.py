@@ -69,10 +69,18 @@ class TestWallets:
         assert payload["wallet_address"] is None
 
     def test_wallets_populated_when_set(self):
+        """#537: wallets must be ``WalletItem[]`` not ``string[]`` — the
+        shell's Zod schema rejects bare address strings."""
         address = "0x1234567890abcdef1234567890abcdef12345678"
         payload = build_user_payload(_make_user(wallet_address=address))
-        assert payload["wallets"] == [address]
         assert payload["wallet_address"] == address
+        assert len(payload["wallets"]) == 1
+        item = payload["wallets"][0]
+        assert item["address"] == address
+        assert item["chain_id"] == 1
+        assert item["primary"] is True
+        assert item["label"] is None
+        assert "linked_at" in item
 
 
 class TestFirstLastNameDropWhenFalsy:

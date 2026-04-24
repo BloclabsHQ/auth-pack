@@ -11,6 +11,37 @@ from typing import Tuple
 
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 
+DEFAULT_WALLET_CHAIN_ID = 1
+
+
+def _build_wallet_items(user, date_joined) -> list[dict]:
+    """Shape wallet rows as ``WalletItem`` objects, not bare address strings.
+
+    The ``@bloclabshq/auth`` shell schema expects
+    ``{address, chain_id, linked_at, label, primary}`` objects so the
+    model can grow to many-wallet-per-user without changing the wire
+    shape. Today the ``BlockUser`` abstract has a single
+    ``wallet_address`` column plus ``authentication_types`` list, so we
+    project the single linked address into a one-element array with
+    ``primary=True``. Default chain id is mainnet (1) until downstream
+    user models add a ``wallet_chain_id`` column; ``linked_at`` falls
+    back to ``date_joined`` because no per-wallet link timestamp exists
+    on the abstract user yet. ``label`` is always ``None`` at this
+    layer — dashboards attach labels client-side.
+    """
+    if not getattr(user, "wallet_address", None):
+        return []
+    linked_at = getattr(user, "wallet_linked_at", None) or date_joined
+    return [
+        {
+            "address": user.wallet_address,
+            "chain_id": getattr(user, "wallet_chain_id", None) or DEFAULT_WALLET_CHAIN_ID,
+            "linked_at": linked_at.isoformat() if linked_at else None,
+            "label": getattr(user, "wallet_label", None),
+            "primary": True,
+        }
+    ]
+
 
 def build_user_payload(user) -> dict:
     """Shape the ``user`` block used by every post-auth-state response.
@@ -39,7 +70,7 @@ def build_user_payload(user) -> dict:
         "is_active": getattr(user, "is_active", True),
         "date_joined": date_joined.isoformat() if date_joined else None,
         "wallet_address": user.wallet_address,
-        "wallets": [user.wallet_address] if user.wallet_address else [],
+        "wallets": _build_wallet_items(user, date_joined),
     }
     first_name = getattr(user, "first_name", None)
     if first_name:

@@ -37,6 +37,15 @@ def social_login(email: str, name: str, provider_data: dict) -> Response:
     if provider in [AuthenticationType.GOOGLE, AuthenticationType.FACEBOOK, AuthenticationType.LINKEDIN]:
         user.add_authentication_type(provider)
 
+    # #533/#537 side-bug: Google returns OIDC-verified email claims. If the
+    # account was previously created by email/password and the user never
+    # clicked the verification link, the Google sign-in is proof the address
+    # is theirs — promote so downstream gates on ``is_verified`` don't bounce
+    # them. Only Google guarantees verified email at the OIDC layer;
+    # Facebook/LinkedIn do NOT, so we stay conservative there.
+    if provider == AuthenticationType.GOOGLE and not user.is_verified:
+        user.is_verified = True
+
     user.save()
 
     user_data = model_to_json(user)
