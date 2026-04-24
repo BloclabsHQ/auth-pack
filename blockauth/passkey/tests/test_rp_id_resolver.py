@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import RequestFactory, override_settings
 
-from ..config import PasskeyConfigManager, PasskeyConfiguration
+from ..config import PasskeyConfigManager, PasskeyConfiguration, _config_manager
 from ..constants import (
     AttestationConveyance,
     COSEAlgorithm,
@@ -117,11 +117,13 @@ class ConfigLoaderTests(unittest.TestCase):
     """Loading resolver and map from BLOCK_AUTH_SETTINGS."""
 
     def setUp(self):
-        PasskeyConfigManager._instance = None
+        # Reset both the class cache and the module-level singleton's instance attribute.
         PasskeyConfigManager._config = None
+        _config_manager._config = None
 
     def tearDown(self):
         PasskeyConfigManager._config = None
+        _config_manager._config = None
 
     @override_settings(
         BLOCK_AUTH_SETTINGS={
@@ -292,28 +294,30 @@ class ViewOriginResolutionTests(unittest.TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         PasskeyConfigManager._config = None
+        _config_manager._config = None
 
     def tearDown(self):
         PasskeyConfigManager._config = None
+        _config_manager._config = None
 
-    def test_request_origin_prefers_origin_header(self):
+    def test_request_origin_uses_origin_header(self):
         from ..views import _request_origin
 
         request = self.factory.post(
             "/auth/passkey/register/options/",
             HTTP_ORIGIN="https://localhost:5173",
-            HTTP_REFERER="https://other.test/page",
         )
         self.assertEqual(_request_origin(request), "https://localhost:5173")
 
-    def test_request_origin_falls_back_to_referer(self):
+    def test_request_origin_ignores_referer_header(self):
+        """Referer is not CORS-controlled - it MUST NOT be used as a trust signal."""
         from ..views import _request_origin
 
         request = self.factory.post(
             "/auth/passkey/register/options/",
-            HTTP_REFERER="https://localhost:5173/login",
+            HTTP_REFERER="https://attacker.test/login",
         )
-        self.assertEqual(_request_origin(request), "https://localhost:5173")
+        self.assertEqual(_request_origin(request), "")
 
     def test_request_origin_empty_when_no_headers(self):
         from ..views import _request_origin
@@ -345,3 +349,23 @@ class ViewOriginResolutionTests(unittest.TestCase):
             HTTP_ORIGIN="https://unknown.test",
         )
         self.assertEqual(_resolve_rp_id(request_other), "example.com")
+
+    @override_settings(
+        BLOCK_AUTH_SETTINGS={
+            "FEATURES": {"PASSKEY_AUTH": True},
+            "PASSKEY_CONFIG": {
+                "RP_ID": "example.com",
+                "RP_ID_RESOLVER": "does.not.exist.resolve",
+            },
+        }
+    )
+    def test_resolve_rp_id_propagates_configuration_error(self):
+        """Misconfigured resolver MUST surface loudly, not silently fall back."""
+        from ..views import _resolve_rp_id
+
+        request = self.factory.post(
+            "/auth/passkey/register/options/",
+            HTTP_ORIGIN="https://app.example.com",
+        )
+        with self.assertRaises(ConfigurationError):
+            _resolve_rp_id(request)

@@ -29,40 +29,30 @@ def _request_origin(request) -> str:
     """
     Extract the request Origin for per-request RP_ID resolution.
 
-    Prefers the ``Origin`` header (set by browsers on CORS and same-origin POSTs);
-    falls back to deriving origin from the ``Referer`` header. Returns an empty
-    string when neither is present - ``PasskeyConfiguration.resolve_rp_id`` treats
+    Uses only the ``Origin`` header. Browsers send it on every same-origin and
+    cross-origin POST (including every WebAuthn endpoint here) and servers
+    cannot forge it across a CORS boundary. We deliberately do NOT fall back
+    to ``Referer``: it is not CORS-controlled and can be set to any value by
+    non-browser clients, which would feed untrusted input into the resolver.
+
+    Returns ``""`` when the Origin header is missing; ``resolve_rp_id`` treats
     that as "use the static RP_ID fallback".
     """
-    origin = request.META.get("HTTP_ORIGIN", "") or ""
-    if origin:
-        return origin
-    referer = request.META.get("HTTP_REFERER", "") or ""
-    if referer:
-        # Derive scheme://host[:port] from the Referer URL without pulling urllib.parse fully into the hot path.
-        try:
-            from urllib.parse import urlsplit
-
-            parts = urlsplit(referer)
-            if parts.scheme and parts.netloc:
-                return f"{parts.scheme}://{parts.netloc}"
-        except ValueError:
-            return ""
-    return ""
+    return request.META.get("HTTP_ORIGIN", "") or ""
 
 
 def _resolve_rp_id(request):
     """
     Resolve the RP_ID for the current request.
 
-    Returns ``None`` when the passkey config can't be loaded - in that case the
-    service call below will surface the misconfiguration with its usual error
-    path. Returning ``None`` here lets callers simply pass it through as an
-    optional override.
+    Returns ``None`` only when the passkey feature is disabled. All other
+    errors (``ConfigurationError`` from a bad resolver or malformed
+    ``RP_ID_BY_ORIGIN`` map, etc.) propagate so misconfiguration surfaces
+    loudly instead of silently falling back to the static ``RP_ID``.
     """
     try:
         config = get_passkey_config()
-    except PasskeyError:
+    except PasskeyNotEnabledError:
         return None
     return config.resolve_rp_id(_request_origin(request))
 
