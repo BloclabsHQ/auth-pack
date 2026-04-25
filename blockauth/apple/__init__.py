@@ -1,14 +1,14 @@
 """Apple Sign-In: web flow, native id_token verify, revocation, S2S notifications.
 
-Registered as a separate Django app (label `blockauth_apple`) for the same
-reason `blockauth.social` is — its own migration namespace if any models are
-added later (none in v0.16; the pre_delete signal in Task 10.4 attaches to
-the User model). Drop the deprecated `default_app_config` declaration since
-Django 3.2+ auto-discovers AppConfig.
+`blockauth.apple` carries no Django models (only views, signals, and
+verification helpers), so it doesn't need to be a separate Django app.
+The User-model `pre_delete` revoke signal in `signals.py` is connected by
+the umbrella `BlockAuthConfig.ready()` in `blockauth/apps.py`. Consumers
+keep one INSTALLED_APPS entry (`"blockauth"`) — same as `passkey`/`totp`/
+`social`.
 
-Public exports use a PEP 562 `__getattr__` so model-bearing modules (when
-they land in later tasks) won't be imported during INSTALLED_APPS
-population.
+Public exports use a PEP 562 `__getattr__` to defer any heavy submodule
+imports until first attribute access.
 """
 
 __all__ = []  # populated incrementally as later tasks add public surface

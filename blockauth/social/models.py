@@ -33,7 +33,11 @@ class SocialIdentity(models.Model):
     last_used_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "blockauth_social"
+        # Lives under the umbrella `blockauth` app — same convention as
+        # `passkey` and `totp` sibling sub-packages. Downstream consumers
+        # (e.g. fabric-auth) keep one INSTALLED_APPS entry and one
+        # MIGRATION_MODULES override for the whole package.
+        app_label = "blockauth"
         db_table = "social_identity"
         unique_together = (("provider", "subject"),)
         indexes = [models.Index(fields=["user", "provider"])]

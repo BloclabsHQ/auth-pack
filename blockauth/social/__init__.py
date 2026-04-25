@@ -1,18 +1,15 @@
 """SocialIdentity layer: durable links between OIDC `(provider, subject)` and User.
 
-`blockauth.social` is registered as a separate Django app (label
-`blockauth_social`) — distinct from sibling sub-packages `totp` and `passkey`,
-which share the parent `blockauth` app label. The split is deliberate: the
-`SocialIdentity` table belongs to its own migration namespace so it can be
-introduced (and, if ever needed, retired) without entangling the existing
-`blockauth` migrations.
+`SocialIdentity` lives under the umbrella `blockauth` app (same convention as
+sibling sub-packages `totp` and `passkey`), so consumers only add `"blockauth"`
+to `INSTALLED_APPS` and can override the entire blockauth migration graph via
+one `MIGRATION_MODULES` entry. The model is wired into the app registry by
+`blockauth/models/__init__.py` importing `SocialIdentity` at module load.
 
-Public exports use a PEP 562 `__getattr__` so model-bearing modules are not
-imported at package-load time. Django imports `blockauth.social` while
-populating `INSTALLED_APPS`; eagerly importing `models.py` here would trip
-`AppRegistryNotReady`. Consumers can still write
-`from blockauth.social import SocialIdentityService` — the lookup resolves
-on first attribute access, after the app registry is ready.
+Public exports below use a PEP 562 `__getattr__` so model-bearing modules are
+not imported at package-load time from this `__init__` itself. Consumers can
+still write `from blockauth.social import SocialIdentityService` — the lookup
+resolves on first attribute access, after the app registry is ready.
 """
 
 __all__ = [
