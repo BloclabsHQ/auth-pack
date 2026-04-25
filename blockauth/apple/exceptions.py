@@ -5,14 +5,6 @@ class AppleAuthError(Exception):
     """Base for Apple auth failures."""
 
 
-class AppleStateMismatch(AppleAuthError):
-    """OAuth state cookie did not match the form-post state."""
-
-
-class ApplePKCEMissing(AppleAuthError):
-    """PKCE verifier cookie was absent on callback."""
-
-
 class AppleTokenExchangeFailed(AppleAuthError):
     """Apple's /auth/token endpoint returned non-200.
 
