@@ -305,6 +305,122 @@ class TestFacebookAuthCallbackView:
         mock_get.assert_not_called()
 
 
+@pytest.fixture(autouse=True)
+def _clear_linkedin_verifier_cache():
+    """Stale verifier from a prior override_settings block must not leak
+    across cases — module-level cache keyed by (audiences,) tuple."""
+    from blockauth.views.linkedin_auth_views import _reset_verifier_cache as _li_reset
+
+    _li_reset()
+    yield
+    _li_reset()
+
+
+@pytest.fixture
+def linkedin_settings():
+    """Override `BLOCK_AUTH_SETTINGS` with a deterministic LinkedIn web client
+    config for the Phase-14 refactored flow tests. The test RSA keypair's
+    `aud` (`linkedin-client-id`) must match what the verifier accepts."""
+    with override_settings(
+        BLOCK_AUTH_SETTINGS={
+            "LINKEDIN_CLIENT_ID": "linkedin-client-id",
+            "LINKEDIN_CLIENT_SECRET": "linkedin-secret",
+            "LINKEDIN_REDIRECT_URI": "https://app.example.com/auth/linkedin/callback/",
+            "FEATURES": {"SOCIAL_AUTH": True},
+            "OAUTH_STATE_COOKIE_SECURE": True,
+            "BLOCK_AUTH_USER_MODEL": "tests.TestBlockUser",
+            "ALGORITHM": "HS256",
+            "SECRET_KEY": "test-secret-not-for-production",
+            "AUTH_PROVIDERS": {
+                "LINKEDIN": {
+                    "CLIENT_ID": "linkedin-client-id",
+                    "CLIENT_SECRET": "linkedin-secret",
+                    "REDIRECT_URI": "https://app.example.com/auth/linkedin/callback/",
+                },
+            },
+        }
+    ):
+        yield
+
+
+@pytest.fixture
+def linkedin_jwks_response(jwks_payload_bytes):
+    response = MagicMock(status_code=200, content=jwks_payload_bytes)
+    response.json.return_value = json.loads(jwks_payload_bytes.decode())
+    return response
+
+
+@pytest.mark.django_db
+def test_linkedin_authorize_includes_pkce_and_nonce(linkedin_settings, client):
+    """Authorize URL must carry openid scope, S256 PKCE challenge, and a
+    hashed nonce; the matching cookies must be set so callback can verify."""
+    from urllib.parse import parse_qs, urlparse
+
+    response = client.get("/linkedin/")
+    assert response.status_code == 302
+    parsed = urlparse(response["Location"])
+    qs = parse_qs(parsed.query)
+    assert qs["client_id"] == ["linkedin-client-id"]
+    assert "code_challenge" in qs
+    assert qs["code_challenge_method"] == ["S256"]
+    assert "nonce" in qs
+
+    cookies = response.cookies
+    assert OAUTH_STATE_COOKIE_NAME in cookies
+    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in cookies
+    assert "blockauth_linkedin_nonce" in cookies
+
+
+@pytest.mark.django_db
+def test_linkedin_callback_verifies_id_token(
+    linkedin_settings, client, build_id_token, linkedin_jwks_response
+):
+    """Full round-trip: code-exchange request must include code_verifier
+    (PKCE), id_token claims power user resolution, and the legacy userinfo
+    HTTP call is gone."""
+    init = client.get("/linkedin/")
+    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    pkce_verifier = init.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME].value
+    raw_nonce = init.cookies["blockauth_linkedin_nonce"].value
+    expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
+
+    id_token = build_id_token(
+        {
+            "iss": "https://www.linkedin.com",
+            "aud": "linkedin-client-id",
+            "sub": "linkedin-sub-1",
+            "email": "u@example.com",
+            "email_verified": True,
+            "name": "User Example",
+            "nonce": expected_hash,
+        }
+    )
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {"access_token": "li-access", "id_token": id_token}
+
+    # Use a side_effect spy on requests.get so we can both stub JWKS AND
+    # assert userinfo isn't fetched (the Phase 13 deviation pattern).
+    seen_get_urls = []
+
+    def _get_spy(url, *args, **kwargs):
+        seen_get_urls.append(url)
+        return linkedin_jwks_response
+
+    with patch(
+        "blockauth.views.linkedin_auth_views.requests.post", return_value=token_response
+    ) as mock_post, patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get", side_effect=_get_spy
+    ):
+        callback = client.get(f"/linkedin/callback/?code=auth-code&state={state}")
+
+    assert callback.status_code == 200, callback.content
+    body = callback.json()
+    assert "access" in body and "user" in body
+    assert mock_post.call_args.kwargs["data"]["code_verifier"] == pkce_verifier
+    # Verifier fetched JWKS but no userinfo endpoint was hit.
+    assert all("userinfo" not in url.lower() for url in seen_get_urls)
+
+
 @pytest.mark.django_db
 class TestLinkedInAuthLoginView:
 
@@ -324,42 +440,9 @@ class TestLinkedInAuthLoginView:
 
 @pytest.mark.django_db
 class TestLinkedInAuthCallbackView:
-
-    @patch("blockauth.views.linkedin_auth_views.social_login_data")
-    @patch("blockauth.views.linkedin_auth_views.requests.get")
-    @patch("blockauth.views.linkedin_auth_views.requests.post")
-    def test_callback_returns_tokens(self, mock_post, mock_get, mock_social_login_data, api_client):
-        mock_post.return_value = MagicMock(
-            status_code=200,
-            json=lambda: {"access_token": "li-token"},
-        )
-        mock_get.return_value = MagicMock(
-            status_code=200,
-            json=lambda: {"email": "li@test.com", "name": "LI User"},
-        )
-        from blockauth.utils.social import SocialLoginResult
-
-        mock_user = MagicMock()
-        mock_user.id = "01936f4e-1234-7abc-8def-0123456789ab"
-        mock_user.email = "li@test.com"
-        mock_user.is_verified = False
-        mock_user.is_active = True
-        mock_user.wallet_address = None
-        mock_user.date_joined = None
-        mock_social_login_data.return_value = SocialLoginResult(
-            user=mock_user,
-            access_token="test-access",
-            refresh_token="test-refresh",
-            created=False,
-        )
-        state = _prime_state(api_client)
-
-        response = api_client.get(
-            reverse("linkedin-login-callback"),
-            {"code": "auth-code", "state": state},
-        )
-        assert response.status_code == status.HTTP_200_OK
-        assert "access" in response.data
+    """Negative-path tests for the refactored LinkedIn web callback. Positive
+    path is covered by `test_linkedin_callback_verifies_id_token` above,
+    which exercises the full PKCE + nonce + id_token-verify pipeline."""
 
     @patch("blockauth.views.linkedin_auth_views.requests.post")
     def test_callback_mismatched_state_rejects(self, mock_post, api_client):
