@@ -30,6 +30,10 @@ def hash_raw_nonce(raw_nonce: str) -> str:
 
 
 def set_nonce_cookie(response: HttpResponse, raw_nonce: str, samesite: str | None = None) -> None:
+    # `secure=True` is hardcoded (not driven by OAUTH_STATE_COOKIE_SECURE)
+    # because Apple's form_post callback requires HTTPS — there is no valid
+    # local-http variant of this flow. SameSite default is "None" for the
+    # same reason: Lax cookies are not sent on cross-site POSTs.
     response.set_cookie(
         APPLE_NONCE_COOKIE_NAME,
         raw_nonce,
