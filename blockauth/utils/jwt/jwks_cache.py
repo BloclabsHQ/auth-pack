@@ -97,10 +97,18 @@ class JWKSCache:
 
         # 304 path is unreachable today (we send no conditional headers) but
         # coding it correctly now avoids a regression once ETag /
-        # If-Modified-Since support is added.
+        # If-Modified-Since support is added. Only refresh `_fetched_at` when
+        # we already have keys; a 304 against an empty cache must NOT mark the
+        # empty cache fresh — that would re-introduce the wipe-and-bump bug.
         if response.status_code == 304:
-            self._fetched_at = time.time()
-            return True
+            if self._keys_by_kid:
+                self._fetched_at = time.time()
+                return True
+            logger.warning(
+                "oidc.jwks.fetch_failed",
+                extra={"jwks_uri": self._jwks_uri, "status_code": 304, "reason": "304_with_empty_cache"},
+            )
+            return False
 
         if response.status_code != 200:
             logger.warning(
@@ -112,7 +120,22 @@ class JWKSCache:
             )
             return False
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            logger.warning(
+                "oidc.jwks.parse_failed",
+                extra={
+                    "jwks_uri": self._jwks_uri,
+                    "error_class": exc.__class__.__name__,
+                },
+            )
+            return False
+
         self._keys_by_kid = {jwk["kid"]: jwk for jwk in payload.get("keys", []) if "kid" in jwk}
         self._fetched_at = time.time()
+        logger.info(
+            "oidc.jwks.refresh",
+            extra={"jwks_uri": self._jwks_uri, "key_count": len(self._keys_by_kid)},
+        )
         return True

@@ -126,3 +126,50 @@ def test_network_error_does_not_propagate_raw(rsa_keypair):
     ):
         with pytest.raises(JWKSUnreachable):
             cache.get_key_for_kid(kid)
+
+
+def test_304_with_empty_cache_does_not_pin_empty_state():
+    """304 against an empty cache must NOT mark _fetched_at fresh (would re-introduce wipe-and-bump)."""
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    not_modified = MagicMock(status_code=304)
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=not_modified):
+        with pytest.raises(JWKSUnreachable):
+            cache.get_key_for_kid("any-kid")
+    assert cache._keys_by_kid == {}
+    assert cache._fetched_at == 0.0
+
+
+def test_304_with_populated_cache_refreshes_freshness(jwks_payload_bytes, rsa_keypair):
+    """304 against a populated cache refreshes _fetched_at without touching keys."""
+    _, _, kid = rsa_keypair
+    initial_response = MagicMock()
+    initial_response.status_code = 200
+    initial_response.json.return_value = json.loads(jwks_payload_bytes.decode())
+    not_modified = MagicMock(status_code=304)
+
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get",
+        side_effect=[initial_response, not_modified],
+    ):
+        cache.get_key_for_kid(kid)  # populates cache
+        cache._fetched_at = 0.0  # force stale so the next call refetches
+        # Asking for a present kid after staling: stale-refresh fetch returns 304,
+        # cache stays populated, _fetched_at refreshed, kid still present.
+        key = cache.get_key_for_kid(kid)
+    assert key["kid"] == kid
+    assert cache._keys_by_kid.get(kid) is not None
+    assert cache._fetched_at > 0.0
+
+
+def test_malformed_json_response_does_not_propagate_raw(rsa_keypair):
+    """A 200 with non-JSON body must surface as JWKSUnreachable, not raw ValueError."""
+    _, _, kid = rsa_keypair
+    bad_response = MagicMock(status_code=200)
+    bad_response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=bad_response):
+        with pytest.raises(JWKSUnreachable):
+            cache.get_key_for_kid(kid)
+    assert cache._keys_by_kid == {}
+    assert cache._fetched_at == 0.0
