@@ -6,6 +6,7 @@ from blockauth.utils.jwt.exceptions import (
     KidNotFound,
     NonceMismatch,
     OIDCVerificationError,
+    RequiredClaimMissing,
     SignatureInvalid,
     TokenExpired,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "OIDCTokenVerifier",
     "OIDCVerificationError",
     "OIDCVerifierConfig",
+    "RequiredClaimMissing",
     "SignatureInvalid",
     "TokenExpired",
 ]

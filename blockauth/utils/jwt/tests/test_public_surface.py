@@ -17,6 +17,7 @@ from blockauth.utils.jwt import (  # noqa: F401
     OIDCTokenVerifier,
     OIDCVerificationError,
     OIDCVerifierConfig,
+    RequiredClaimMissing,
     SignatureInvalid,
     TokenExpired,
 )
@@ -37,6 +38,7 @@ def test_public_surface_exports_match_all():
         "OIDCTokenVerifier",
         "OIDCVerificationError",
         "OIDCVerifierConfig",
+        "RequiredClaimMissing",
         "SignatureInvalid",
         "TokenExpired",
     }
@@ -45,27 +47,21 @@ def test_public_surface_exports_match_all():
 
 def test_oidc_subclasses_share_base():
     """All OIDC failure subclasses inherit from OIDCVerificationError so callers
-    can catch broadly with `except OIDCVerificationError`."""
-    from blockauth.utils.jwt import (
-        AlgorithmNotAllowed,
-        AudienceMismatch,
-        IssuerMismatch,
-        JWKSUnreachable,
-        KidNotFound,
-        NonceMismatch,
-        OIDCVerificationError,
-        SignatureInvalid,
-        TokenExpired,
-    )
+    can catch broadly with `except OIDCVerificationError`.
 
-    for sub in (
-        AlgorithmNotAllowed,
-        AudienceMismatch,
-        IssuerMismatch,
-        JWKSUnreachable,
-        KidNotFound,
-        NonceMismatch,
-        SignatureInvalid,
-        TokenExpired,
-    ):
-        assert issubclass(sub, OIDCVerificationError), f"{sub.__name__} does not subclass OIDCVerificationError"
+    Uses __subclasses__() so adding a new subclass without updating __all__
+    will fail this test. (And vice versa.)
+    """
+    import blockauth.utils.jwt as pkg
+    from blockauth.utils.jwt import OIDCVerificationError
+
+    subclasses = OIDCVerificationError.__subclasses__()
+    # Must be at least the 9 currently-known failure modes.
+    assert len(subclasses) >= 9
+
+    for sub in subclasses:
+        assert issubclass(sub, OIDCVerificationError), (
+            f"{sub.__name__} does not subclass OIDCVerificationError"
+        )
+        # Each declared subclass must also be exported.
+        assert sub.__name__ in pkg.__all__, f"{sub.__name__} missing from __all__"

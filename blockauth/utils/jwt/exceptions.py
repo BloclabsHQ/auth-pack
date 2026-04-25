@@ -39,3 +39,7 @@ class NonceMismatch(OIDCVerificationError):
 
 class AlgorithmNotAllowed(OIDCVerificationError):
     """Token header alg is not in OIDCVerifierConfig.algorithms allowlist."""
+
+
+class RequiredClaimMissing(OIDCVerificationError):
+    """A claim required by the verifier configuration is absent from the decoded token."""
