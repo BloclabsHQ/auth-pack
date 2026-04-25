@@ -31,6 +31,7 @@ def pytest_configure():
             "rest_framework",
             "blockauth",
             "blockauth.social",
+            "blockauth.apple",
             "tests",
         ],
         ROOT_URLCONF="blockauth.urls",
