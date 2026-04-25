@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from blockauth.utils.jwt.exceptions import KidNotFound
+from blockauth.utils.jwt.exceptions import JWKSUnreachable, KidNotFound
 from blockauth.utils.jwt.jwks_cache import JWKSCache
 
 
@@ -74,8 +74,55 @@ def test_unknown_kid_succeeds_when_refetch_returns_it(jwks_payload_bytes, rsa_ke
 
 
 def test_jwks_fetch_failure_raises():
+    """Non-200 from JWKS endpoint surfaces as JWKSUnreachable AND preserves (empty) cache state."""
     cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
     failing_response = MagicMock(status_code=500)
     with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=failing_response):
-        with pytest.raises(KidNotFound):
+        with pytest.raises(JWKSUnreachable):
             cache.get_key_for_kid("any-kid")
+    # Cache state untouched — no spurious "fresh empty cache" pinning.
+    assert cache._keys_by_kid == {}
+    assert cache._fetched_at == 0.0
+
+
+def test_transient_5xx_preserves_previously_cached_keys(jwks_payload_bytes, rsa_keypair):
+    """A 5xx after a successful fetch must not wipe the cache or bump _fetched_at.
+
+    Without this, a transient IdP outage would mark the empty cache as fresh and
+    starve legitimate verifications for the entire TTL window.
+    """
+    _, _, kid = rsa_keypair
+    initial_response = MagicMock()
+    initial_response.status_code = 200
+    initial_response.json.return_value = json.loads(jwks_payload_bytes.decode())
+    failing_response = MagicMock(status_code=503)
+
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get",
+        side_effect=[initial_response, failing_response],
+    ):
+        cache.get_key_for_kid(kid)  # populates cache
+        cached_fetched_at_before_503 = cache._fetched_at
+        cache._fetched_at = 0.0  # force the cache to look stale so the next call attempts a fetch
+        with pytest.raises((KidNotFound, JWKSUnreachable)):
+            cache.get_key_for_kid("unknown-kid-rotation-attempt")
+
+    # Original kid still recoverable; _keys_by_kid was not wiped.
+    assert cache._keys_by_kid.get(kid) is not None
+    # _fetched_at was not bumped by the failed fetch (still the value we forced).
+    assert cache._fetched_at == 0.0
+
+
+def test_network_error_does_not_propagate_raw(rsa_keypair):
+    """RequestException from requests.get must surface as JWKSUnreachable, not raw exception."""
+    import requests as _requests
+
+    _, _, kid = rsa_keypair
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get",
+        side_effect=_requests.exceptions.ConnectionError("DNS failure"),
+    ):
+        with pytest.raises(JWKSUnreachable):
+            cache.get_key_for_kid(kid)

@@ -177,6 +177,20 @@ class AlgorithmNotAllowed(OIDCVerificationError):
 
 - [ ] **Step 2: Create `blockauth/utils/jwt/__init__.py`**
 
+> **Note:** This task ships an intermediate `__init__.py` that does NOT yet
+> import `JWKSCache` or the verifier (those modules don't exist yet). Task 1.3
+> adds `JWKSCache` to this file; Task 1.5 adds `OIDCTokenVerifier` and
+> `OIDCVerifierConfig`. The final `__all__` (after Task 1.5) is:
+>
+> ```python
+> __all__ = [
+>     "AlgorithmNotAllowed", "AudienceMismatch", "IssuerMismatch",
+>     "JWKSCache", "JWKSUnreachable", "KidNotFound", "NonceMismatch",
+>     "OIDCTokenVerifier", "OIDCVerificationError", "OIDCVerifierConfig",
+>     "SignatureInvalid", "TokenExpired",
+> ]
+> ```
+
 ```python
 from blockauth.utils.jwt.exceptions import (
     AlgorithmNotAllowed,
@@ -188,19 +202,14 @@ from blockauth.utils.jwt.exceptions import (
     SignatureInvalid,
     TokenExpired,
 )
-from blockauth.utils.jwt.jwks_cache import JWKSCache
-from blockauth.utils.jwt.verifier import OIDCTokenVerifier, OIDCVerifierConfig
 
 __all__ = [
     "AlgorithmNotAllowed",
     "AudienceMismatch",
     "IssuerMismatch",
-    "JWKSCache",
     "KidNotFound",
     "NonceMismatch",
-    "OIDCTokenVerifier",
     "OIDCVerificationError",
-    "OIDCVerifierConfig",
     "SignatureInvalid",
     "TokenExpired",
 ]
@@ -400,12 +409,61 @@ def test_unknown_kid_succeeds_when_refetch_returns_it(jwks_payload_bytes, rsa_ke
 
 
 def test_jwks_fetch_failure_raises():
+    """Non-200 from JWKS endpoint surfaces as JWKSUnreachable AND preserves (empty) cache state."""
     cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
     failing_response = MagicMock(status_code=500)
     with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=failing_response):
-        with pytest.raises(KidNotFound):
+        with pytest.raises(JWKSUnreachable):
             cache.get_key_for_kid("any-kid")
+    # Cache state untouched — no spurious "fresh empty cache" pinning.
+    assert cache._keys_by_kid == {}
+    assert cache._fetched_at == 0.0
+
+
+def test_transient_5xx_preserves_previously_cached_keys(jwks_payload_bytes, rsa_keypair):
+    """A 5xx after a successful fetch must not wipe the cache or bump _fetched_at.
+
+    Without this, a transient IdP outage would mark the empty cache as fresh and
+    starve legitimate verifications for the entire TTL window.
+    """
+    _, _, kid = rsa_keypair
+    initial_response = MagicMock()
+    initial_response.status_code = 200
+    initial_response.json.return_value = json.loads(jwks_payload_bytes.decode())
+    failing_response = MagicMock(status_code=503)
+
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get",
+        side_effect=[initial_response, failing_response],
+    ):
+        cache.get_key_for_kid(kid)  # populates cache
+        cache._fetched_at = 0.0  # force the cache to look stale so the next call attempts a fetch
+        with pytest.raises((KidNotFound, JWKSUnreachable)):
+            cache.get_key_for_kid("unknown-kid-rotation-attempt")
+
+    # Original kid still recoverable; _keys_by_kid was not wiped.
+    assert cache._keys_by_kid.get(kid) is not None
+    # _fetched_at was not bumped by the failed fetch (still the value we forced).
+    assert cache._fetched_at == 0.0
+
+
+def test_network_error_does_not_propagate_raw(rsa_keypair):
+    """RequestException from requests.get must surface as JWKSUnreachable, not raw exception."""
+    import requests as _requests
+
+    _, _, kid = rsa_keypair
+    cache = JWKSCache("https://issuer.example/.well-known/jwks.json")
+    with patch(
+        "blockauth.utils.jwt.jwks_cache.requests.get",
+        side_effect=_requests.exceptions.ConnectionError("DNS failure"),
+    ):
+        with pytest.raises(JWKSUnreachable):
+            cache.get_key_for_kid(kid)
 ```
+
+> **Note:** `JWKSUnreachable` is also imported at the top of this test module
+> alongside `KidNotFound` (added by Task 1.3 alongside the exception split).
 
 - [ ] **Step 2: Run test, verify it fails**
 
@@ -426,6 +484,12 @@ Caches the keys fetched from a provider's JWKS endpoint. On a cache miss for an
 unknown `kid` (e.g. provider rotated keys mid-window), refetches once and looks
 again before reporting failure. Uses a threading lock to serialize concurrent
 refetches so a thundering herd never multiplies the upstream call rate.
+
+Failure policy: a transport-level failure (network error or non-200) leaves
+`_keys_by_kid` and `_fetched_at` untouched. This avoids the failure mode where
+a single transient 5xx wipes a working cache *and* marks the empty cache as
+"fresh" for the entire TTL window. Surfaces as `JWKSUnreachable` when no key
+is available; `KidNotFound` is reserved for "endpoint reachable, kid absent".
 """
 
 import logging
@@ -435,7 +499,7 @@ from typing import Any
 
 import requests
 
-from blockauth.utils.jwt.exceptions import KidNotFound
+from blockauth.utils.jwt.exceptions import JWKSUnreachable, KidNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -457,36 +521,87 @@ class JWKSCache:
             cached = self._keys_by_kid.get(kid)
             if cached is not None and self._is_fresh():
                 return cached
-            self._fetch_and_store()
+
+            # `last_fetch_ok` defaults True so the kid-miss-refetch branch below
+            # still fires when the cache was simply fresh-but-missing-this-kid.
+            last_fetch_ok = True
+            if not self._is_fresh():
+                last_fetch_ok = self._fetch_and_store()
+                cached = self._keys_by_kid.get(kid)
+                if cached is not None:
+                    return cached
+                # If the stale-refresh fetch itself failed, do not immediately
+                # hammer the upstream again — short-circuit to JWKSUnreachable.
+                if not last_fetch_ok:
+                    raise JWKSUnreachable(
+                        f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}"
+                    )
+
+            logger.info("oidc.verify.kid_miss_refetch", extra={"kid": kid})
+            last_fetch_ok = self._fetch_and_store()
             cached = self._keys_by_kid.get(kid)
             if cached is not None:
                 return cached
 
-            logger.info("oidc.verify.kid_miss_refetch", extra={"kid": kid})
-            self._fetch_and_store()
-            cached = self._keys_by_kid.get(kid)
-            if cached is None:
-                raise KidNotFound(f"kid {kid!r} not present in JWKS at {self._jwks_uri}")
-            return cached
+            if not last_fetch_ok:
+                raise JWKSUnreachable(
+                    f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}"
+                )
+            logger.warning(
+                "oidc.verify.kid_not_found",
+                extra={"kid": kid, "jwks_uri": self._jwks_uri},
+            )
+            raise KidNotFound(f"kid {kid!r} not present in JWKS at {self._jwks_uri}")
 
     def _is_fresh(self) -> bool:
         return (time.time() - self._fetched_at) < self._cache_ttl_seconds
 
-    def _fetch_and_store(self) -> None:
-        response = requests.get(self._jwks_uri, timeout=5)
-        if response.status_code != 200:
-            self._keys_by_kid = {}
+    def _fetch_and_store(self) -> bool:
+        """Fetch JWKS and update cache.
+
+        Returns True if a fresh response was successfully consumed (200 or 304),
+        False on any failure. On failure, `_keys_by_kid` and `_fetched_at` are
+        left unchanged so a transient outage cannot evict a working cache.
+        """
+        try:
+            response = requests.get(self._jwks_uri, timeout=10)
+        except requests.exceptions.RequestException as exc:
+            logger.warning(
+                "oidc.jwks.fetch_failed",
+                extra={
+                    "jwks_uri": self._jwks_uri,
+                    "error_class": exc.__class__.__name__,
+                },
+            )
+            return False
+
+        # 304 path is unreachable today (we send no conditional headers) but
+        # coding it correctly now avoids a regression once ETag /
+        # If-Modified-Since support is added.
+        if response.status_code == 304:
             self._fetched_at = time.time()
-            return
+            return True
+
+        if response.status_code != 200:
+            logger.warning(
+                "oidc.jwks.fetch_failed",
+                extra={
+                    "jwks_uri": self._jwks_uri,
+                    "status_code": response.status_code,
+                },
+            )
+            return False
+
         payload = response.json()
         self._keys_by_kid = {jwk["kid"]: jwk for jwk in payload.get("keys", []) if "kid" in jwk}
         self._fetched_at = time.time()
+        return True
 ```
 
 - [ ] **Step 2: Run tests, verify they pass**
 
 Run: `uv run pytest blockauth/utils/jwt/tests/test_jwks_cache.py -v`
-Expected: 5 passed.
+Expected: 7 passed.
 
 - [ ] **Step 3: Commit**
 
@@ -743,7 +858,7 @@ class OIDCTokenVerifier:
 - [ ] **Step 2: Run all OIDC tests**
 
 Run: `uv run pytest blockauth/utils/jwt/tests -v`
-Expected: 13 passed (5 cache + 8 verifier).
+Expected: 15 passed (7 cache + 8 verifier).
 
 - [ ] **Step 3: Commit**
 
@@ -751,6 +866,16 @@ Expected: 13 passed (5 cache + 8 verifier).
 git add blockauth/utils/jwt/verifier.py blockauth/utils/jwt/tests/test_verifier.py
 git commit -m "feat(oidc): OIDCTokenVerifier with alg pinning, audience allowlist, nonce check"
 ```
+
+- [ ] **Step 4: Add smoke test to lock in the public surface**
+
+Now that `OIDCTokenVerifier` and `OIDCVerifierConfig` are exported from
+`blockauth.utils.jwt`, add a one-line smoke test that asserts the public
+surface — this guards against accidental `__all__` regressions in later
+phases (e.g. when refactors temporarily collapse modules).
+
+Run: `uv run python -c "from blockauth.utils.jwt import OIDCTokenVerifier, OIDCVerifierConfig, JWKSCache, JWKSUnreachable, KidNotFound, OIDCVerificationError; print('ok')"`
+Expected output: `ok`.
 
 ---
 

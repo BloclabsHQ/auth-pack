@@ -45,6 +45,7 @@ def jwks_payload_bytes(rsa_keypair):
     numbers = public_key.public_numbers()
     n_bytes = numbers.n.to_bytes((numbers.n.bit_length() + 7) // 8, "big")
     e_bytes = numbers.e.to_bytes((numbers.e.bit_length() + 7) // 8, "big")
+    # RFC 7518 §6.3.1: RSA JWK `n` and `e` are unpadded base64url integers.
     jwk = {
         "kty": "RSA",
         "use": "sig",
