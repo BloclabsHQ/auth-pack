@@ -228,6 +228,18 @@ class GoogleAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
+    def handle_exception(self, exc):
+        # Mirror the Apple callback's defensive cookie cleanup: any error
+        # path must clear the state, PKCE verifier, and Google nonce cookies
+        # so a retry doesn't replay stale credentials. The cookies are
+        # HttpOnly + Secure + 10-min TTL so the leak window is small, but
+        # consistency across providers is worth the few extra lines.
+        response = super().handle_exception(exc)
+        clear_state_cookie(response)
+        clear_pkce_verifier_cookie(response)
+        response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite="Lax")
+        return response
+
     def build_success_response(self, request, result) -> Response:
         """Default: return the `{access, refresh, user}` JSON body.
 

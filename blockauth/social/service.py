@@ -78,7 +78,10 @@ class SocialIdentityService:
         # treat it case-insensitively, and downstream views normalize on
         # ingress). Using __iexact prevents a duplicate User row on
         # already-existing accounts whose email differs only in case.
-        existing_user = User.objects.filter(email__iexact=email).first() if email else None
+        # `.order_by("id")` makes the choice deterministic across replicas if
+        # legacy data has two users sharing the same email modulo case. Without
+        # it, .first() ordering is unspecified.
+        existing_user = User.objects.filter(email__iexact=email).order_by("id").first() if email else None
         if existing_user is not None:
             if not AccountLinkingPolicy.can_link_to_existing_user(
                 provider=provider,

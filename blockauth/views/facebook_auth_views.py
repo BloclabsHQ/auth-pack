@@ -105,6 +105,16 @@ class FacebookAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
+    def handle_exception(self, exc):
+        # Mirror the Apple callback's defensive cookie cleanup: any error
+        # path must clear the state and PKCE verifier cookies so a retry
+        # doesn't replay stale credentials. (No nonce cookie — Facebook is
+        # not OIDC and doesn't carry a nonce.)
+        response = super().handle_exception(exc)
+        clear_state_cookie(response)
+        clear_pkce_verifier_cookie(response)
+        return response
+
     def build_success_response(self, request, result) -> Response:
         serializer = AuthStateResponseSerializer(
             {

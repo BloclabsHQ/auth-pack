@@ -207,6 +207,16 @@ class LinkedInAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
+    def handle_exception(self, exc):
+        # Mirror the Apple callback's defensive cookie cleanup: any error
+        # path must clear the state, PKCE verifier, and LinkedIn nonce
+        # cookies so a retry doesn't replay stale credentials.
+        response = super().handle_exception(exc)
+        clear_state_cookie(response)
+        clear_pkce_verifier_cookie(response)
+        response.delete_cookie(LINKEDIN_NONCE_COOKIE_NAME, samesite="Lax")
+        return response
+
     def build_success_response(self, request, result) -> Response:
         """Default: return the `{access, refresh, user}` JSON body.
 
