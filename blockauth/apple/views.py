@@ -73,6 +73,18 @@ def _samesite_for_callback() -> str:
     return str(apple_setting("APPLE_CALLBACK_COOKIE_SAMESITE") or "None")
 
 
+def _build_auth_state_response(result) -> Response:
+    """Build the standard success response shape for any Apple flow."""
+    serializer = AuthStateResponseSerializer(
+        {
+            "access": result.access_token,
+            "refresh": result.refresh_token,
+            "user": build_user_payload(result.user),
+        }
+    )
+    return Response(data=serializer.data, status=drf_status.HTTP_200_OK)
+
+
 class AppleWebAuthorizeView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
@@ -117,16 +129,6 @@ class AppleWebAuthorizeView(APIView):
 class AppleWebCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
-
-    def build_success_response(self, request, result) -> Response:
-        serializer = AuthStateResponseSerializer(
-            {
-                "access": result.access_token,
-                "refresh": result.refresh_token,
-                "user": build_user_payload(result.user),
-            }
-        )
-        return Response(data=serializer.data, status=drf_status.HTTP_200_OK)
 
     def handle_exception(self, exc):
         # Any error path must clear the state/PKCE/nonce cookies; otherwise
@@ -227,7 +229,7 @@ class AppleWebCallbackView(APIView):
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
 
-        response = self.build_success_response(request, result)
+        response = _build_auth_state_response(result)
         samesite = _samesite_for_callback()
         clear_state_cookie(response, samesite=samesite)
         clear_pkce_verifier_cookie(response, samesite=samesite)
@@ -253,16 +255,6 @@ class AppleNativeVerifyView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
-    def build_success_response(self, request, result) -> Response:
-        serializer = AuthStateResponseSerializer(
-            {
-                "access": result.access_token,
-                "refresh": result.refresh_token,
-                "user": build_user_payload(result.user),
-            }
-        )
-        return Response(data=serializer.data, status=drf_status.HTTP_200_OK)
-
     @extend_schema(**apple_native_verify_schema)
     def post(self, request):
         serializer = AppleNativeVerifyRequestSerializer(data=request.data)
@@ -285,6 +277,11 @@ class AppleNativeVerifyView(APIView):
             except AppleClientSecretConfigError as exc:
                 raise ValidationError({"detail": str(exc)}, 4020)
 
+            # Apple's native auth flow has no redirect_uri originally; pass empty
+            # string to keep the form field present (Apple's token endpoint will
+            # accept the empty value for native code redemption). Production
+            # integrators may also leave APPLE_REDIRECT_URI configured for the web
+            # flow without affecting this code path.
             try:
                 token_response = requests.post(
                     AppleEndpoints.TOKEN,
@@ -315,21 +312,26 @@ class AppleNativeVerifyView(APIView):
                         {"status_code": token_response.status_code},
                     )
 
-        try:
-            user, _, _ = SocialIdentityService().upsert_and_link(
-                provider="apple",
-                subject=claims.sub,
-                email=claims.email,
-                email_verified=claims.email_verified,
-                extra_claims={"is_private_email": claims.is_private_email},
-                refresh_token=refresh_token,
-            )
-        except SocialIdentityConflictError as exc:
-            raise ValidationError({"detail": "Email already linked to another account"}, 4090) from exc
+        # SocialIdentityConflictError (status_code=409) is allowed to propagate
+        # natively to DRF — Apple's policy never auto-links by email, so a
+        # collision with an existing user is a true conflict (RFC 7231 §6.5.8),
+        # not a bad request. Wrapping it as ValidationError (400) would lose
+        # that semantic and make the conflict indistinguishable from a generic
+        # validation failure for clients.
+        user, _, _ = SocialIdentityService().upsert_and_link(
+            provider="apple",
+            subject=claims.sub,
+            email=claims.email,
+            email_verified=claims.email_verified,
+            extra_claims={"is_private_email": claims.is_private_email},
+            refresh_token=refresh_token,
+        )
 
         result = social_login_data(
             email=claims.email or "",
-            name=" ".join(filter(None, [validated.get("first_name", ""), validated.get("last_name", "")])).strip(),
+            name=" ".join(
+                filter(None, [validated.get("first_name") or "", validated.get("last_name") or ""])
+            ).strip(),
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
-        return self.build_success_response(request, result)
+        return _build_auth_state_response(result)
