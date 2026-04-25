@@ -134,6 +134,17 @@ class OIDCTokenVerifier:
         except pyjwt.PyJWTError as exc:
             raise SignatureInvalid(str(exc)) from exc
 
+        if expected_nonce is not None:
+            actual = claims.get("nonce")
+            if not actual or not hmac.compare_digest(str(actual), str(expected_nonce)):
+                raise NonceMismatch("nonce claim missing or did not match")
+
+        # `"email" not in claims` (key presence) — providers do not emit
+        # empty-string or null email claims in practice; if a future provider
+        # does, tighten this to a truthy check.
+        if self._config.require_email_claim and "email" not in claims:
+            raise RequiredClaimMissing("Required `email` claim missing from id_token")
+
         logger.info(
             "oidc.verify.succeeded",
             extra={
@@ -141,13 +152,4 @@ class OIDCTokenVerifier:
                 "audiences": list(self._config.audiences),
             },
         )
-
-        if expected_nonce is not None:
-            actual = claims.get("nonce")
-            if not actual or not hmac.compare_digest(str(actual), str(expected_nonce)):
-                raise NonceMismatch("nonce claim missing or did not match")
-
-        if self._config.require_email_claim and "email" not in claims:
-            raise RequiredClaimMissing("Required `email` claim missing from id_token")
-
         return claims
