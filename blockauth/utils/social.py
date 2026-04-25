@@ -62,14 +62,37 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
     #533 side-bug), fires post-signup / post-login triggers, and mints a
     fresh access/refresh pair. The caller decides the response shape.
     """
-    # Only include `first_name` in defaults if the configured user model
-    # actually defines it. Otherwise get_or_create raises FieldError on
-    # the create path (first OAuth signup for a new email). See #109.
-    defaults = {"email": email, "is_verified": True}
-    if _user_model_has_field("first_name"):
-        defaults["first_name"] = name
+    # OIDC-verified flows (Apple, Google, native + web post-Phase 13) hand us
+    # a `preexisting_user` resolved by `SocialIdentityService.upsert_and_link`
+    # via the (provider, subject) primary key — bypassing email-based
+    # `get_or_create` is the whole point of the SocialIdentity layer
+    # (preventing account-linking bypass when a hostile IdP forges email
+    # claims). Legacy callers that still match by email keep the old
+    # `get_or_create` behavior — `preexisting_user` is optional.
+    #
+    # Defensive: only honor `preexisting_user` when it's an instance of the
+    # configured `BLOCK_AUTH_USER_MODEL`. SocialIdentityService resolves users
+    # via Django's `get_user_model()` (the FK target), which in production
+    # equals `BLOCK_AUTH_USER_MODEL` since integrators set both to the same
+    # class. In test envs where AUTH_USER_MODEL is the default Django User
+    # but BLOCK_AUTH_USER_MODEL points at TestBlockUser, the SocialIdentity
+    # user lacks BlockUser-specific attributes (`is_verified`,
+    # `add_authentication_type`); fall back to email-based `get_or_create`
+    # so the call doesn't AttributeError on assets that only exist on the
+    # BlockUser subclass.
+    preexisting_user = (provider_data or {}).get("preexisting_user") if provider_data else None
+    if preexisting_user is not None and isinstance(preexisting_user, _User):
+        user = preexisting_user
+        created = False
+    else:
+        # Only include `first_name` in defaults if the configured user model
+        # actually defines it. Otherwise get_or_create raises FieldError on
+        # the create path (first OAuth signup for a new email). See #109.
+        defaults = {"email": email, "is_verified": True}
+        if _user_model_has_field("first_name"):
+            defaults["first_name"] = name
 
-    user, created = _User.objects.get_or_create(email=email, defaults=defaults)
+        user, created = _User.objects.get_or_create(email=email, defaults=defaults)
     user.last_login = timezone.now()
 
     # Add authentication type based on provider
