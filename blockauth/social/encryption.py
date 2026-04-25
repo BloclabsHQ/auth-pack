@@ -4,6 +4,13 @@ Each ciphertext blob is `nonce(12 bytes) || ciphertext || tag(16 bytes)` — a
 single bytes value that fits a `BinaryField` on the SocialIdentity model.
 Associated data binds the ciphertext to a specific (provider, subject) so a
 ciphertext from one identity row cannot be replayed onto another.
+
+Nonce-collision bound: random 96-bit nonces have ~2**-32 collision probability
+near 2**32 messages encrypted with the same key (birthday bound). For the
+SocialIdentity use case (one ciphertext per linked identity per rotation, per
+deployment) this is comfortably below the limit. If this class is reused for
+high-volume encryption (e.g. millions of messages per key per day), switch to
+deterministic/counter-based nonces or rotate keys.
 """
 
 import os
@@ -12,6 +19,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 NONCE_BYTES = 12
 KEY_BYTES = 32
+GCM_TAG_BYTES = 16
 
 
 class AESGCMEncryptor:
@@ -26,6 +34,11 @@ class AESGCMEncryptor:
         return nonce + ciphertext_with_tag
 
     def decrypt(self, blob: bytes, associated_data: bytes) -> str:
+        if len(blob) < NONCE_BYTES + GCM_TAG_BYTES:
+            raise ValueError(
+                f"AES-GCM blob too short: got {len(blob)} bytes, "
+                f"need at least {NONCE_BYTES + GCM_TAG_BYTES}"
+            )
         nonce = blob[:NONCE_BYTES]
         ciphertext_with_tag = blob[NONCE_BYTES:]
         plaintext_bytes = self._aesgcm.decrypt(nonce, ciphertext_with_tag, associated_data)
