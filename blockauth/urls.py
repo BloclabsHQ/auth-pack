@@ -217,9 +217,14 @@ urlpatterns = build_urlpatterns()
 # Apple Sign-In (Phase 8 — temporary placement; Phase 16 moves into URL_PATTERN_MAPPINGS)
 # TODO(Phase 16): gate this registration by FEATURES.APPLE_LOGIN via the
 # feature-flag dispatcher above instead of always registering.
-from blockauth.apple.views import AppleWebAuthorizeView, AppleWebCallbackView  # noqa: E402
+from blockauth.apple.views import (  # noqa: E402
+    AppleNativeVerifyView,
+    AppleWebAuthorizeView,
+    AppleWebCallbackView,
+)
 
 urlpatterns += [
     path("apple/", AppleWebAuthorizeView.as_view(), name=URLNames.APPLE_LOGIN),
     path("apple/callback/", AppleWebCallbackView.as_view(), name=URLNames.APPLE_CALLBACK),
+    path("apple/verify/", AppleNativeVerifyView.as_view(), name=URLNames.APPLE_NATIVE_VERIFY),
 ]

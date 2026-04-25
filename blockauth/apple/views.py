@@ -32,7 +32,7 @@ from rest_framework.views import APIView
 from blockauth.apple._settings import apple_setting
 from blockauth.apple.client_secret import apple_client_secret_builder
 from blockauth.apple.constants import AppleEndpoints
-from blockauth.apple.docs import apple_authorize_schema, apple_callback_schema
+from blockauth.apple.docs import apple_authorize_schema, apple_callback_schema, apple_native_verify_schema
 from blockauth.apple.exceptions import (
     AppleClientSecretConfigError,
     AppleIdTokenVerificationFailed,
@@ -47,6 +47,7 @@ from blockauth.apple.nonce import (
     read_nonce_cookie,
     set_nonce_cookie,
 )
+from blockauth.apple.serializers import AppleNativeVerifyRequestSerializer
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.social.exceptions import SocialIdentityConflictError
 from blockauth.social.service import SocialIdentityService
@@ -232,3 +233,103 @@ class AppleWebCallbackView(APIView):
         clear_pkce_verifier_cookie(response, samesite=samesite)
         clear_nonce_cookie(response, samesite=samesite)
         return response
+
+
+class AppleNativeVerifyView(APIView):
+    """Native (mobile / Web One Tap) id_token verification.
+
+    Receives a platform-issued id_token from a mobile / web client that
+    invoked Apple's native auth UI. The client passes the raw nonce that
+    was used to seed the request — we hash it server-side and compare
+    against the id_token's nonce claim (when nonce_supported=True).
+
+    Optional authorization_code: if the client also obtains the auth code
+    (Apple supplies one alongside the id_token), the server redeems it
+    here for a refresh token and stores it AES-GCM-encrypted on the
+    SocialIdentity. This is the only path through which the integrator
+    can later revoke the user's Apple session.
+    """
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def build_success_response(self, request, result) -> Response:
+        serializer = AuthStateResponseSerializer(
+            {
+                "access": result.access_token,
+                "refresh": result.refresh_token,
+                "user": build_user_payload(result.user),
+            }
+        )
+        return Response(data=serializer.data, status=drf_status.HTTP_200_OK)
+
+    @extend_schema(**apple_native_verify_schema)
+    def post(self, request):
+        serializer = AppleNativeVerifyRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        expected_nonce = hash_raw_nonce(validated["raw_nonce"])
+        try:
+            claims = AppleIdTokenVerifier().verify(validated["id_token"], expected_nonce=expected_nonce)
+        except AppleNonceMismatch as exc:
+            raise ValidationError({"detail": str(exc)}, 4055)
+        except AppleIdTokenVerificationFailed as exc:
+            raise ValidationError({"detail": str(exc)}, 4054)
+
+        refresh_token: str | None = None
+        authorization_code = validated.get("authorization_code")
+        if authorization_code:
+            try:
+                client_secret = apple_client_secret_builder.build()
+            except AppleClientSecretConfigError as exc:
+                raise ValidationError({"detail": str(exc)}, 4020)
+
+            try:
+                token_response = requests.post(
+                    AppleEndpoints.TOKEN,
+                    data={
+                        "client_id": apple_setting("APPLE_SERVICES_ID"),
+                        "client_secret": client_secret,
+                        "code": authorization_code,
+                        "grant_type": "authorization_code",
+                        "redirect_uri": apple_setting("APPLE_REDIRECT_URI") or "",
+                    },
+                    timeout=10,
+                )
+            except requests.exceptions.RequestException as exc:
+                # Code redemption is a best-effort enrichment, not a
+                # verification gate. Swallow transport errors with a
+                # warning log and continue without a refresh token —
+                # the id_token-verified user/identity link is still valid.
+                blockauth_logger.warning(
+                    "apple.native.code_redemption_unreachable",
+                    {"error_class": exc.__class__.__name__},
+                )
+            else:
+                if token_response.status_code == 200:
+                    refresh_token = token_response.json().get("refresh_token")
+                else:
+                    blockauth_logger.warning(
+                        "apple.native.code_redemption_failed",
+                        {"status_code": token_response.status_code},
+                    )
+
+        try:
+            user, _, _ = SocialIdentityService().upsert_and_link(
+                provider="apple",
+                subject=claims.sub,
+                email=claims.email,
+                email_verified=claims.email_verified,
+                extra_claims={"is_private_email": claims.is_private_email},
+                refresh_token=refresh_token,
+            )
+        except SocialIdentityConflictError as exc:
+            raise ValidationError({"detail": "Email already linked to another account"}, 4090) from exc
+
+        result = social_login_data(
+            email=claims.email or "",
+            name=" ".join(filter(None, [validated.get("first_name", ""), validated.get("last_name", "")])).strip(),
+            provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
+        )
+        return self.build_success_response(request, result)
