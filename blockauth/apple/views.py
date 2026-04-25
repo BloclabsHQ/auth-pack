@@ -49,7 +49,7 @@ from blockauth.apple.nonce import (
 )
 from blockauth.apple.serializers import AppleNativeVerifyRequestSerializer
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import SocialIdentityConflictError
+from blockauth.social.exceptions import SocialIdentityConflictError  # noqa: F401  intentional: documented as the propagating-409 in callsite comments
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.logger import blockauth_logger
@@ -211,17 +211,19 @@ class AppleWebCallbackView(APIView):
         except AppleIdTokenVerificationFailed as exc:
             raise ValidationError({"detail": str(exc)}, 4054)
 
-        try:
-            user, _, _ = SocialIdentityService().upsert_and_link(
-                provider="apple",
-                subject=claims.sub,
-                email=claims.email,
-                email_verified=claims.email_verified,
-                extra_claims={"is_private_email": claims.is_private_email},
-                refresh_token=refresh_token,
-            )
-        except SocialIdentityConflictError as exc:
-            raise ValidationError({"detail": "Email already linked to another account"}, 4090) from exc
+        # SocialIdentityConflictError extends APIException with
+        # status_code=409 + default_code="SOCIAL_IDENTITY_CONFLICT"; let it
+        # propagate so the HTTP-semantic Conflict (409) reaches the client
+        # rather than being demoted to 400 by an extra ValidationError wrap.
+        # Apple identities never auto-link by email per AccountLinkingPolicy.
+        user, _, _ = SocialIdentityService().upsert_and_link(
+            provider="apple",
+            subject=claims.sub,
+            email=claims.email,
+            email_verified=claims.email_verified,
+            extra_claims={"is_private_email": claims.is_private_email},
+            refresh_token=refresh_token,
+        )
 
         result = social_login_data(
             email=claims.email or "",
