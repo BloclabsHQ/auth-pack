@@ -169,6 +169,151 @@ def test_invalid_jwt_raises(apple_settings, jwks_response):
 
 
 @pytest.mark.django_db
+def test_email_enabled_is_logged_only(apple_settings, build_id_token, jwks_response):
+    """email-enabled is symmetric with email-disabled: log only, no state change."""
+    user = User.objects.create_user(username="enabled_user", email="enabled@example.com", password="pw")
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="001234.enabled",
+        user=user,
+        email_at_link=None,
+        email_verified_at_link=False,
+    )
+
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "email-enabled", "sub": "001234.enabled", "event_time": 1700000010},
+        }
+    )
+
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        result = AppleNotificationService().dispatch(payload_jwt)
+
+    assert result.handled is True
+    assert SocialIdentity.objects.filter(provider="apple", subject="001234.enabled").exists()
+
+
+@pytest.mark.django_db
+def test_account_delete_for_unknown_sub_returns_handled_false(apple_settings, build_id_token, jwks_response):
+    """account-delete for a sub with no matching SocialIdentity returns
+    handled=False without raising. Apple may deliver a stale notification
+    after the integrator already cleaned up; the handler must be idempotent."""
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "account-delete", "sub": "001234.unknown.sub", "event_time": 1700000011},
+        }
+    )
+
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        result = AppleNotificationService().dispatch(payload_jwt)
+
+    assert result.handled is False
+
+
+@pytest.mark.django_db
+def test_trigger_hook_called_with_trimmed_payload(apple_settings, build_id_token, jwks_response):
+    """When APPLE_NOTIFICATION_TRIGGER is configured, the hook is called with
+    {event_type, sub, event_time} only — NOT the full JWT claims."""
+    user = User.objects.create_user(username="trigger_user", email="trigger@example.com", password="pw")
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="001234.trigger",
+        user=user,
+        email_at_link=None,
+        email_verified_at_link=False,
+    )
+
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "consent-revoked", "sub": "001234.trigger", "event_time": 1700000020},
+        }
+    )
+
+    captured: dict = {}
+
+    class _CaptureTrigger:
+        def run(self, payload):
+            captured.update(payload)
+
+    with patch(
+        "blockauth.apple.notification_service.import_string_or_none",
+        return_value=_CaptureTrigger,
+    ), patch(
+        "blockauth.apple.notification_service.apple_setting",
+        side_effect=lambda key, default=None: {
+            "APPLE_SERVICES_ID": "com.example.services",
+            "APPLE_NOTIFICATION_TRIGGER": "_test._CaptureTrigger",
+        }.get(key, default),
+    ), patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        AppleNotificationService().dispatch(payload_jwt)
+
+    assert captured == {
+        "event_type": "consent-revoked",
+        "sub": "001234.trigger",
+        "event_time": 1700000020,
+    }
+    # Critically: the full JWT claims (iss, aud, etc.) must NOT be in the
+    # payload — that's the PII-leak defense the trigger trim implements.
+    assert "claims" not in captured
+    assert "iss" not in captured
+
+
+@pytest.mark.django_db
+def test_trigger_hook_exception_is_swallowed(apple_settings, build_id_token, jwks_response):
+    """A trigger that raises must not crash the dispatch — the webhook MUST
+    return 200 to Apple even when the integrator's hook is buggy."""
+    user = User.objects.create_user(username="boom_user", email="boom@example.com", password="pw")
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="001234.boom",
+        user=user,
+        email_at_link=None,
+        email_verified_at_link=False,
+    )
+
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "consent-revoked", "sub": "001234.boom", "event_time": 1700000030},
+        }
+    )
+
+    class _BoomTrigger:
+        def run(self, payload):
+            raise RuntimeError("trigger explodes")
+
+    with patch(
+        "blockauth.apple.notification_service.import_string_or_none",
+        return_value=_BoomTrigger,
+    ), patch(
+        "blockauth.apple.notification_service.apple_setting",
+        side_effect=lambda key, default=None: {
+            "APPLE_SERVICES_ID": "com.example.services",
+            "APPLE_NOTIFICATION_TRIGGER": "_test._BoomTrigger",
+        }.get(key, default),
+    ), patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        # Must NOT raise.
+        result = AppleNotificationService().dispatch(payload_jwt)
+
+    assert result.event_type == "consent-revoked"
+    assert result.handled is True
+    # The identity was still deleted before the trigger fired (state
+    # changes happen first; trigger is informational).
+    assert not SocialIdentity.objects.filter(provider="apple", subject="001234.boom").exists()
+
+
+@pytest.mark.django_db
 def test_notification_endpoint_returns_200_on_valid_payload(apple_settings, build_id_token, jwks_response, client):
     user = User.objects.create_user(username="end_user", email="end@example.com", password="pw")
     SocialIdentity.objects.create(

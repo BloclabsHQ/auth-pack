@@ -11,6 +11,13 @@ Event handling:
   - consent-revoked -> drop the SocialIdentity for (apple, sub)
   - account-delete  -> if user has no other social identities, delete the User
   - email-disabled / email-enabled -> log only
+
+Trigger contract (APPLE_NOTIFICATION_TRIGGER):
+  Integrators receive a trimmed dict containing only `event_type`, `sub`, and
+  `event_time` — NOT the full decoded JWT claims. This is intentional to
+  reduce the surface for accidental PII leaks if the integrator logs the
+  trigger payload. If the integrator needs additional claim fields, they
+  must extend the trigger contract explicitly here.
 """
 
 import json
@@ -62,12 +69,27 @@ class AppleNotificationService:
             handled = self._handle_account_delete(sub)
         elif event_type in (AppleNotificationEvents.EMAIL_DISABLED, AppleNotificationEvents.EMAIL_ENABLED):
             handled = True
+        else:
+            # Unknown / unsupported event type. Log so integrators see new
+            # event types Apple may add in the future without crashing.
+            logger.warning(
+                "apple.notification.unknown_event_type",
+                extra={"event_type": event_type or "<empty>"},
+            )
 
         trigger_path = apple_setting("APPLE_NOTIFICATION_TRIGGER")
         trigger = import_string_or_none(trigger_path) if trigger_path else None
         if trigger:
             try:
-                trigger().run({"event_type": event_type, "sub": sub, "claims": claims})
+                # Trim the trigger payload to event_type/sub/event_time only.
+                # The full JWT claims are NOT passed — see module docstring.
+                trigger().run(
+                    {
+                        "event_type": event_type,
+                        "sub": sub,
+                        "event_time": events.get("event_time"),
+                    }
+                )
             except Exception as exc:  # never let an integrator hook bring down the webhook
                 logger.error("apple.notification.trigger_failed", extra={"error_class": exc.__class__.__name__})
 
