@@ -858,7 +858,7 @@ class OIDCTokenVerifier:
 - [ ] **Step 2: Run all OIDC tests**
 
 Run: `uv run pytest blockauth/utils/jwt/tests -v`
-Expected: 15 passed (7 cache + 8 verifier).
+Expected: 20 passed (10 cache + 8 verifier + 2 surface).
 
 - [ ] **Step 3: Commit**
 
