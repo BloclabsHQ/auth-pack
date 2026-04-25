@@ -1004,21 +1004,27 @@ git commit -m "feat(social): scaffold SocialIdentity app and conflict exception"
 - [ ] **Step 1: Write failing test**
 
 ```python
-"""SocialIdentity model behaviour: uniqueness, FK cascade, indexes, encryption blob storage."""
+"""SocialIdentity model behaviour: uniqueness, FK cascade, indexes, encryption blob storage.
+
+Uses Django's `get_user_model()` (which resolves to the test environment's
+`auth.User`) — matches the pattern used by `passkey/tests/` and `totp/tests/`
+in this codebase, which also reference `settings.AUTH_USER_MODEL` for the
+user FK in their models.
+"""
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 
 from blockauth.social.models import SocialIdentity
-from blockauth.utils.config import get_block_auth_user_model
 
-User = get_block_auth_user_model()
+User = get_user_model()
 
 
 @pytest.mark.django_db
 def test_provider_subject_uniqueness():
-    user_a = User.objects.create(email="a@example.com")
-    user_b = User.objects.create(email="b@example.com")
+    user_a = User.objects.create_user(username="user_a", email="a@example.com", password="pw")
+    user_b = User.objects.create_user(username="user_b", email="b@example.com", password="pw")
     SocialIdentity.objects.create(
         provider="google", subject="g_sub_1", user=user_a, email_at_link="a@example.com", email_verified_at_link=True
     )
@@ -1030,7 +1036,7 @@ def test_provider_subject_uniqueness():
 
 @pytest.mark.django_db
 def test_user_cascade_deletes_identities():
-    user = User.objects.create(email="c@example.com")
+    user = User.objects.create_user(username="user_c", email="c@example.com", password="pw")
     SocialIdentity.objects.create(
         provider="apple", subject="a_sub_1", user=user, email_at_link="c@example.com", email_verified_at_link=False
     )
@@ -1040,7 +1046,7 @@ def test_user_cascade_deletes_identities():
 
 @pytest.mark.django_db
 def test_encrypted_refresh_token_is_bytes():
-    user = User.objects.create(email="d@example.com")
+    user = User.objects.create_user(username="user_d", email="d@example.com", password="pw")
     blob = b"\x00\x01\x02test-bytes"
     identity = SocialIdentity.objects.create(
         provider="apple",
@@ -1056,7 +1062,7 @@ def test_encrypted_refresh_token_is_bytes():
 
 @pytest.mark.django_db
 def test_one_user_can_have_multiple_providers():
-    user = User.objects.create(email="e@example.com")
+    user = User.objects.create_user(username="user_e", email="e@example.com", password="pw")
     SocialIdentity.objects.create(provider="google", subject="g1", user=user, email_at_link="e@example.com", email_verified_at_link=True)
     SocialIdentity.objects.create(provider="linkedin", subject="l1", user=user, email_at_link="e@example.com", email_verified_at_link=True)
     SocialIdentity.objects.create(provider="apple", subject="a1", user=user, email_at_link="e@example.com", email_verified_at_link=False)
@@ -1087,16 +1093,15 @@ verification path uses to find an existing user without falling back to email.
 plaintext refresh tokens never reach the database.
 """
 
+from django.conf import settings
 from django.db import models
-
-from blockauth.utils.config import get_block_auth_user_model
 
 
 class SocialIdentity(models.Model):
     provider = models.CharField(max_length=20)
     subject = models.CharField(max_length=255)
     user = models.ForeignKey(
-        get_block_auth_user_model(),
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="social_identities",
     )
@@ -1113,10 +1118,25 @@ class SocialIdentity(models.Model):
         indexes = [models.Index(fields=["user", "provider"])]
 ```
 
+The model FK uses `settings.AUTH_USER_MODEL` (the standard Django swappable
+user pattern, matching `blockauth/passkey/models.py` and
+`blockauth/totp/models.py`) rather than a `get_block_auth_user_model()`
+call site. The latter resolves at import time and fights Django's
+swappable-user contract.
+
 - [ ] **Step 2: Generate migration**
 
-Run: `uv run python -m django makemigrations blockauth_social --settings=blockauth.settings`
-Expected: a file `blockauth/social/migrations/0001_initial.py` is created. Inspect it to confirm: `CREATE TABLE social_identity` with the expected columns, the `unique_together` constraint, and the index on `(user, provider)`.
+Since `blockauth/settings.py` is a DRF APISettings wrapper (not a Django
+settings module), use `manage.py` instead — but first add `"blockauth.social"`
+to the INSTALLED_APPS list inside `manage.py`'s `settings.configure(...)`.
+Then run:
+
+    uv run python manage.py makemigrations blockauth_social
+
+Inspect the generated `blockauth/social/migrations/0001_initial.py` and confirm
+it uses `migrations.swappable_dependency(settings.AUTH_USER_MODEL)`,
+`db_table = "social_identity"`, `unique_together` on `(provider, subject)`,
+and an index on `(user, provider)`.
 
 - [ ] **Step 3: Run model tests**
 
@@ -1126,7 +1146,7 @@ Expected: 4 passed.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add blockauth/social/models.py blockauth/social/migrations/0001_initial.py blockauth/social/tests/test_models.py
+git add blockauth/social/models.py blockauth/social/migrations/0001_initial.py blockauth/social/tests/test_models.py manage.py
 git commit -m "feat(social): SocialIdentity model with provider+subject uniqueness"
 ```
 
