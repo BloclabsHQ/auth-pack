@@ -7,7 +7,15 @@ class AppleAuthConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self) -> None:
-        # Signal registration lands in Task 10.4 (pre_delete handler for
-        # Apple revocation). Keeping ready() a no-op until then so the
-        # AppConfig can be registered without depending on signals.py.
-        pass
+        # Connect the pre_delete handler explicitly here (not via a
+        # top-level @receiver decorator in signals.py). The decorator's
+        # `sender=` would resolve at import time, before the app registry
+        # is populated, raising AppRegistryNotReady. Doing the connect()
+        # inside ready() defers the lookup to a point where AUTH_USER_MODEL
+        # is safe to dereference.
+        from django.conf import settings
+        from django.db.models.signals import pre_delete
+
+        from blockauth.apple.signals import revoke_apple_identities
+
+        pre_delete.connect(revoke_apple_identities, sender=settings.AUTH_USER_MODEL)
