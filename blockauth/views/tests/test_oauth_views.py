@@ -177,12 +177,8 @@ def test_google_callback_verifies_id_token_and_links_identity(
         return jwks_response
 
     _track_get.calls = []
-    with patch(
-        "blockauth.views.google_auth_views.requests.post", return_value=token_response
-    ) as mock_post:
-        with patch(
-            "blockauth.utils.jwt.jwks_cache.requests.get", side_effect=_track_get
-        ):
+    with patch("blockauth.views.google_auth_views.requests.post", return_value=token_response) as mock_post:
+        with patch("blockauth.utils.jwt.jwks_cache.requests.get", side_effect=_track_get):
             callback = client.get(f"/google/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content
@@ -194,8 +190,7 @@ def test_google_callback_verifies_id_token_and_links_identity(
     # `requests.get`; the legacy `https://www.googleapis.com/oauth2/v2/userinfo`
     # GET must never appear in the spy.
     userinfo_calls = [
-        call_args for call_args in _track_get.calls
-        if "userinfo" in (call_args[0][0] if call_args[0] else "")
+        call_args for call_args in _track_get.calls if "userinfo" in (call_args[0][0] if call_args[0] else "")
     ]
     assert userinfo_calls == [], "userinfo HTTP call should be gone"
 
@@ -301,6 +296,7 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     assert "access" in body and "user" in body
 
     from blockauth.social.models import SocialIdentity
+
     assert SocialIdentity.objects.filter(provider="facebook", subject="fb_user_123").exists()
 
 
@@ -406,9 +402,7 @@ def test_linkedin_authorize_includes_pkce_and_nonce(linkedin_settings, client):
 
 
 @pytest.mark.django_db
-def test_linkedin_callback_verifies_id_token(
-    linkedin_settings, client, build_id_token, linkedin_jwks_response
-):
+def test_linkedin_callback_verifies_id_token(linkedin_settings, client, build_id_token, linkedin_jwks_response):
     """Full round-trip: code-exchange request must include code_verifier
     (PKCE), id_token claims power user resolution, and the legacy userinfo
     HTTP call is gone."""
@@ -440,10 +434,9 @@ def test_linkedin_callback_verifies_id_token(
         seen_get_urls.append(url)
         return linkedin_jwks_response
 
-    with patch(
-        "blockauth.views.linkedin_auth_views.requests.post", return_value=token_response
-    ) as mock_post, patch(
-        "blockauth.utils.jwt.jwks_cache.requests.get", side_effect=_get_spy
+    with (
+        patch("blockauth.views.linkedin_auth_views.requests.post", return_value=token_response) as mock_post,
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", side_effect=_get_spy),
     ):
         callback = client.get(f"/linkedin/callback/?code=auth-code&state={state}")
 

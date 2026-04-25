@@ -14,7 +14,6 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from django.test import override_settings
 
-from blockauth.apple.constants import AppleEndpoints
 from blockauth.apple.id_token_verifier import _reset_verifier_cache
 from blockauth.apple.nonce import APPLE_NONCE_COOKIE_NAME
 from blockauth.utils.oauth_state import OAUTH_PKCE_VERIFIER_COOKIE_NAME, OAUTH_STATE_COOKIE_NAME
@@ -38,10 +37,14 @@ def es256_keypair():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     return private_pem, public_pem
 
 
@@ -123,8 +126,9 @@ def test_callback_full_flow(apple_settings, client, build_id_token, jwks_payload
     jwks_response = MagicMock(status_code=200, content=jwks_payload_bytes)
     jwks_response.json.return_value = json.loads(jwks_payload_bytes.decode())
 
-    with patch("blockauth.apple.views.requests.post", return_value=token_response) as mock_post, patch(
-        "blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response
+    with (
+        patch("blockauth.apple.views.requests.post", return_value=token_response) as mock_post,
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
     ):
         callback = client.post(
             "/apple/callback/",

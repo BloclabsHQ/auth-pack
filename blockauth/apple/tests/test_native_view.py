@@ -103,9 +103,10 @@ def test_native_verify_redeems_authorization_code(apple_settings, client, build_
     token_response = MagicMock(status_code=200)
     token_response.json.return_value = {"refresh_token": "apple-refresh-from-code"}
 
-    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response), patch(
-        "blockauth.apple.views.requests.post", return_value=token_response
-    ) as mock_post:
+    with (
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch("blockauth.apple.views.requests.post", return_value=token_response) as mock_post,
+    ):
         response = client.post(
             "/apple/verify/",
             data={"id_token": id_token, "raw_nonce": raw_nonce, "authorization_code": "auth-code"},
@@ -168,9 +169,12 @@ def test_native_verify_continues_when_code_redemption_transport_fails(
     jwks_response = MagicMock(status_code=200, content=jwks_payload_bytes)
     jwks_response.json.return_value = json.loads(jwks_payload_bytes.decode())
 
-    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response), patch(
-        "blockauth.apple.views.requests.post",
-        side_effect=_requests.exceptions.ConnectionError("dns failure"),
+    with (
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch(
+            "blockauth.apple.views.requests.post",
+            side_effect=_requests.exceptions.ConnectionError("dns failure"),
+        ),
     ):
         response = client.post(
             "/apple/verify/",
@@ -211,8 +215,9 @@ def test_native_verify_continues_when_code_redemption_returns_4xx(
     failing_response = MagicMock(status_code=400)
     failing_response.json.return_value = {"error": "invalid_grant"}
 
-    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response), patch(
-        "blockauth.apple.views.requests.post", return_value=failing_response
+    with (
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch("blockauth.apple.views.requests.post", return_value=failing_response),
     ):
         response = client.post(
             "/apple/verify/",
@@ -228,9 +233,7 @@ def test_native_verify_continues_when_code_redemption_returns_4xx(
 
 
 @pytest.mark.django_db
-def test_native_verify_nonce_mismatch_returns_4055(
-    apple_settings, client, build_id_token, jwks_payload_bytes
-):
+def test_native_verify_nonce_mismatch_returns_4055(apple_settings, client, build_id_token, jwks_payload_bytes):
     """nonce_supported=True with a mismatched nonce must reject."""
     id_token = build_id_token(
         {

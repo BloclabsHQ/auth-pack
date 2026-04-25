@@ -60,7 +60,14 @@ from blockauth.apple.serializers import (
     AppleServerToServerNotificationRequestSerializer,
 )
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import SocialIdentityConflictError  # noqa: F401  intentional: documented as the propagating-409 in callsite comments
+# SocialIdentityConflictError extends APIException with status_code=409 and
+# is allowed to propagate naturally from the views below — see callsite
+# comments. The import is kept so the symbol resolves for type-checking
+# and so a future change that catches it explicitly doesn't have to re-add
+# the import.
+from blockauth.social.exceptions import (  # noqa: F401
+    SocialIdentityConflictError,
+)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.logger import blockauth_logger
@@ -342,9 +349,7 @@ class AppleNativeVerifyView(APIView):
 
         result = social_login_data(
             email=claims.email or "",
-            name=" ".join(
-                filter(None, [validated.get("first_name") or "", validated.get("last_name") or ""])
-            ).strip(),
+            name=" ".join(filter(None, [validated.get("first_name") or "", validated.get("last_name") or ""])).strip(),
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
         return _build_auth_state_response(result)

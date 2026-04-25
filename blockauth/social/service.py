@@ -58,14 +58,10 @@ class SocialIdentityService:
         User = get_user_model()
 
         existing_identity = (
-            SocialIdentity.objects.select_related("user")
-            .filter(provider=provider, subject=subject)
-            .first()
+            SocialIdentity.objects.select_related("user").filter(provider=provider, subject=subject).first()
         )
         if existing_identity is not None:
-            refresh_changed = self._maybe_store_refresh(
-                existing_identity, refresh_token, provider, subject
-            )
+            refresh_changed = self._maybe_store_refresh(existing_identity, refresh_token, provider, subject)
             update_fields = ["last_used_at"]
             if refresh_changed:
                 update_fields.append("encrypted_refresh_token")
@@ -97,9 +93,7 @@ class SocialIdentityService:
                         "email_domain_only": (email or "").split("@")[-1],
                     },
                 )
-                raise SocialIdentityConflictError(
-                    provider=provider, existing_user_id=str(existing_user.id)
-                )
+                raise SocialIdentityConflictError(provider=provider, existing_user_id=str(existing_user.id))
 
             identity = SocialIdentity(
                 provider=provider,
@@ -193,9 +187,7 @@ class SocialIdentityService:
                 extra={"provider": provider},
             )
             return False
-        identity.encrypted_refresh_token = self._encryptor.encrypt(
-            refresh_token, aad_for(provider, subject)
-        )
+        identity.encrypted_refresh_token = self._encryptor.encrypt(refresh_token, aad_for(provider, subject))
         return True
 
     def _recover_from_race(
@@ -212,9 +204,7 @@ class SocialIdentityService:
         last_used_at on the winner so the caller still sees a "saw this
         identity recently" signal.
         """
-        winner = SocialIdentity.objects.select_related("user").get(
-            provider=provider, subject=subject
-        )
+        winner = SocialIdentity.objects.select_related("user").get(provider=provider, subject=subject)
         # Don't re-store the refresh token here — the winning insert already
         # wrote the AAD-bound ciphertext (or decided not to). Updating it on
         # the loser's behalf would write a different ciphertext under an AAD

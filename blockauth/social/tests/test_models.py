@@ -24,7 +24,11 @@ def test_provider_subject_uniqueness():
     )
     with pytest.raises(IntegrityError):
         SocialIdentity.objects.create(
-            provider="google", subject="g_sub_1", user=user_b, email_at_link="b@example.com", email_verified_at_link=True
+            provider="google",
+            subject="g_sub_1",
+            user=user_b,
+            email_at_link="b@example.com",
+            email_verified_at_link=True,
         )
 
 
@@ -57,9 +61,15 @@ def test_encrypted_refresh_token_is_bytes():
 @pytest.mark.django_db
 def test_one_user_can_have_multiple_providers():
     user = User.objects.create_user(username="user_e", email="e@example.com", password="pw")
-    SocialIdentity.objects.create(provider="google", subject="g1", user=user, email_at_link="e@example.com", email_verified_at_link=True)
-    SocialIdentity.objects.create(provider="linkedin", subject="l1", user=user, email_at_link="e@example.com", email_verified_at_link=True)
-    SocialIdentity.objects.create(provider="apple", subject="a1", user=user, email_at_link="e@example.com", email_verified_at_link=False)
+    SocialIdentity.objects.create(
+        provider="google", subject="g1", user=user, email_at_link="e@example.com", email_verified_at_link=True
+    )
+    SocialIdentity.objects.create(
+        provider="linkedin", subject="l1", user=user, email_at_link="e@example.com", email_verified_at_link=True
+    )
+    SocialIdentity.objects.create(
+        provider="apple", subject="a1", user=user, email_at_link="e@example.com", email_verified_at_link=False
+    )
     assert user.social_identities.count() == 3
 
 

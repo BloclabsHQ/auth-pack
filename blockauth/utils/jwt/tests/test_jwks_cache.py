@@ -103,7 +103,6 @@ def test_transient_5xx_preserves_previously_cached_keys(jwks_payload_bytes, rsa_
         side_effect=[initial_response, failing_response],
     ):
         cache.get_key_for_kid(kid)  # populates cache
-        cached_fetched_at_before_503 = cache._fetched_at
         cache._fetched_at = 0.0  # force the cache to look stale so the next call attempts a fetch
         with pytest.raises((KidNotFound, JWKSUnreachable)):
             cache.get_key_for_kid("unknown-kid-rotation-attempt")

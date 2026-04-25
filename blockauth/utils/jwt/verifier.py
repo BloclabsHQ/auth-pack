@@ -56,13 +56,9 @@ class OIDCVerifierConfig:
         if not self.jwks_uri:
             raise ValueError("OIDCVerifierConfig.jwks_uri must be non-empty")
         if not self.audiences:
-            raise ValueError(
-                "OIDCVerifierConfig.audiences must contain at least one accepted audience"
-            )
+            raise ValueError("OIDCVerifierConfig.audiences must contain at least one accepted audience")
         if not self.algorithms:
-            raise ValueError(
-                "OIDCVerifierConfig.algorithms must contain at least one accepted alg"
-            )
+            raise ValueError("OIDCVerifierConfig.algorithms must contain at least one accepted alg")
         if self.leeway_seconds < 0:
             raise ValueError("OIDCVerifierConfig.leeway_seconds must be >= 0")
 
@@ -108,9 +104,7 @@ class OIDCTokenVerifier:
         jwk = self._jwks_cache.get_key_for_kid(kid)
         algorithm_impl = get_default_algorithms().get(alg)
         if algorithm_impl is None:
-            raise AlgorithmNotAllowed(
-                f"alg {alg!r} has no registered algorithm implementation"
-            )
+            raise AlgorithmNotAllowed(f"alg {alg!r} has no registered algorithm implementation")
         public_key = algorithm_impl.from_jwk(jwk)
 
         try:

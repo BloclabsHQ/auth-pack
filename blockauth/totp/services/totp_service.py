@@ -33,7 +33,6 @@ from ..exceptions import (
     TOTPInvalidSecretError,
     TOTPNotEnabledError,
     TOTPSetupError,
-    TOTPVerificationError,
 )
 from ..storage.base import ITOTP2FAStore, TOTP2FAData
 

@@ -74,7 +74,9 @@ class Features:
 
     # Apple Sign-In
     APPLE_LOGIN = "APPLE_LOGIN"  # Apple Sign-In (web + native + revocation + S2S notifications)
-    GOOGLE_NATIVE_LOGIN = "GOOGLE_NATIVE_LOGIN"  # Google native id_token verify (Credential Manager / iOS / Web One Tap)
+    GOOGLE_NATIVE_LOGIN = (
+        "GOOGLE_NATIVE_LOGIN"  # Google native id_token verify (Credential Manager / iOS / Web One Tap)
+    )
 
     # Passkey/WebAuthn authentication
     PASSKEY_AUTH = "PASSKEY_AUTH"  # WebAuthn/Passkey authentication (Face ID, Touch ID, Windows Hello)

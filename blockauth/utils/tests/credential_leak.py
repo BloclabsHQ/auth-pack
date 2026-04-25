@@ -19,9 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 # Adding a new forbidden field: append it here. No test-file edit needed.
-FORBIDDEN_USER_PAYLOAD_KEYS = frozenset(
-    {"password", "password_hash", "hashed_password"}
-)
+FORBIDDEN_USER_PAYLOAD_KEYS = frozenset({"password", "password_hash", "hashed_password"})
 
 
 def assert_no_credential_leak(user_payload: Any) -> None:
@@ -51,12 +49,12 @@ def _walk(node: Any) -> None:
     """Recurse into ``node``, flagging forbidden keys wherever they appear."""
     if isinstance(node, dict):
         for key, value in node.items():
-            assert key not in FORBIDDEN_USER_PAYLOAD_KEYS, (
-                f"Forbidden credential field '{key}' leaked in login user payload"
-            )
-            assert not (isinstance(key, str) and key.startswith("_")), (
-                f"Private field '{key}' leaked in login user payload"
-            )
+            assert (
+                key not in FORBIDDEN_USER_PAYLOAD_KEYS
+            ), f"Forbidden credential field '{key}' leaked in login user payload"
+            assert not (
+                isinstance(key, str) and key.startswith("_")
+            ), f"Private field '{key}' leaked in login user payload"
             _walk(value)
     elif isinstance(node, (list, tuple)):
         for item in node:

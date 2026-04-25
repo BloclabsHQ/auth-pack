@@ -29,10 +29,14 @@ def es256_keypair():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     return private_pem, public_pem
 
 
@@ -84,7 +88,14 @@ def test_cache_rebuilt_when_near_expiry(configured_settings):
 
 
 def test_missing_team_id_raises():
-    with override_settings(BLOCK_AUTH_SETTINGS={"APPLE_TEAM_ID": None, "APPLE_KEY_ID": "k", "APPLE_PRIVATE_KEY_PEM": "x", "APPLE_SERVICES_ID": "s"}):
+    with override_settings(
+        BLOCK_AUTH_SETTINGS={
+            "APPLE_TEAM_ID": None,
+            "APPLE_KEY_ID": "k",
+            "APPLE_PRIVATE_KEY_PEM": "x",
+            "APPLE_SERVICES_ID": "s",
+        }
+    ):
         with pytest.raises(AppleClientSecretConfigError):
             AppleClientSecretBuilder().build()
 

@@ -27,6 +27,12 @@ Configuration:
 
 from django.urls import path
 
+from blockauth.apple.views import (
+    AppleNativeVerifyView,
+    AppleServerToServerNotificationView,
+    AppleWebAuthorizeView,
+    AppleWebCallbackView,
+)
 from blockauth.constants import Features, SocialProviders, URLNames
 from blockauth.passkey.views import (
     PasskeyAuthenticationOptionsView,
@@ -51,12 +57,6 @@ from blockauth.views.basic_auth_views import (
     SignUpConfirmView,
     SignUpResendOTPView,
     SignUpView,
-)
-from blockauth.apple.views import (
-    AppleNativeVerifyView,
-    AppleServerToServerNotificationView,
-    AppleWebAuthorizeView,
-    AppleWebCallbackView,
 )
 from blockauth.views.facebook_auth_views import FacebookAuthCallbackView, FacebookAuthLoginView
 from blockauth.views.google_auth_views import GoogleAuthCallbackView, GoogleAuthLoginView

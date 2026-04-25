@@ -31,7 +31,9 @@ from rest_framework.views import APIView
 from blockauth.docs.social_auth_docs import linkedin_auth_callback_schema, linkedin_auth_login_schema
 from blockauth.schemas.examples.social_auth import social_authorization_code, social_invalid_auth_config
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import SocialIdentityConflictError  # noqa: F401  intentional: documented as the propagating-409
+from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
+    SocialIdentityConflictError,
+)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.jwt import (

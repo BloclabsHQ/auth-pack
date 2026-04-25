@@ -39,12 +39,18 @@ class AppleClientSecretBuilder:
 
     def build(self) -> str:
         now = time.time()
-        if self._cached_secret is not None and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS:
+        if (
+            self._cached_secret is not None
+            and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS
+        ):
             return self._cached_secret
 
         with self._lock:
             now = time.time()
-            if self._cached_secret is not None and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS:
+            if (
+                self._cached_secret is not None
+                and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS
+            ):
                 return self._cached_secret
 
             team_id, key_id, private_pem, services_id = self._read_settings()
@@ -106,7 +112,8 @@ class AppleClientSecretBuilder:
                 },
             )
             raise AppleClientSecretConfigError(
-                "APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_SERVICES_ID, and APPLE_PRIVATE_KEY_PEM (or APPLE_PRIVATE_KEY_PATH) must all be set"
+                "APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_SERVICES_ID, and "
+                "APPLE_PRIVATE_KEY_PEM (or APPLE_PRIVATE_KEY_PATH) must all be set"
             )
         return team_id, key_id, private_pem, services_id
 

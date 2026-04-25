@@ -53,9 +53,7 @@ class JWKSCache:
                 # If the stale-refresh fetch itself failed, do not immediately
                 # hammer the upstream again — short-circuit to JWKSUnreachable.
                 if not last_fetch_ok:
-                    raise JWKSUnreachable(
-                        f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}"
-                    )
+                    raise JWKSUnreachable(f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}")
 
             logger.info("oidc.verify.kid_miss_refetch", extra={"kid": kid})
             last_fetch_ok = self._fetch_and_store()
@@ -64,9 +62,7 @@ class JWKSCache:
                 return cached
 
             if not last_fetch_ok:
-                raise JWKSUnreachable(
-                    f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}"
-                )
+                raise JWKSUnreachable(f"JWKS at {self._jwks_uri} unreachable; cannot resolve kid {kid!r}")
             logger.warning(
                 "oidc.verify.kid_not_found",
                 extra={"kid": kid, "jwks_uri": self._jwks_uri},

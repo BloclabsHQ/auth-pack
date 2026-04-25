@@ -3,7 +3,6 @@
 import base64
 import hashlib
 
-import pytest
 
 from blockauth.utils.pkce import PkcePair, compute_pkce_challenge, generate_pkce_pair
 
@@ -16,7 +15,9 @@ def test_pair_lengths_match_rfc_7636():
 
 def test_challenge_is_sha256_of_verifier():
     pair = generate_pkce_pair()
-    expected = base64.urlsafe_b64encode(hashlib.sha256(pair.verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    expected = (
+        base64.urlsafe_b64encode(hashlib.sha256(pair.verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    )
     assert pair.challenge == expected
 
 

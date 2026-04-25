@@ -38,8 +38,7 @@ class AESGCMEncryptor:
     def decrypt(self, blob: bytes, associated_data: bytes) -> str:
         if len(blob) < NONCE_BYTES + GCM_TAG_BYTES:
             raise ValueError(
-                f"AES-GCM blob too short: got {len(blob)} bytes, "
-                f"need at least {NONCE_BYTES + GCM_TAG_BYTES}"
+                f"AES-GCM blob too short: got {len(blob)} bytes, " f"need at least {NONCE_BYTES + GCM_TAG_BYTES}"
             )
         nonce = blob[:NONCE_BYTES]
         ciphertext_with_tag = blob[NONCE_BYTES:]

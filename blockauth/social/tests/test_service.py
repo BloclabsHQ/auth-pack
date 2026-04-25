@@ -208,9 +208,7 @@ def test_link_uses_case_insensitive_email_match():
     Pins the __iexact match introduced to avoid duplicate User rows that
     differ only in case.
     """
-    user = User.objects.create_user(
-        username="case_user", email="CaseUser@Gmail.com", password="pw"
-    )
+    user = User.objects.create_user(username="case_user", email="CaseUser@Gmail.com", password="pw")
 
     returned_user, identity, _ = SocialIdentityService().upsert_and_link(
         provider="google",

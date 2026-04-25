@@ -27,7 +27,9 @@ from rest_framework.serializers import CharField, Serializer
 from rest_framework.views import APIView
 
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import SocialIdentityConflictError  # noqa: F401  intentional: documented as the propagating-409
+from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
+    SocialIdentityConflictError,
+)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.jwt import (
@@ -78,9 +80,7 @@ def _reset_verifier_cache() -> None:
 def _build_google_native_verifier() -> OIDCTokenVerifier:
     audiences = tuple(_block_setting("GOOGLE_NATIVE_AUDIENCES") or ())
     if not audiences:
-        raise ValidationError(
-            {"detail": "Google native audiences are not configured"}, 4020
-        )
+        raise ValidationError({"detail": "Google native audiences are not configured"}, 4020)
 
     cached = _verifier_cache.get(audiences)
     if cached is not None:
@@ -141,13 +141,9 @@ class GoogleNativeIdTokenVerifyView(APIView):
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
 
-        expected_nonce = hashlib.sha256(
-            validated["raw_nonce"].encode("utf-8")
-        ).hexdigest()
+        expected_nonce = hashlib.sha256(validated["raw_nonce"].encode("utf-8")).hexdigest()
         try:
-            claims = _build_google_native_verifier().verify(
-                validated["id_token"], expected_nonce=expected_nonce
-            )
+            claims = _build_google_native_verifier().verify(validated["id_token"], expected_nonce=expected_nonce)
         except OIDCVerificationError as exc:
             blockauth_logger.error(
                 "google.native.verify_failed",

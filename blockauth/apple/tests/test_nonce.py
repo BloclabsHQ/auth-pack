@@ -2,7 +2,6 @@
 
 import hashlib
 
-import pytest
 from django.http import HttpResponse
 
 from blockauth.apple.nonce import (

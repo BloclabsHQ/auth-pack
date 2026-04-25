@@ -63,9 +63,7 @@ def test_consent_revoked_deletes_social_identity_only(apple_settings, build_id_t
             "iss": "https://appleid.apple.com",
             "aud": "com.example.services",
             "sub": "apple-server",
-            "events": json.dumps(
-                {"type": "consent-revoked", "sub": "001234.consent", "event_time": 1700000000}
-            ),
+            "events": json.dumps({"type": "consent-revoked", "sub": "001234.consent", "event_time": 1700000000}),
         }
     )
 
@@ -247,16 +245,20 @@ def test_trigger_hook_called_with_trimmed_payload(apple_settings, build_id_token
         def run(self, payload):
             captured.update(payload)
 
-    with patch(
-        "blockauth.apple.notification_service.import_string_or_none",
-        return_value=_CaptureTrigger,
-    ), patch(
-        "blockauth.apple.notification_service.apple_setting",
-        side_effect=lambda key, default=None: {
-            "APPLE_SERVICES_ID": "com.example.services",
-            "APPLE_NOTIFICATION_TRIGGER": "_test._CaptureTrigger",
-        }.get(key, default),
-    ), patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+    with (
+        patch(
+            "blockauth.apple.notification_service.import_string_or_none",
+            return_value=_CaptureTrigger,
+        ),
+        patch(
+            "blockauth.apple.notification_service.apple_setting",
+            side_effect=lambda key, default=None: {
+                "APPLE_SERVICES_ID": "com.example.services",
+                "APPLE_NOTIFICATION_TRIGGER": "_test._CaptureTrigger",
+            }.get(key, default),
+        ),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+    ):
         AppleNotificationService().dispatch(payload_jwt)
 
     assert captured == {
@@ -296,16 +298,20 @@ def test_trigger_hook_exception_is_swallowed(apple_settings, build_id_token, jwk
         def run(self, payload):
             raise RuntimeError("trigger explodes")
 
-    with patch(
-        "blockauth.apple.notification_service.import_string_or_none",
-        return_value=_BoomTrigger,
-    ), patch(
-        "blockauth.apple.notification_service.apple_setting",
-        side_effect=lambda key, default=None: {
-            "APPLE_SERVICES_ID": "com.example.services",
-            "APPLE_NOTIFICATION_TRIGGER": "_test._BoomTrigger",
-        }.get(key, default),
-    ), patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+    with (
+        patch(
+            "blockauth.apple.notification_service.import_string_or_none",
+            return_value=_BoomTrigger,
+        ),
+        patch(
+            "blockauth.apple.notification_service.apple_setting",
+            side_effect=lambda key, default=None: {
+                "APPLE_SERVICES_ID": "com.example.services",
+                "APPLE_NOTIFICATION_TRIGGER": "_test._BoomTrigger",
+            }.get(key, default),
+        ),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+    ):
         # Must NOT raise.
         result = AppleNotificationService().dispatch(payload_jwt)
 

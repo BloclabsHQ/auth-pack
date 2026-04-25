@@ -7,7 +7,6 @@ generated OpenAPI files.
 
 from drf_spectacular.utils import OpenApiResponse
 
-
 apple_authorize_schema = {
     "summary": "Initiate Apple Sign-In (web)",
     "responses": {302: OpenApiResponse(description="Redirect to Apple authorize endpoint")},

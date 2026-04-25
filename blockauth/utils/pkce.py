@@ -32,11 +32,7 @@ def compute_pkce_challenge(verifier: str) -> str:
     tested against the RFC 7636 Appendix B known-answer vector without going
     through the random generator.
     """
-    return (
-        base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
-        .rstrip(b"=")
-        .decode("ascii")
-    )
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
 
 
 def generate_pkce_pair() -> PkcePair:

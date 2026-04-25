@@ -48,7 +48,12 @@ def patch_requests_get(jwks_payload_bytes):
 
 def test_verify_ok(google_config, build_id_token, patch_requests_get):
     token = build_id_token(
-        {"iss": "https://accounts.google.com", "aud": "123-web.apps.googleusercontent.com", "sub": "user-1", "email": "u@example.com"}
+        {
+            "iss": "https://accounts.google.com",
+            "aud": "123-web.apps.googleusercontent.com",
+            "sub": "user-1",
+            "email": "u@example.com",
+        }
     )
     verifier = OIDCTokenVerifier(google_config)
     claims = verifier.verify(token, expected_nonce=None)
@@ -56,9 +61,7 @@ def test_verify_ok(google_config, build_id_token, patch_requests_get):
 
 
 def test_issuer_mismatch_raises(google_config, build_id_token, patch_requests_get):
-    token = build_id_token(
-        {"iss": "https://evil.example", "aud": "123-web.apps.googleusercontent.com", "sub": "x"}
-    )
+    token = build_id_token({"iss": "https://evil.example", "aud": "123-web.apps.googleusercontent.com", "sub": "x"})
     verifier = OIDCTokenVerifier(google_config)
     with pytest.raises(IssuerMismatch):
         verifier.verify(token, expected_nonce=None)

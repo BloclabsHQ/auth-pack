@@ -53,15 +53,12 @@ def test_oidc_subclasses_share_base():
     will fail this test. (And vice versa.)
     """
     import blockauth.utils.jwt as pkg
-    from blockauth.utils.jwt import OIDCVerificationError
 
     subclasses = OIDCVerificationError.__subclasses__()
     # Must be at least the 9 currently-known failure modes.
     assert len(subclasses) >= 9
 
     for sub in subclasses:
-        assert issubclass(sub, OIDCVerificationError), (
-            f"{sub.__name__} does not subclass OIDCVerificationError"
-        )
+        assert issubclass(sub, OIDCVerificationError), f"{sub.__name__} does not subclass OIDCVerificationError"
         # Each declared subclass must also be exported.
         assert sub.__name__ in pkg.__all__, f"{sub.__name__} missing from __all__"

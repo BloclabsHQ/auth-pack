@@ -2,11 +2,12 @@
 Tests for signup views: SignUpView, SignUpResendOTPView, SignUpConfirmView.
 """
 
+from unittest.mock import patch
+
 import pytest
 from django.contrib.auth.hashers import make_password
 from django.urls import reverse
 from rest_framework import status
-from unittest.mock import patch
 
 from blockauth.models.otp import OTP, OTPSubject
 
@@ -61,9 +62,9 @@ class TestSignUpView:
         assert "authentication_types" in otp.payload
 
         # No user row until confirm
-        assert not User.objects.filter(email="new@test.com").exists(), (
-            "fabric_user row must not exist until SignUpConfirmView succeeds"
-        )
+        assert not User.objects.filter(
+            email="new@test.com"
+        ).exists(), "fabric_user row must not exist until SignUpConfirmView succeeds"
 
     def test_signup_otp_send_failure_leaves_no_user_row(self, api_client):
         """If send_otp raises, no orphan fabric_user row is left behind and
@@ -80,9 +81,9 @@ class TestSignUpView:
             response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": _TEST_PW})
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert not User.objects.filter(email="new@test.com").exists(), (
-            "No fabric_user row must remain after a failed OTP send"
-        )
+        assert not User.objects.filter(
+            email="new@test.com"
+        ).exists(), "No fabric_user row must remain after a failed OTP send"
 
     def test_signup_retry_after_otp_send_failure_succeeds(self, api_client):
         """A Creator can retry signup with the same email after a failed OTP send."""
@@ -104,9 +105,7 @@ class TestSignUpView:
             "Retry with the same email must succeed after a failed OTP send — "
             "code 4002 must not fire when no user row exists"
         )
-        assert not User.objects.filter(email="new@test.com").exists(), (
-            "User row must still not exist until confirm"
-        )
+        assert not User.objects.filter(email="new@test.com").exists(), "User row must still not exist until confirm"
 
     def test_signup_duplicate_email_blocked_after_confirm(self, api_client, create_user):
         """Existing verified Creator blocks re-signup (code 4002 unchanged)."""
@@ -177,9 +176,7 @@ class TestSignUpResendOTPView:
             {"identifier": "resend@test.com", "method": "email", "verification_type": "otp"},
         )
 
-        new_otp = OTP.objects.filter(
-            identifier="resend@test.com", subject=OTPSubject.SIGNUP, is_used=False
-        ).first()
+        new_otp = OTP.objects.filter(identifier="resend@test.com", subject=OTPSubject.SIGNUP, is_used=False).first()
         assert new_otp is not None, "New OTP must be created on resend"
         assert new_otp.payload is not None, "New OTP must carry payload from original"
         assert "hashed_password" in new_otp.payload
