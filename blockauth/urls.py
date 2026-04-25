@@ -234,3 +234,16 @@ urlpatterns += [
         name=URLNames.APPLE_NOTIFICATIONS,
     ),
 ]
+
+# Google Native id_token verify (Phase 12 — temporary placement; Phase 16
+# moves this into the feature-flag dispatcher above gated by
+# FEATURES.GOOGLE_NATIVE_LOGIN).
+from blockauth.views.google_native_views import GoogleNativeIdTokenVerifyView  # noqa: E402
+
+urlpatterns += [
+    path(
+        "google/native/verify/",
+        GoogleNativeIdTokenVerifyView.as_view(),
+        name=URLNames.GOOGLE_NATIVE_VERIFY,
+    ),
+]
