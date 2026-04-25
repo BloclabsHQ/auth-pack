@@ -14,6 +14,8 @@ integrator configured.
 
 import logging
 
+from cryptography.exceptions import InvalidTag
+
 from blockauth.apple.revocation_client import AppleRevocationClient
 from blockauth.social.models import SocialIdentity
 from blockauth.social.service import SocialIdentityService
@@ -27,21 +29,27 @@ def revoke_apple_identities(sender, instance, **kwargs):
     Looks up apple SocialIdentity rows for the user being deleted and
     invokes AppleRevocationClient.revoke for each. Decryption and
     revocation failures are logged but never raise — the user deletion
-    must complete regardless of Apple-side state.
+    must complete regardless of Apple-side state. A decryption failure
+    leaves an orphaned refresh token at Apple's side; document this as
+    a known consequence of key rotation in the security standards.
     """
     apple_identities = SocialIdentity.objects.filter(user=instance, provider="apple")
-    if not apple_identities.exists():
-        return
-
     service = SocialIdentityService()
     client = AppleRevocationClient()
     for identity in apple_identities:
         try:
             refresh_token = service.decrypt_refresh_token(identity)
-        except Exception as exc:  # decryption failure should not block deletion
+        except (InvalidTag, ValueError) as exc:
+            # InvalidTag = wrong key / tampered ciphertext.
+            # ValueError = blob shorter than nonce+tag (corrupted column).
+            # Either way: log and continue; do not block user deletion.
             logger.error(
                 "apple.revocation.refresh_decrypt_failed",
-                extra={"user_id": str(instance.id), "error_class": exc.__class__.__name__},
+                extra={
+                    "user_id": str(instance.id),
+                    "social_identity_id": identity.pk,
+                    "error_class": exc.__class__.__name__,
+                },
             )
             continue
         if not refresh_token:

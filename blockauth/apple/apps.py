@@ -18,4 +18,11 @@ class AppleAuthConfig(AppConfig):
 
         from blockauth.apple.signals import revoke_apple_identities
 
-        pre_delete.connect(revoke_apple_identities, sender=settings.AUTH_USER_MODEL)
+        # `dispatch_uid` makes the connect() idempotent. Production ready()
+        # runs once, but tests that re-enter ready() (e.g. via apps.clear_cache())
+        # would otherwise double-register the handler.
+        pre_delete.connect(
+            revoke_apple_identities,
+            sender=settings.AUTH_USER_MODEL,
+            dispatch_uid="blockauth.apple.revoke_apple_identities",
+        )
