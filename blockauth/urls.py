@@ -219,6 +219,7 @@ urlpatterns = build_urlpatterns()
 # feature-flag dispatcher above instead of always registering.
 from blockauth.apple.views import (  # noqa: E402
     AppleNativeVerifyView,
+    AppleServerToServerNotificationView,
     AppleWebAuthorizeView,
     AppleWebCallbackView,
 )
@@ -227,4 +228,9 @@ urlpatterns += [
     path("apple/", AppleWebAuthorizeView.as_view(), name=URLNames.APPLE_LOGIN),
     path("apple/callback/", AppleWebCallbackView.as_view(), name=URLNames.APPLE_CALLBACK),
     path("apple/verify/", AppleNativeVerifyView.as_view(), name=URLNames.APPLE_NATIVE_VERIFY),
+    path(
+        "apple/notifications/",
+        AppleServerToServerNotificationView.as_view(),
+        name=URLNames.APPLE_NOTIFICATIONS,
+    ),
 ]

@@ -17,6 +17,7 @@ SameSite=None requires Secure (TLS); use a tunnel (ngrok/cloudflared) or
 deploy to a TLS-fronted environment to test the callback path.
 """
 
+import json
 import logging
 from urllib.parse import urlencode
 
@@ -32,11 +33,17 @@ from rest_framework.views import APIView
 from blockauth.apple._settings import apple_setting
 from blockauth.apple.client_secret import apple_client_secret_builder
 from blockauth.apple.constants import AppleEndpoints
-from blockauth.apple.docs import apple_authorize_schema, apple_callback_schema, apple_native_verify_schema
+from blockauth.apple.docs import (
+    apple_authorize_schema,
+    apple_callback_schema,
+    apple_native_verify_schema,
+    apple_notifications_schema,
+)
 from blockauth.apple.exceptions import (
     AppleClientSecretConfigError,
     AppleIdTokenVerificationFailed,
     AppleNonceMismatch,
+    AppleNotificationVerificationFailed,
     AppleTokenExchangeFailed,
 )
 from blockauth.apple.id_token_verifier import AppleIdTokenVerifier
@@ -47,7 +54,11 @@ from blockauth.apple.nonce import (
     read_nonce_cookie,
     set_nonce_cookie,
 )
-from blockauth.apple.serializers import AppleNativeVerifyRequestSerializer
+from blockauth.apple.notification_service import AppleNotificationService
+from blockauth.apple.serializers import (
+    AppleNativeVerifyRequestSerializer,
+    AppleServerToServerNotificationRequestSerializer,
+)
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.social.exceptions import SocialIdentityConflictError  # noqa: F401  intentional: documented as the propagating-409 in callsite comments
 from blockauth.social.service import SocialIdentityService
@@ -337,3 +348,38 @@ class AppleNativeVerifyView(APIView):
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
         return _build_auth_state_response(result)
+
+
+class AppleServerToServerNotificationView(APIView):
+    """POST /apple/notifications/ — Apple's server-to-server webhook.
+
+    Apple sends {"payload": "<JWT>"} for events like consent-revoked,
+    account-delete, email-disabled, email-enabled. We verify the JWT
+    inside AppleNotificationService.dispatch and let it apply state
+    changes; on any verification or parse failure, we return 400 with
+    code 4056 so Apple's retry logic gets a meaningful signal.
+    """
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    @extend_schema(**apple_notifications_schema)
+    def post(self, request):
+        serializer = AppleServerToServerNotificationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            AppleNotificationService().dispatch(serializer.validated_data["payload"])
+        except (
+            AppleIdTokenVerificationFailed,
+            AppleNotificationVerificationFailed,
+            json.JSONDecodeError,
+            TypeError,
+            KeyError,
+            ValueError,
+        ) as exc:
+            blockauth_logger.error(
+                "apple.notification.verification_failed",
+                {"error_class": exc.__class__.__name__},
+            )
+            raise ValidationError({"detail": "Invalid Apple notification payload"}, 4056)
+        return Response(status=drf_status.HTTP_200_OK)

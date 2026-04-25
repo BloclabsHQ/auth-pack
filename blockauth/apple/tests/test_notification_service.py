@@ -166,3 +166,45 @@ def test_invalid_jwt_raises(apple_settings, jwks_response):
     with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
         with pytest.raises(Exception):
             AppleNotificationService().dispatch("not-a-jwt")
+
+
+@pytest.mark.django_db
+def test_notification_endpoint_returns_200_on_valid_payload(apple_settings, build_id_token, jwks_response, client):
+    user = User.objects.create_user(username="end_user", email="end@example.com", password="pw")
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="001234.endpoint",
+        user=user,
+        email_at_link=None,
+        email_verified_at_link=False,
+    )
+
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "consent-revoked", "sub": "001234.endpoint", "event_time": 1700000004},
+        }
+    )
+
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        response = client.post(
+            "/apple/notifications/",
+            data={"payload": payload_jwt},
+            content_type="application/json",
+        )
+
+    assert response.status_code == 200, response.content
+
+
+@pytest.mark.django_db
+def test_notification_endpoint_returns_400_on_bad_payload(apple_settings, jwks_response, client):
+    with patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+        response = client.post(
+            "/apple/notifications/",
+            data={"payload": "not-a-real-jwt"},
+            content_type="application/json",
+        )
+
+    assert response.status_code == 400
