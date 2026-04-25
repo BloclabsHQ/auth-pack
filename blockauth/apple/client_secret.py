@@ -7,6 +7,11 @@ console. This module builds and caches that JWT.
 The cache holds a single secret for the process lifetime, rebuilding when the
 remaining lifetime drops below 5 minutes. A `threading.Lock` serializes the
 rebuild so concurrent requests never produce two different in-flight secrets.
+
+The module-level singleton `apple_client_secret_builder` is the canonical
+instance to use from views/services so the cache survives across requests.
+Per-instance caches don't help if every view instantiates its own builder —
+import the singleton instead.
 """
 
 import logging
@@ -55,7 +60,9 @@ class AppleClientSecretBuilder:
                 },
                 private_pem,
                 algorithm="ES256",
-                headers={"kid": key_id, "alg": "ES256"},
+                # alg is also set by the algorithm= kwarg above; explicit kid
+                # is the only header field Apple requires beyond the default.
+                headers={"kid": key_id},
             )
             self._cached_secret = secret
             self._cached_secret_expires_at = float(expires_at)
@@ -72,9 +79,40 @@ class AppleClientSecretBuilder:
         if not private_pem:
             path = block_settings.get("APPLE_PRIVATE_KEY_PATH")
             if path:
-                private_pem = Path(path).read_text()
+                try:
+                    private_pem = Path(path).read_text(encoding="utf-8")
+                except FileNotFoundError as exc:
+                    logger.warning(
+                        "apple.client_secret.config_missing",
+                        extra={"reason": "private_key_path_not_found", "path_suffix": str(path)[-12:]},
+                    )
+                    raise AppleClientSecretConfigError(
+                        f"APPLE_PRIVATE_KEY_PATH is set but file does not exist: {path}"
+                    ) from exc
         if not all([team_id, key_id, services_id, private_pem]):
+            logger.warning(
+                "apple.client_secret.config_missing",
+                extra={
+                    "reason": "required_setting_absent",
+                    "missing": [
+                        name
+                        for name, value in [
+                            ("APPLE_TEAM_ID", team_id),
+                            ("APPLE_KEY_ID", key_id),
+                            ("APPLE_SERVICES_ID", services_id),
+                            ("APPLE_PRIVATE_KEY_PEM_or_PATH", private_pem),
+                        ]
+                        if not value
+                    ],
+                },
+            )
             raise AppleClientSecretConfigError(
                 "APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_SERVICES_ID, and APPLE_PRIVATE_KEY_PEM (or APPLE_PRIVATE_KEY_PATH) must all be set"
             )
         return team_id, key_id, private_pem, services_id
+
+
+# Module-level singleton — import this from views/services so the
+# in-process cache survives across requests instead of re-signing on
+# every call.
+apple_client_secret_builder = AppleClientSecretBuilder()
