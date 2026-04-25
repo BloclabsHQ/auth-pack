@@ -13,7 +13,13 @@ from django.db import models
 
 
 class SocialIdentity(models.Model):
+    # Provider value-set is enforced by `AccountLinkingPolicy` (Task 2.7)
+    # rather than a model-level `choices=` so the policy can register new
+    # providers without requiring a schema migration. Do not add `choices`.
     provider = models.CharField(max_length=20)
+    # Always queried as a composite (provider, subject); the
+    # `unique_together` below produces the required composite index. No
+    # standalone index on `subject` — adding one would be redundant.
     subject = models.CharField(max_length=255)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

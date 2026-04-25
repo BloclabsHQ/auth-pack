@@ -61,3 +61,54 @@ def test_one_user_can_have_multiple_providers():
     SocialIdentity.objects.create(provider="linkedin", subject="l1", user=user, email_at_link="e@example.com", email_verified_at_link=True)
     SocialIdentity.objects.create(provider="apple", subject="a1", user=user, email_at_link="e@example.com", email_verified_at_link=False)
     assert user.social_identities.count() == 3
+
+
+@pytest.mark.django_db
+def test_email_verified_at_link_false_is_storable():
+    """Apple's email is user-supplied and never authoritative — `False` must be a valid value."""
+    user = User.objects.create_user(username="user_f", email="f@example.com", password="pw")
+    identity = SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_sub_3",
+        user=user,
+        email_at_link="f@example.com",
+        email_verified_at_link=False,
+    )
+    identity.refresh_from_db()
+    assert identity.email_verified_at_link is False
+
+
+@pytest.mark.django_db
+def test_email_verified_at_link_required():
+    """Field is non-nullable with no default — omission must fail at the DB constraint."""
+    user = User.objects.create_user(username="user_g", email="g@example.com", password="pw")
+    with pytest.raises(IntegrityError):
+        SocialIdentity.objects.create(
+            provider="google",
+            subject="g_sub_2",
+            user=user,
+            email_at_link="g@example.com",
+            # email_verified_at_link intentionally omitted
+        )
+
+
+@pytest.mark.django_db
+def test_last_used_at_updates_on_save():
+    """auto_now=True must bump last_used_at on every save so SocialIdentityService.upsert
+    can use the column to track recent activity."""
+    import time
+
+    user = User.objects.create_user(username="user_h", email="h@example.com", password="pw")
+    identity = SocialIdentity.objects.create(
+        provider="linkedin",
+        subject="l_sub_1",
+        user=user,
+        email_at_link="h@example.com",
+        email_verified_at_link=True,
+    )
+    initial_last_used_at = identity.last_used_at
+    time.sleep(0.01)  # auto_now resolution can collapse same-microsecond saves
+    identity.email_at_link = "h_new@example.com"
+    identity.save()
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used_at
