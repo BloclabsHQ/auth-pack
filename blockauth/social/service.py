@@ -26,15 +26,13 @@ Plan deviations:
     default), so the integrator's password-reset flow still works.
 """
 
-import base64
 import logging
 from typing import Any
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
-from blockauth.social.encryption import AESGCMEncryptor
+from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
 from blockauth.social.exceptions import SocialIdentityConflictError
 from blockauth.social.linking_policy import AccountLinkingPolicy
 from blockauth.social.models import SocialIdentity
@@ -42,21 +40,9 @@ from blockauth.social.models import SocialIdentity
 logger = logging.getLogger(__name__)
 
 
-def _load_encryptor() -> AESGCMEncryptor | None:
-    block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
-    key_b64 = block_settings.get("SOCIAL_IDENTITY_ENCRYPTION_KEY")
-    if not key_b64:
-        return None
-    return AESGCMEncryptor(base64.b64decode(key_b64))
-
-
-def _aad_for(provider: str, subject: str) -> bytes:
-    return f"social_identity:{provider}:{subject}".encode("utf-8")
-
-
 class SocialIdentityService:
     def __init__(self, encryptor: AESGCMEncryptor | None = None):
-        self._encryptor = encryptor or _load_encryptor()
+        self._encryptor = encryptor or load_encryptor()
 
     @transaction.atomic
     def upsert_and_link(
@@ -77,15 +63,26 @@ class SocialIdentityService:
             .first()
         )
         if existing_identity is not None:
-            self._maybe_store_refresh(existing_identity, refresh_token, provider, subject)
-            existing_identity.save(update_fields=["last_used_at", "encrypted_refresh_token"])
+            refresh_changed = self._maybe_store_refresh(
+                existing_identity, refresh_token, provider, subject
+            )
+            update_fields = ["last_used_at"]
+            if refresh_changed:
+                update_fields.append("encrypted_refresh_token")
+            existing_identity.save(update_fields=update_fields)
             logger.info(
                 "social_identity.matched_existing_subject",
                 extra={"provider": provider, "user_id": str(existing_identity.user.id)},
             )
             return existing_identity.user, existing_identity, False
 
-        existing_user = User.objects.filter(email=email).first() if email else None
+        # Case-insensitive email match: a stored "CaseUser@Gmail.com" must still
+        # match an IdP-returned "caseuser@gmail.com" (RFC 5321 §2.4 — local-part
+        # is technically case-sensitive, but virtually all real mail providers
+        # treat it case-insensitively, and downstream views normalize on
+        # ingress). Using __iexact prevents a duplicate User row on
+        # already-existing accounts whose email differs only in case.
+        existing_user = User.objects.filter(email__iexact=email).first() if email else None
         if existing_user is not None:
             if not AccountLinkingPolicy.can_link_to_existing_user(
                 provider=provider,
@@ -112,7 +109,15 @@ class SocialIdentityService:
                 email_verified_at_link=email_verified,
             )
             self._maybe_store_refresh(identity, refresh_token, provider, subject)
-            identity.save()
+            try:
+                identity.save()
+            except IntegrityError:
+                # Concurrency race: another sign-in for the same (provider,
+                # subject) won the unique-constraint coin flip. Re-fetch the
+                # winner and return that. The @transaction.atomic decorator
+                # rolls back any half-applied state from this call. (See
+                # `_recover_from_race` for details.)
+                return self._recover_from_race(provider, subject, refresh_token)
             logger.info(
                 "social_identity.linked_to_existing_user",
                 extra={
@@ -144,7 +149,14 @@ class SocialIdentityService:
             email_verified_at_link=email_verified,
         )
         self._maybe_store_refresh(identity, refresh_token, provider, subject)
-        identity.save()
+        try:
+            identity.save()
+        except IntegrityError:
+            # Lost the race against a concurrent sign-in. The @transaction.atomic
+            # decorator on this method ensures the just-created `new_user`
+            # row is rolled back along with everything else, so we won't leak
+            # an orphan User. Re-fetch the winning identity and return it.
+            return self._recover_from_race(provider, subject, refresh_token)
         logger.info(
             "social_identity.created_new_user",
             extra={"provider": provider, "user_id": str(new_user.id)},
@@ -156,7 +168,7 @@ class SocialIdentityService:
             return None
         return self._encryptor.decrypt(
             bytes(identity.encrypted_refresh_token),
-            _aad_for(identity.provider, identity.subject),
+            aad_for(identity.provider, identity.subject),
         )
 
     def _maybe_store_refresh(
@@ -165,18 +177,54 @@ class SocialIdentityService:
         refresh_token: str | None,
         provider: str,
         subject: str,
-    ) -> None:
+    ) -> bool:
+        """Encrypt and stage `refresh_token` on `identity` if conditions allow.
+
+        Returns True iff `identity.encrypted_refresh_token` was actually
+        mutated. Callers use the bool to decide whether to include the field
+        in `save(update_fields=...)`, so logins that don't carry a fresh
+        refresh token avoid a needless write.
+        """
         if refresh_token is None:
-            return
+            return False
         if self._encryptor is None:
             logger.warning(
                 "social_identity.refresh_token_dropped_no_key",
                 extra={"provider": provider},
             )
-            return
+            return False
         identity.encrypted_refresh_token = self._encryptor.encrypt(
-            refresh_token, _aad_for(provider, subject)
+            refresh_token, aad_for(provider, subject)
         )
+        return True
+
+    def _recover_from_race(
+        self,
+        provider: str,
+        subject: str,
+        refresh_token: str | None,
+    ) -> tuple[Any, SocialIdentity, bool]:
+        """Re-fetch the (provider, subject) winner after a lost-race IntegrityError.
+
+        Called from the IntegrityError handlers in upsert_and_link. The outer
+        @transaction.atomic has already rolled back any partial state from
+        this call (including a freshly-created User in Branch 4). We bump
+        last_used_at on the winner so the caller still sees a "saw this
+        identity recently" signal.
+        """
+        winner = SocialIdentity.objects.select_related("user").get(
+            provider=provider, subject=subject
+        )
+        # Don't re-store the refresh token here — the winning insert already
+        # wrote the AAD-bound ciphertext (or decided not to). Updating it on
+        # the loser's behalf would write a different ciphertext under an AAD
+        # that's already valid, with no benefit.
+        winner.save(update_fields=["last_used_at"])
+        logger.info(
+            "social_identity.race_recovered",
+            extra={"provider": provider, "user_id": str(winner.user.id)},
+        )
+        return winner.user, winner, False
 
     @staticmethod
     def _linking_reason(provider: str, email: str | None, extra: dict[str, Any]) -> str:

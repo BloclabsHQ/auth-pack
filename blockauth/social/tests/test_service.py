@@ -35,10 +35,16 @@ def _settings(encryption_key_b64):
 
 @pytest.mark.django_db
 def test_existing_identity_returns_same_user():
+    import time
+
     user = User.objects.create_user(username="x_user", email="x@gmail.com", password="pw")
-    SocialIdentity.objects.create(
+    initial = SocialIdentity.objects.create(
         provider="google", subject="g_sub_1", user=user, email_at_link="x@gmail.com", email_verified_at_link=True
     )
+    initial_last_used = initial.last_used_at
+    # Briefly sleep so the auto_now bump on `last_used_at` lands on a strictly
+    # later timestamp (DB-level resolution can collapse sub-millisecond gaps).
+    time.sleep(0.01)
 
     returned_user, identity, created = SocialIdentityService().upsert_and_link(
         provider="google",
@@ -51,6 +57,8 @@ def test_existing_identity_returns_same_user():
     assert returned_user.id == user.id
     assert identity.provider == "google"
     assert created is False
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used
 
 
 @pytest.mark.django_db
@@ -117,3 +125,100 @@ def test_refresh_token_encrypted_round_trip():
 
     decrypted = service.decrypt_refresh_token(identity)
     assert decrypted == "apple-refresh-token-xyz"
+
+
+@pytest.mark.django_db
+def test_concurrent_create_loses_gracefully(monkeypatch):
+    """If a concurrent sign-in already created the (provider, subject), the
+    losing call must return the winner's identity rather than surfacing the
+    raw IntegrityError to the caller.
+
+    We simulate the race by monkeypatching the existing-identity lookup so
+    the service skips Branch 1 even though the row exists, then the actual
+    `identity.save()` collides on the unique constraint and the recovery
+    path runs.
+    """
+    user_a = User.objects.create_user(username="alice", email="alice@gmail.com", password="pw")
+    winner = SocialIdentity.objects.create(
+        provider="google",
+        subject="g_race",
+        user=user_a,
+        email_at_link="alice@gmail.com",
+        email_verified_at_link=True,
+    )
+
+    # Force the existing-identity lookup to miss exactly once, so the service
+    # falls through to a save() that hits the unique constraint.
+    original_filter = SocialIdentity.objects.filter
+    call_count = {"n": 0}
+
+    def fake_filter(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # First call is the existing-identity check inside upsert_and_link.
+            # Pretend nothing's there to force the new-insert path.
+            return original_filter(provider="__nonexistent__", subject="__nonexistent__")
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(SocialIdentity.objects, "filter", fake_filter)
+
+    service = SocialIdentityService()
+    returned_user, identity, created = service.upsert_and_link(
+        provider="google",
+        subject="g_race",
+        email="alice@gmail.com",
+        email_verified=True,
+        extra_claims={},
+    )
+
+    assert returned_user.id == user_a.id
+    assert identity.pk == winner.pk
+    assert created is False
+
+
+@pytest.mark.django_db
+def test_decrypt_refresh_token_returns_none_without_key(encryption_key_b64):
+    """A service instantiated without an encryption key returns None for
+    `decrypt_refresh_token` even when an encrypted blob is present on the
+    identity row. Pins the contract that key removal degrades gracefully
+    rather than raising at decrypt time.
+    """
+    # Step 1: store a token using a configured key.
+    service_with_key = SocialIdentityService()
+    _, identity, _ = service_with_key.upsert_and_link(
+        provider="apple",
+        subject="a_no_key",
+        email="apple@example.com",
+        email_verified=False,
+        extra_claims={},
+        refresh_token="apple-tok",
+    )
+    assert identity.encrypted_refresh_token is not None
+
+    # Step 2: simulate a deployment with the key removed.
+    with override_settings(BLOCK_AUTH_SETTINGS={}):
+        keyless_service = SocialIdentityService()
+        assert keyless_service.decrypt_refresh_token(identity) is None
+
+
+@pytest.mark.django_db
+def test_link_uses_case_insensitive_email_match():
+    """User stored with mixed-case email is found when the IdP returns lowercase.
+
+    Pins the __iexact match introduced to avoid duplicate User rows that
+    differ only in case.
+    """
+    user = User.objects.create_user(
+        username="case_user", email="CaseUser@Gmail.com", password="pw"
+    )
+
+    returned_user, identity, _ = SocialIdentityService().upsert_and_link(
+        provider="google",
+        subject="g_case_test",
+        email="caseuser@gmail.com",
+        email_verified=True,
+        extra_claims={},
+    )
+
+    assert returned_user.id == user.id
+    assert identity.provider == "google"

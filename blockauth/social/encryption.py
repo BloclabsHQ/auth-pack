@@ -13,9 +13,11 @@ high-volume encryption (e.g. millions of messages per key per day), switch to
 deterministic/counter-based nonces or rotate keys.
 """
 
+import base64
 import os
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from django.conf import settings
 
 NONCE_BYTES = 12
 KEY_BYTES = 32
@@ -43,3 +45,21 @@ class AESGCMEncryptor:
         ciphertext_with_tag = blob[NONCE_BYTES:]
         plaintext_bytes = self._aesgcm.decrypt(nonce, ciphertext_with_tag, associated_data)
         return plaintext_bytes.decode("utf-8")
+
+
+def load_encryptor() -> "AESGCMEncryptor | None":
+    """Load the configured AESGCMEncryptor from BLOCK_AUTH_SETTINGS.
+
+    Returns None when no encryption key is configured. Callers should treat
+    None as "do not store refresh tokens at rest" rather than crashing.
+    """
+    block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
+    key_b64 = block_settings.get("SOCIAL_IDENTITY_ENCRYPTION_KEY")
+    if not key_b64:
+        return None
+    return AESGCMEncryptor(base64.b64decode(key_b64))
+
+
+def aad_for(provider: str, subject: str) -> bytes:
+    """AAD format binding a refresh-token blob to a specific identity row."""
+    return f"social_identity:{provider}:{subject}".encode("utf-8")
