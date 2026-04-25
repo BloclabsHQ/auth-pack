@@ -33,12 +33,6 @@ from rest_framework.views import APIView
 from blockauth.apple._settings import apple_setting
 from blockauth.apple.client_secret import apple_client_secret_builder
 from blockauth.apple.constants import AppleEndpoints
-from blockauth.apple.docs import (
-    apple_authorize_schema,
-    apple_callback_schema,
-    apple_native_verify_schema,
-    apple_notifications_schema,
-)
 from blockauth.apple.exceptions import (
     AppleClientSecretConfigError,
     AppleIdTokenVerificationFailed,
@@ -59,7 +53,14 @@ from blockauth.apple.serializers import (
     AppleNativeVerifyRequestSerializer,
     AppleServerToServerNotificationRequestSerializer,
 )
+from blockauth.docs.apple_docs import (
+    apple_authorize_schema,
+    apple_callback_schema,
+    apple_native_verify_schema,
+    apple_notifications_schema,
+)
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
+
 # SocialIdentityConflictError extends APIException with status_code=409 and
 # is allowed to propagate naturally from the views below — see callsite
 # comments. The import is kept so the symbol resolves for type-checking
