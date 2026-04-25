@@ -30,6 +30,7 @@ def pytest_configure():
             "django.contrib.contenttypes",
             "rest_framework",
             "blockauth",
+            "blockauth.social",
             "tests",
         ],
         ROOT_URLCONF="blockauth.urls",
