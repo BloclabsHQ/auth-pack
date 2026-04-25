@@ -41,6 +41,7 @@ import secrets
 from rest_framework.exceptions import ValidationError
 
 OAUTH_STATE_COOKIE_NAME = "blockauth_oauth_state"
+OAUTH_PKCE_VERIFIER_COOKIE_NAME = "blockauth_oauth_pkce"
 OAUTH_STATE_COOKIE_MAX_AGE = 600  # 10 minutes — covers human consent screens
 OAUTH_STATE_TOKEN_BYTES = 32
 
@@ -81,13 +82,18 @@ def generate_state() -> str:
     return secrets.token_urlsafe(OAUTH_STATE_TOKEN_BYTES)
 
 
-def set_state_cookie(response, state: str) -> None:
+def set_state_cookie(response, state: str, samesite: str | None = None) -> None:
     """Bind the state token to the browser session via a short-lived cookie.
 
     Secure / SameSite are read from `BLOCK_AUTH_SETTINGS` so deployments
     can downgrade to `secure=False` for http-only local dev without
     patching the library. HttpOnly stays on always — there is no JS
     reason to read state; the check is entirely server-side.
+
+    `samesite` may be passed explicitly to override the env-driven default
+    on a per-call basis — Apple's `form_post` callback requires
+    `SameSite=None` because the POST is cross-site, even when the rest of
+    the integration runs on `Lax`.
     """
     response.set_cookie(
         OAUTH_STATE_COOKIE_NAME,
@@ -95,33 +101,57 @@ def set_state_cookie(response, state: str) -> None:
         max_age=OAUTH_STATE_COOKIE_MAX_AGE,
         httponly=True,
         secure=_cookie_secure(),
-        samesite=_cookie_samesite(),
+        samesite=samesite or _cookie_samesite(),
     )
 
 
-def verify_state(request) -> None:
-    """Compare the query `state` against the cookie in constant time.
-
-    Raises `ValidationError` (400) on any of: missing cookie, missing query,
-    mismatch. Callers MUST invoke this before making any call to the
-    provider's token endpoint — otherwise a CSRF probe can still consume a
-    real authorization code.
-    """
-    cookie_state = request.COOKIES.get(OAUTH_STATE_COOKIE_NAME)
-    query_state = request.query_params.get("state")
-
-    if not cookie_state or not query_state:
+def verify_state_values(cookie_state: str | None, provided_state: str | None) -> None:
+    """Constant-time compare of the cookie-stored state against any other
+    source (query string for redirect callbacks, form body for `form_post`
+    callbacks like Apple). Raises `ValidationError` on missing or mismatched
+    values so callers can convert to HTTP 400 directly."""
+    if not cookie_state or not provided_state:
         raise ValidationError({"detail": "OAuth state missing"}, 4030)
-
-    if not hmac.compare_digest(cookie_state, query_state):
+    if not hmac.compare_digest(cookie_state, provided_state):
         raise ValidationError({"detail": "OAuth state mismatch"}, 4030)
 
 
-def clear_state_cookie(response) -> None:
+def verify_state(request) -> None:
+    """Backwards-compatible wrapper that reads `state` from the request's
+    query parameters."""
+    verify_state_values(
+        request.COOKIES.get(OAUTH_STATE_COOKIE_NAME),
+        request.query_params.get("state"),
+    )
+
+
+def clear_state_cookie(response, samesite: str | None = None) -> None:
     """Clear the state cookie on the outbound response.
 
     Must match the `samesite` attribute used at set time so browsers
     treat the delete as applying to the same cookie (Set-Cookie with
     Max-Age=0).
     """
-    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, samesite=_cookie_samesite())
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, samesite=samesite or _cookie_samesite())
+
+
+def set_pkce_verifier_cookie(response, verifier: str, samesite: str | None = None) -> None:
+    """Persist the PKCE `code_verifier` across the authorize → callback
+    hop. Lifecycle (TTL, HttpOnly, Secure, SameSite) mirrors the state
+    cookie since they share the same trust boundary."""
+    response.set_cookie(
+        OAUTH_PKCE_VERIFIER_COOKIE_NAME,
+        verifier,
+        max_age=OAUTH_STATE_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite=samesite or _cookie_samesite(),
+    )
+
+
+def read_pkce_verifier_cookie(request) -> str | None:
+    return request.COOKIES.get(OAUTH_PKCE_VERIFIER_COOKIE_NAME)
+
+
+def clear_pkce_verifier_cookie(response, samesite: str | None = None) -> None:
+    response.delete_cookie(OAUTH_PKCE_VERIFIER_COOKIE_NAME, samesite=samesite or _cookie_samesite())
