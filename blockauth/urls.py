@@ -213,3 +213,11 @@ def build_urlpatterns():
 # Generate the final URL patterns list
 # This is the main export that Django will use for URL routing
 urlpatterns = build_urlpatterns()
+
+# Apple Sign-In (Phase 8 — temporary placement; Phase 16 moves into URL_PATTERN_MAPPINGS)
+from blockauth.apple.views import AppleWebAuthorizeView, AppleWebCallbackView  # noqa: E402
+
+urlpatterns += [
+    path("apple/", AppleWebAuthorizeView.as_view(), name=URLNames.APPLE_LOGIN),
+    path("apple/callback/", AppleWebCallbackView.as_view(), name=URLNames.APPLE_CALLBACK),
+]
