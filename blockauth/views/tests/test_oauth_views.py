@@ -243,6 +243,67 @@ class TestGoogleAuthCallbackView:
         mock_post.assert_not_called()
 
 
+@pytest.fixture
+def facebook_settings():
+    with override_settings(
+        BLOCK_AUTH_SETTINGS={
+            "FACEBOOK_CLIENT_ID": "fb-client-id",
+            "FACEBOOK_CLIENT_SECRET": "fb-secret",
+            "FACEBOOK_REDIRECT_URI": "https://app.example.com/auth/facebook/callback/",
+            "FEATURES": {"SOCIAL_AUTH": True},
+            "OAUTH_STATE_COOKIE_SECURE": True,
+            "BLOCK_AUTH_USER_MODEL": "tests.TestBlockUser",
+            "ALGORITHM": "HS256",
+            "SECRET_KEY": "test-secret-not-for-production",
+            "AUTH_PROVIDERS": {
+                "FACEBOOK": {
+                    "CLIENT_ID": "fb-client-id",
+                    "CLIENT_SECRET": "fb-secret",
+                    "REDIRECT_URI": "https://app.example.com/auth/facebook/callback/",
+                },
+            },
+        }
+    ):
+        yield
+
+
+@pytest.mark.django_db
+def test_facebook_authorize_includes_pkce(facebook_settings, client):
+    from urllib.parse import parse_qs, urlparse
+
+    response = client.get("/facebook/")
+    assert response.status_code == 302
+    parsed = urlparse(response["Location"])
+    qs = parse_qs(parsed.query)
+    assert qs["client_id"] == ["fb-client-id"]
+    assert "code_challenge" in qs
+    assert qs["code_challenge_method"] == ["S256"]
+
+    assert OAUTH_STATE_COOKIE_NAME in response.cookies
+    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in response.cookies
+
+
+@pytest.mark.django_db
+def test_facebook_callback_links_by_subject(facebook_settings, client):
+    init = client.get("/facebook/")
+    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {"access_token": "fb-access"}
+    me_response = MagicMock(status_code=200)
+    me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
+
+    with patch("blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]):
+        callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
+
+    assert callback.status_code == 200, callback.content
+    body = callback.json()
+    assert "access" in body and "user" in body
+
+    from blockauth.social.models import SocialIdentity
+    assert SocialIdentity.objects.filter(provider="facebook", subject="fb_user_123").exists()
+
+
 @pytest.mark.django_db
 class TestFacebookAuthLoginView:
 
@@ -263,37 +324,6 @@ class TestFacebookAuthLoginView:
 @pytest.mark.django_db
 class TestFacebookAuthCallbackView:
 
-    @patch("blockauth.views.facebook_auth_views.social_login_data")
-    @patch("blockauth.views.facebook_auth_views.requests.get")
-    def test_callback_returns_tokens(self, mock_get, mock_social_login_data, api_client):
-        mock_get.side_effect = [
-            MagicMock(status_code=200, json=lambda: {"access_token": "fb-token"}),
-            MagicMock(status_code=200, json=lambda: {"email": "fb@test.com", "name": "FB User"}),
-        ]
-        from blockauth.utils.social import SocialLoginResult
-
-        mock_user = MagicMock()
-        mock_user.id = "01936f4e-1234-7abc-8def-0123456789ab"
-        mock_user.email = "fb@test.com"
-        mock_user.is_verified = False
-        mock_user.is_active = True
-        mock_user.wallet_address = None
-        mock_user.date_joined = None
-        mock_social_login_data.return_value = SocialLoginResult(
-            user=mock_user,
-            access_token="test-access",
-            refresh_token="test-refresh",
-            created=False,
-        )
-        state = _prime_state(api_client)
-
-        response = api_client.get(
-            reverse("facebook-login-callback"),
-            {"code": "auth-code", "state": state},
-        )
-        assert response.status_code == status.HTTP_200_OK
-        assert "access" in response.data
-
     @patch("blockauth.views.facebook_auth_views.requests.get")
     def test_callback_mismatched_state_rejects(self, mock_get, api_client):
         _prime_state(api_client, value="victim-state")
@@ -303,6 +333,10 @@ class TestFacebookAuthCallbackView:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_get.assert_not_called()
+
+    def test_callback_missing_code(self, api_client):
+        response = api_client.get(reverse("facebook-login-callback"))
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.fixture(autouse=True)
