@@ -72,6 +72,10 @@ class Features:
     # Social authentication features
     SOCIAL_AUTH = "SOCIAL_AUTH"  # Master switch for social authentication
 
+    # Apple Sign-In
+    APPLE_LOGIN = "APPLE_LOGIN"  # Apple Sign-In (web + native + revocation + S2S notifications)
+    GOOGLE_NATIVE_LOGIN = "GOOGLE_NATIVE_LOGIN"  # Google native id_token verify (Credential Manager / iOS / Web One Tap)
+
     # Passkey/WebAuthn authentication
     PASSKEY_AUTH = "PASSKEY_AUTH"  # WebAuthn/Passkey authentication (Face ID, Touch ID, Windows Hello)
 
@@ -103,6 +107,8 @@ class Features:
             cls.WALLET_EMAIL_ADD,
             cls.WALLET_LINK,
             cls.SOCIAL_AUTH,
+            cls.APPLE_LOGIN,
+            cls.GOOGLE_NATIVE_LOGIN,
             cls.PASSKEY_AUTH,
             cls.TOTP_2FA,
         ]
@@ -128,6 +134,7 @@ class SocialProviders:
     GOOGLE = "google"  # Google OAuth2 provider
     FACEBOOK = "facebook"  # Facebook OAuth2 provider
     LINKEDIN = "linkedin"  # LinkedIn OAuth2 provider
+    APPLE = "apple"  # Apple Sign-In (OIDC)
 
     @classmethod
     def all_providers(cls):
@@ -141,7 +148,7 @@ class SocialProviders:
             for provider in SocialProviders.all_providers():
                 print(f"Provider: {provider}")
         """
-        return [cls.GOOGLE, cls.FACEBOOK, cls.LINKEDIN]
+        return [cls.GOOGLE, cls.FACEBOOK, cls.LINKEDIN, cls.APPLE]
 
 
 # Configuration Keys
@@ -249,6 +256,15 @@ class URLNames:
     FACEBOOK_CALLBACK = "facebook-login-callback"
     LINKEDIN_LOGIN = "linkedin-login"
     LINKEDIN_CALLBACK = "linkedin-login-callback"
+
+    # Apple Sign-In
+    APPLE_LOGIN = "apple-login"
+    APPLE_CALLBACK = "apple-callback"
+    APPLE_NATIVE_VERIFY = "apple-native-verify"
+    APPLE_NOTIFICATIONS = "apple-notifications"
+
+    # Google Native id_token verify
+    GOOGLE_NATIVE_VERIFY = "google-native-verify"
 
     # Passkey/WebAuthn
     PASSKEY_REGISTER_OPTIONS = "passkey-register-options"
