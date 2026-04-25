@@ -11,13 +11,16 @@ including nonce, then upserts a SocialIdentity and issues blockauth JWTs.
 
 `AppleNativeVerifyView` (added in Phase 9) and the S2S webhook
 (`AppleServerToServerNotificationView`, Phase 11) live in this same module.
+
+Note: local-http development cannot exercise the form_post callback because
+SameSite=None requires Secure (TLS); use a tunnel (ngrok/cloudflared) or
+deploy to a TLS-fronted environment to test the callback path.
 """
 
 import logging
 from urllib.parse import urlencode
 
 import requests
-from django.conf import settings
 from django.shortcuts import redirect
 from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
@@ -26,6 +29,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from blockauth.apple._settings import apple_setting
 from blockauth.apple.client_secret import apple_client_secret_builder
 from blockauth.apple.constants import AppleEndpoints
 from blockauth.apple.docs import apple_authorize_schema, apple_callback_schema
@@ -64,23 +68,8 @@ from blockauth.utils.social import social_login_data
 logger = logging.getLogger(__name__)
 
 
-def _apple_setting(key: str, default=None):
-    """Read an Apple-specific value directly from `BLOCK_AUTH_SETTINGS`.
-
-    The other Apple modules (client_secret, id_token_verifier) read settings
-    this way so `override_settings(BLOCK_AUTH_SETTINGS=...)` in tests
-    propagates without depending on the conf-module's `auth_settings`
-    snapshot, which is captured at import time and only re-syncs the
-    user-settings overlay (not the defaults dict). Keeping the access
-    pattern uniform across the sub-package makes the test fixtures
-    mirror what production sees.
-    """
-    block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
-    return block_settings.get(key, default)
-
-
 def _samesite_for_callback() -> str:
-    return str(_apple_setting("APPLE_CALLBACK_COOKIE_SAMESITE") or "None")
+    return str(apple_setting("APPLE_CALLBACK_COOKIE_SAMESITE") or "None")
 
 
 class AppleWebAuthorizeView(APIView):
@@ -89,8 +78,8 @@ class AppleWebAuthorizeView(APIView):
 
     @extend_schema(**apple_authorize_schema)
     def get(self, request):
-        services_id = _apple_setting("APPLE_SERVICES_ID")
-        redirect_uri = _apple_setting("APPLE_REDIRECT_URI")
+        services_id = apple_setting("APPLE_SERVICES_ID")
+        redirect_uri = apple_setting("APPLE_REDIRECT_URI")
         if not services_id or not redirect_uri:
             raise ValidationError({"detail": "Apple Sign-In is not configured"}, 4020)
 
@@ -138,6 +127,18 @@ class AppleWebCallbackView(APIView):
         )
         return Response(data=serializer.data, status=drf_status.HTTP_200_OK)
 
+    def handle_exception(self, exc):
+        # Any error path must clear the state/PKCE/nonce cookies; otherwise
+        # a retry could replay stale credentials. DRF builds the error
+        # response in `super().handle_exception(...)`, so we mutate it
+        # before returning.
+        response = super().handle_exception(exc)
+        samesite = _samesite_for_callback()
+        clear_state_cookie(response, samesite=samesite)
+        clear_pkce_verifier_cookie(response, samesite=samesite)
+        clear_nonce_cookie(response, samesite=samesite)
+        return response
+
     @extend_schema(**apple_callback_schema)
     def post(self, request):
         code = request.data.get("code")
@@ -161,24 +162,37 @@ class AppleWebCallbackView(APIView):
         except AppleClientSecretConfigError as exc:
             raise ValidationError({"detail": str(exc)}, 4020)
 
-        token_response = requests.post(
-            AppleEndpoints.TOKEN,
-            data={
-                "client_id": _apple_setting("APPLE_SERVICES_ID"),
-                "client_secret": client_secret,
-                "code": code,
-                "code_verifier": pkce_verifier,
-                "grant_type": "authorization_code",
-                "redirect_uri": _apple_setting("APPLE_REDIRECT_URI"),
-            },
-            timeout=10,
-        )
+        try:
+            token_response = requests.post(
+                AppleEndpoints.TOKEN,
+                data={
+                    "client_id": apple_setting("APPLE_SERVICES_ID"),
+                    "client_secret": client_secret,
+                    "code": code,
+                    "code_verifier": pkce_verifier,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": apple_setting("APPLE_REDIRECT_URI"),
+                },
+                timeout=10,
+            )
+        except requests.exceptions.RequestException as exc:
+            blockauth_logger.warning(
+                "apple.web.token_endpoint_unreachable",
+                {"error_type": type(exc).__name__},
+            )
+            raise ValidationError({"detail": "Apple token endpoint unreachable"}, 4053) from exc
+
         if token_response.status_code != 200:
             blockauth_logger.error(
                 "apple.web.token_exchange_failed",
                 {"status_code": token_response.status_code},
             )
-            raise AppleTokenExchangeFailed(token_response.status_code, token_response.text)
+            # Preserve the original AppleTokenExchangeFailed in the cause
+            # chain so log/sentry breadcrumbs still see the structured
+            # exception type, but raise as ValidationError so DRF maps
+            # it to HTTP 400 with our error code.
+            inner = AppleTokenExchangeFailed(token_response.status_code)
+            raise ValidationError({"detail": "Apple token exchange failed"}, 4053) from inner
 
         token_payload = token_response.json()
         id_token = token_payload.get("id_token")

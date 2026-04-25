@@ -137,3 +137,83 @@ def test_callback_full_flow(apple_settings, client, build_id_token, jwks_payload
     assert mock_post.call_args.kwargs["data"]["code"] == "real-auth-code"
     assert mock_post.call_args.kwargs["data"]["code_verifier"] == pkce_verifier
     assert mock_post.call_args.kwargs["data"]["grant_type"] == "authorization_code"
+
+
+@pytest.mark.django_db
+def test_callback_state_mismatch_raises(apple_settings, client):
+    """Cookie state and form-post state must match; mismatch is a 400."""
+    client.get("/apple/")
+    callback = client.post(
+        "/apple/callback/",
+        data={"code": "real-auth-code", "state": "wrong-state"},
+    )
+    assert callback.status_code == 400
+
+
+@pytest.mark.django_db
+def test_callback_pkce_cookie_missing_raises(apple_settings, client):
+    """PKCE verifier cookie is required; absence is a 400 (code 4051)."""
+    init = client.get("/apple/")
+    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    # Simulate a callback request that drops the PKCE cookie (e.g. cookie loss).
+    client.cookies.pop(OAUTH_PKCE_VERIFIER_COOKIE_NAME, None)
+    callback = client.post(
+        "/apple/callback/",
+        data={"code": "real-auth-code", "state": state_value},
+    )
+    assert callback.status_code == 400
+
+
+@pytest.mark.django_db
+def test_callback_token_exchange_4xx_returns_4053(apple_settings, client):
+    """Apple /auth/token returning 4xx must map to ValidationError (HTTP 400),
+    not escape as HTTP 500."""
+    init = client.get("/apple/")
+    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+
+    failing_response = MagicMock(status_code=400, text="bad code")
+    failing_response.json.return_value = {"error": "invalid_grant"}
+    with patch("blockauth.apple.views.requests.post", return_value=failing_response):
+        callback = client.post(
+            "/apple/callback/",
+            data={"code": "real-auth-code", "state": state_value},
+        )
+    assert callback.status_code == 400  # ValidationError -> 400
+
+
+@pytest.mark.django_db
+def test_callback_token_endpoint_unreachable_returns_4053(apple_settings, client):
+    """Network failures during token exchange must map to ValidationError,
+    not bubble up as a raw RequestException → HTTP 500."""
+    import requests as _requests
+
+    init = client.get("/apple/")
+    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+
+    with patch(
+        "blockauth.apple.views.requests.post",
+        side_effect=_requests.exceptions.ConnectionError("dns failure"),
+    ):
+        callback = client.post(
+            "/apple/callback/",
+            data={"code": "real-auth-code", "state": state_value},
+        )
+    assert callback.status_code == 400  # ValidationError -> 400
+
+
+@pytest.mark.django_db
+def test_callback_clears_cookies_on_error(apple_settings, client):
+    """Failed callback must clear state/pkce/nonce cookies (not just on success)
+    so a retry doesn't reuse stale values."""
+    client.get("/apple/")
+
+    callback = client.post(
+        "/apple/callback/",
+        data={"code": "real-auth-code", "state": "wrong-state"},  # mismatch -> 400
+    )
+
+    # All 3 cookies must be cleared on the error response.
+    assert callback.status_code == 400
+    assert callback.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
+    assert callback.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
+    assert callback.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0

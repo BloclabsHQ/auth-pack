@@ -14,12 +14,17 @@ class ApplePKCEMissing(AppleAuthError):
 
 
 class AppleTokenExchangeFailed(AppleAuthError):
-    """Apple's /auth/token endpoint returned non-200."""
+    """Apple's /auth/token endpoint returned non-200.
 
-    def __init__(self, status_code: int, body: str):
+    Intentionally does NOT carry the response body: Apple error payloads can
+    echo `client_secret` or `code` depending on the failure mode, and a
+    future log/sentry breadcrumb capturing `exc.body` would leak those
+    secrets. The status_code is sufficient for diagnosis.
+    """
+
+    def __init__(self, status_code: int):
         super().__init__(f"Apple token exchange failed: HTTP {status_code}")
         self.status_code = status_code
-        self.body = body
 
 
 class AppleIdTokenVerificationFailed(AppleAuthError):

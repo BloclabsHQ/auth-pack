@@ -20,8 +20,8 @@ import time
 from pathlib import Path
 
 import jwt as pyjwt
-from django.conf import settings
 
+from blockauth.apple._settings import apple_setting
 from blockauth.apple.constants import AppleEndpoints
 from blockauth.apple.exceptions import AppleClientSecretConfigError
 
@@ -71,13 +71,12 @@ class AppleClientSecretBuilder:
 
     @staticmethod
     def _read_settings() -> tuple[str, str, str, str]:
-        block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
-        team_id = block_settings.get("APPLE_TEAM_ID")
-        key_id = block_settings.get("APPLE_KEY_ID")
-        services_id = block_settings.get("APPLE_SERVICES_ID")
-        private_pem = block_settings.get("APPLE_PRIVATE_KEY_PEM")
+        team_id = apple_setting("APPLE_TEAM_ID")
+        key_id = apple_setting("APPLE_KEY_ID")
+        services_id = apple_setting("APPLE_SERVICES_ID")
+        private_pem = apple_setting("APPLE_PRIVATE_KEY_PEM")
         if not private_pem:
-            path = block_settings.get("APPLE_PRIVATE_KEY_PATH")
+            path = apple_setting("APPLE_PRIVATE_KEY_PATH")
             if path:
                 try:
                     private_pem = Path(path).read_text(encoding="utf-8")

@@ -23,8 +23,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from django.conf import settings
-
+from blockauth.apple._settings import apple_setting
 from blockauth.apple.constants import AppleClaimKeys, AppleEndpoints
 from blockauth.apple.exceptions import AppleIdTokenVerificationFailed, AppleNonceMismatch
 from blockauth.utils.jwt import (
@@ -56,9 +55,8 @@ def _coerce_bool(value: Any) -> bool:
 
 
 def _audiences() -> tuple[str, ...]:
-    block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
-    services_id = block_settings.get("APPLE_SERVICES_ID")
-    bundle_ids = tuple(block_settings.get("APPLE_BUNDLE_IDS") or ())
+    services_id = apple_setting("APPLE_SERVICES_ID")
+    bundle_ids = tuple(apple_setting("APPLE_BUNDLE_IDS") or ())
     # Order is informational only — OIDCVerifierConfig accepts any tuple
     # member as a valid `aud`. services_id first matches the typical web flow.
     audiences: list[str] = []
@@ -94,18 +92,17 @@ def _build_verifier(audiences: tuple[str, ...], *, require_email_claim: bool = T
         if cached is not None:
             return cached
 
-        block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
         config = OIDCVerifierConfig(
             issuer="https://appleid.apple.com",
             jwks_uri=AppleEndpoints.JWKS,
             audiences=audiences,
             algorithms=("RS256",),
-            leeway_seconds=int(block_settings.get("OIDC_VERIFIER_LEEWAY_SECONDS", 60)),
+            leeway_seconds=int(apple_setting("OIDC_VERIFIER_LEEWAY_SECONDS", 60)),
             require_email_claim=require_email_claim,
         )
         cache = JWKSCache(
             AppleEndpoints.JWKS,
-            cache_ttl_seconds=int(block_settings.get("OIDC_JWKS_CACHE_TTL_SECONDS", 3600)),
+            cache_ttl_seconds=int(apple_setting("OIDC_JWKS_CACHE_TTL_SECONDS", 3600)),
         )
         verifier = OIDCTokenVerifier(config, jwks_cache=cache)
         _verifier_cache[cache_key] = verifier
