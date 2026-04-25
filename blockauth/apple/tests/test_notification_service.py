@@ -32,6 +32,9 @@ def apple_settings():
         BLOCK_AUTH_SETTINGS={
             "APPLE_SERVICES_ID": "com.example.services",
             "APPLE_BUNDLE_IDS": (),
+            # FEATURES.APPLE_LOGIN required by the Phase 16 feature-flag
+            # dispatcher; without it, /apple/notifications/ doesn't route.
+            "FEATURES": {"APPLE_LOGIN": True, "SOCIAL_AUTH": True},
         }
     ):
         yield

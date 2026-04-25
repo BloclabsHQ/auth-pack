@@ -52,8 +52,15 @@ from blockauth.views.basic_auth_views import (
     SignUpResendOTPView,
     SignUpView,
 )
+from blockauth.apple.views import (
+    AppleNativeVerifyView,
+    AppleServerToServerNotificationView,
+    AppleWebAuthorizeView,
+    AppleWebCallbackView,
+)
 from blockauth.views.facebook_auth_views import FacebookAuthCallbackView, FacebookAuthLoginView
 from blockauth.views.google_auth_views import GoogleAuthCallbackView, GoogleAuthLoginView
+from blockauth.views.google_native_views import GoogleNativeIdTokenVerifyView
 from blockauth.views.linkedin_auth_views import LinkedInAuthCallbackView, LinkedInAuthLoginView
 from blockauth.views.wallet_auth_views import (
     WalletAuthLoginView,
@@ -119,6 +126,29 @@ URL_PATTERN_MAPPINGS = {
     Features.WALLET_LINK: [
         ("wallet/link/", WalletLinkView, URLNames.WALLET_LINK),
         ("wallet/unlink/", WalletUnlinkView, URLNames.WALLET_UNLINK),
+    ],
+    # Apple Sign-In endpoints (web flow + native verify + S2S notifications).
+    # Gated by FEATURES.APPLE_LOGIN — independent of SOCIAL_AUTH so integrators
+    # can enable Apple without enabling the Google/Facebook/LinkedIn web flows.
+    Features.APPLE_LOGIN: [
+        ("apple/", AppleWebAuthorizeView, URLNames.APPLE_LOGIN),  # 302 to Apple authorize
+        ("apple/callback/", AppleWebCallbackView, URLNames.APPLE_CALLBACK),  # form_post callback
+        ("apple/verify/", AppleNativeVerifyView, URLNames.APPLE_NATIVE_VERIFY),  # native id_token verify
+        (
+            "apple/notifications/",
+            AppleServerToServerNotificationView,
+            URLNames.APPLE_NOTIFICATIONS,
+        ),  # S2S notification webhook
+    ],
+    # Google native id_token verify (Credential Manager / iOS / Web One Tap).
+    # Separate from SOCIAL_AUTH because native verify needs no redirect/state
+    # cookie — integrators may ship native-only without enabling the web flows.
+    Features.GOOGLE_NATIVE_LOGIN: [
+        (
+            "google/native/verify/",
+            GoogleNativeIdTokenVerifyView,
+            URLNames.GOOGLE_NATIVE_VERIFY,
+        ),
     ],
     # Passkey/WebAuthn authentication endpoints
     Features.PASSKEY_AUTH: [
@@ -213,37 +243,3 @@ def build_urlpatterns():
 # Generate the final URL patterns list
 # This is the main export that Django will use for URL routing
 urlpatterns = build_urlpatterns()
-
-# Apple Sign-In (Phase 8 — temporary placement; Phase 16 moves into URL_PATTERN_MAPPINGS)
-# TODO(Phase 16): gate this registration by FEATURES.APPLE_LOGIN via the
-# feature-flag dispatcher above instead of always registering.
-from blockauth.apple.views import (  # noqa: E402
-    AppleNativeVerifyView,
-    AppleServerToServerNotificationView,
-    AppleWebAuthorizeView,
-    AppleWebCallbackView,
-)
-
-urlpatterns += [
-    path("apple/", AppleWebAuthorizeView.as_view(), name=URLNames.APPLE_LOGIN),
-    path("apple/callback/", AppleWebCallbackView.as_view(), name=URLNames.APPLE_CALLBACK),
-    path("apple/verify/", AppleNativeVerifyView.as_view(), name=URLNames.APPLE_NATIVE_VERIFY),
-    path(
-        "apple/notifications/",
-        AppleServerToServerNotificationView.as_view(),
-        name=URLNames.APPLE_NOTIFICATIONS,
-    ),
-]
-
-# Google Native id_token verify (Phase 12 — temporary placement; Phase 16
-# moves this into the feature-flag dispatcher above gated by
-# FEATURES.GOOGLE_NATIVE_LOGIN).
-from blockauth.views.google_native_views import GoogleNativeIdTokenVerifyView  # noqa: E402
-
-urlpatterns += [
-    path(
-        "google/native/verify/",
-        GoogleNativeIdTokenVerifyView.as_view(),
-        name=URLNames.GOOGLE_NATIVE_VERIFY,
-    ),
-]
