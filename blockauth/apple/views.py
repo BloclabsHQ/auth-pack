@@ -339,6 +339,13 @@ class AppleNativeVerifyView(APIView):
         # not a bad request. Wrapping it as ValidationError (400) would lose
         # that semantic and make the conflict indistinguishable from a generic
         # validation failure for clients.
+        #
+        # `first_name` / `last_name` come from Apple's first-sign-in payload —
+        # Apple sends the user object exactly once, on the very first consent.
+        # Forwarding them via extra_user_fields persists the name on the
+        # initial create_user call so we don't lose it. SocialIdentityService
+        # filters these against the user model's schema; integrators whose
+        # user model lacks first_name / last_name simply ignore the values.
         user, _, _ = SocialIdentityService().upsert_and_link(
             provider="apple",
             subject=claims.sub,
@@ -346,6 +353,10 @@ class AppleNativeVerifyView(APIView):
             email_verified=claims.email_verified,
             extra_claims={"is_private_email": claims.is_private_email},
             refresh_token=refresh_token,
+            extra_user_fields={
+                "first_name": validated.get("first_name") or "",
+                "last_name": validated.get("last_name") or "",
+            },
         )
 
         result = social_login_data(

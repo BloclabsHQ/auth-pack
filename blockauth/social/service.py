@@ -6,9 +6,17 @@ sign-in can produce:
      canonical email is also resynced from the id_token when the IdP returns
      a different verified address (drives the Apple "Hide My Email" ->
      "Share My Email" transition; see `_sync_user_email_from_provider`).
-  2. New (provider, subject), email matches existing User, policy permits — link.
-  3. New (provider, subject), email matches existing User, policy rejects — raise.
-  4. No email match — create a new User.
+     `is_verified` and `authentication_types` are also brought up to date
+     via `_apply_identity_completion`.
+  2. New (provider, subject), email matches existing User, policy permits —
+     link, then run identity completion on the linked user.
+  3. New (provider, subject), email matches existing User, policy rejects —
+     raise.
+  4. No email match — create a new User. `is_verified`, `authentication_types`,
+     and any `extra_user_fields` the caller forwards (e.g. first_name /
+     last_name from Apple's first-sign-in payload) are baked into the
+     initial `create_user` call so a single write produces a fully
+     provisioned account.
 
 Refresh tokens are encrypted with `AESGCMEncryptor` and stored as the
 `encrypted_refresh_token` blob; the AAD binds each ciphertext to the
@@ -38,6 +46,7 @@ from typing import Any
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
+from blockauth.enums import AuthenticationType
 from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
 from blockauth.social.exceptions import (
     SocialIdentityConflictError,
@@ -63,6 +72,7 @@ class SocialIdentityService:
         email_verified: bool,
         extra_claims: dict[str, Any],
         refresh_token: str | None = None,
+        extra_user_fields: dict[str, Any] | None = None,
     ) -> tuple[Any, SocialIdentity, bool]:
         User = get_user_model()
 
@@ -74,6 +84,11 @@ class SocialIdentityService:
                 user=existing_identity.user,
                 provider=provider,
                 email=email,
+                email_verified=email_verified,
+            )
+            self._apply_identity_completion(
+                user=existing_identity.user,
+                provider=provider,
                 email_verified=email_verified,
             )
             refresh_changed = self._maybe_store_refresh(existing_identity, refresh_token, provider, subject)
@@ -130,6 +145,11 @@ class SocialIdentityService:
                 # rolls back any half-applied state from this call. (See
                 # `_recover_from_race` for details.)
                 return self._recover_from_race(provider, subject, refresh_token)
+            self._apply_identity_completion(
+                user=existing_user,
+                provider=provider,
+                email_verified=email_verified,
+            )
             logger.info(
                 "social_identity.linked_to_existing_user",
                 extra={
@@ -154,7 +174,9 @@ class SocialIdentityService:
             raise SocialIdentityMissingEmailError(provider=provider)
 
         new_user = User.objects.create_user(
-            **self._build_create_user_kwargs(User, email)
+            **self._build_create_user_kwargs(
+                User, email, provider=provider, email_verified=email_verified, extra_user_fields=extra_user_fields
+            )
         )
         identity = SocialIdentity(
             provider=provider,
@@ -264,7 +286,14 @@ class SocialIdentityService:
         return True
 
     @staticmethod
-    def _build_create_user_kwargs(user_model: Any, email: str) -> dict[str, Any]:
+    def _build_create_user_kwargs(
+        user_model: Any,
+        email: str,
+        *,
+        provider: str,
+        email_verified: bool,
+        extra_user_fields: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Build the kwargs for `User.objects.create_user(...)` for a new social user.
 
         The natural identifier is routed through whichever kwarg the user model
@@ -272,34 +301,148 @@ class SocialIdentityService:
         only when it is a distinct field from the natural key, avoiding both a
         `TypeError` (passing `username=` to email-keyed models) and a redundant
         `email=` (when email already serves as the natural key).
+
+        `extra_user_fields` lets the caller seed model-specific attributes
+        (e.g., `first_name`, `last_name`) at create time. Each entry is
+        accepted only if the user model declares a concrete field with that
+        name — keeps the call signature generic across integrators with
+        different schemas. Empty / None values are dropped so an integrator
+        passing through optional request data doesn't accidentally clear a
+        manager-supplied default.
+
+        `email_verified` and `provider` seed the BlockUser-shaped
+        `is_verified` and `authentication_types` fields so a freshly created
+        social-sign-in user lands fully provisioned (no second save). The
+        seeds are skipped silently when the integrator's user model lacks
+        those fields, so the helper still works against `auth.User`.
         """
         username_field: str = user_model.USERNAME_FIELD
         kwargs: dict[str, Any] = {"password": None}
 
         if username_field == "email":
             kwargs["email"] = email
-            return kwargs
+        else:
+            has_email_field = SocialIdentityService._user_model_has_field(user_model, "email")
+            if has_email_field:
+                kwargs["email"] = email
 
-        has_email_field = any(
-            getattr(field, "name", None) == "email"
-            for field in user_model._meta.get_fields()
-        )
-        if has_email_field:
-            kwargs["email"] = email
+            # Only set the natural key kwarg when it is not auto-populated. Models
+            # keyed on `id` rely on the manager / default to assign the value, and
+            # passing a truncated email there would clash with the field type
+            # (e.g., `UUIDField`).
+            if username_field != "id":
+                try:
+                    username_field_obj = user_model._meta.get_field(username_field)
+                except Exception:
+                    username_field_obj = None
+                max_length = getattr(username_field_obj, "max_length", None) or 150
+                kwargs[username_field] = email[:max_length]
 
-        # Only set the natural key kwarg when it is not auto-populated. Models
-        # keyed on `id` rely on the manager / default to assign the value, and
-        # passing a truncated email there would clash with the field type
-        # (e.g., `UUIDField`).
-        if username_field != "id":
-            try:
-                username_field_obj = user_model._meta.get_field(username_field)
-            except Exception:
-                username_field_obj = None
-            max_length = getattr(username_field_obj, "max_length", None) or 150
-            kwargs[username_field] = email[:max_length]
+        # Seed BlockUser-shaped completion fields so a brand-new social user is
+        # provisioned in one write. is_verified mirrors the IdP's
+        # email_verified claim; authentication_types records the provider
+        # using the canonical AuthenticationType enum value.
+        if email_verified and SocialIdentityService._user_model_has_field(user_model, "is_verified"):
+            kwargs["is_verified"] = True
+        auth_type = SocialIdentityService._authentication_type_for(provider)
+        if auth_type and SocialIdentityService._user_model_has_field(user_model, "authentication_types"):
+            kwargs["authentication_types"] = [auth_type]
+
+        # Forward integrator-supplied extras only when the field exists on the
+        # user model and the value is non-empty. Filtering keeps the
+        # SocialIdentityService API generic across user models with very
+        # different shapes.
+        for field_name, field_value in (extra_user_fields or {}).items():
+            if field_value in (None, ""):
+                continue
+            if not SocialIdentityService._user_model_has_field(user_model, field_name):
+                continue
+            kwargs[field_name] = field_value
 
         return kwargs
+
+    @staticmethod
+    def _apply_identity_completion(
+        *,
+        user: Any,
+        provider: str,
+        email_verified: bool,
+    ) -> bool:
+        """Bring an existing user up to date with what the IdP has now confirmed.
+
+        Idempotent: only writes when there is something to change. Two pieces
+        kept in sync:
+          - `is_verified` flips False -> True the first time the IdP confirms
+            the email is verified. Never flips back — once verified, always
+            verified for this account.
+          - `authentication_types` accumulates the providers the user has
+            successfully authenticated through, using the canonical
+            `AuthenticationType` enum value (e.g., "APPLE", "GOOGLE"). Lets
+            downstream UI/SDK answer "which sign-in methods does this user
+            have?" without joining `SocialIdentity`.
+
+        Skipped silently when the integrator's user model doesn't declare
+        either field — keeps the helper safe to call against `auth.User`.
+
+        Returns True iff `user.save()` was called.
+        """
+        update_fields: list[str] = []
+
+        if (
+            email_verified
+            and SocialIdentityService._user_model_has_field(type(user), "is_verified")
+            and not getattr(user, "is_verified", False)
+        ):
+            user.is_verified = True
+            update_fields.append("is_verified")
+
+        auth_type = SocialIdentityService._authentication_type_for(provider)
+        if auth_type and SocialIdentityService._user_model_has_field(
+            type(user), "authentication_types"
+        ):
+            current_types = list(getattr(user, "authentication_types", None) or [])
+            if auth_type not in current_types:
+                current_types.append(auth_type)
+                user.authentication_types = current_types
+                update_fields.append("authentication_types")
+
+        if not update_fields:
+            return False
+
+        user.save(update_fields=update_fields)
+        logger.info(
+            "social_identity.identity_completion_applied",
+            extra={
+                "provider": provider,
+                "user_id": str(user.pk),
+                "fields": update_fields,
+            },
+        )
+        return True
+
+    @staticmethod
+    def _authentication_type_for(provider: str) -> str | None:
+        """Map a provider literal (e.g. "apple") to the AuthenticationType enum
+        value (e.g. "APPLE"). Returns None when the provider has no enum
+        member, so unknown providers don't end up as free-form strings in
+        `authentication_types`."""
+        try:
+            return AuthenticationType(provider.upper()).value
+        except ValueError:
+            logger.warning(
+                "social_identity.authentication_type_unknown_provider",
+                extra={"provider": provider},
+            )
+            return None
+
+    @staticmethod
+    def _user_model_has_field(user_model: Any, field_name: str) -> bool:
+        """True iff the user model declares a concrete field with this name."""
+        try:
+            user_model._meta.get_field(field_name)
+            return True
+        except Exception:
+            return False
 
     def _maybe_store_refresh(
         self,

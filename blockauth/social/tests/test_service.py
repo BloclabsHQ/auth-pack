@@ -345,3 +345,137 @@ def test_existing_identity_skips_email_sync_on_collision():
 
     user_a.refresh_from_db()
     assert user_a.email == "abc123@privaterelay.appleid.com"
+
+
+# ---------------------------------------------------------------------------
+# Identity-completion helpers — exercised directly because they're the
+# primary mechanism for keeping `is_verified` and `authentication_types`
+# in sync across BlockUser-derived integrators (fabric-auth's Creator).
+# ---------------------------------------------------------------------------
+
+from tests.models import TestBlockUser  # noqa: E402  (import at top of file would force Django app loading before pytest_configure)
+
+
+def test_authentication_type_for_known_provider_returns_enum_value():
+    assert SocialIdentityService._authentication_type_for("apple") == "APPLE"
+    assert SocialIdentityService._authentication_type_for("google") == "GOOGLE"
+    assert SocialIdentityService._authentication_type_for("facebook") == "FACEBOOK"
+    assert SocialIdentityService._authentication_type_for("linkedin") == "LINKEDIN"
+
+
+def test_authentication_type_for_unknown_provider_returns_none():
+    """Unknown providers must NOT silently end up as free-form strings in
+    `authentication_types` — the helper logs and returns None so the caller
+    skips the seed."""
+    assert SocialIdentityService._authentication_type_for("microsoft") is None
+
+
+def test_build_create_user_kwargs_seeds_block_user_fields_when_present():
+    """BlockUser-derived models receive `is_verified=True` and the provider's
+    AuthenticationType in `authentication_types` baked into the initial
+    create_user call — no second save needed."""
+    kwargs = SocialIdentityService._build_create_user_kwargs(
+        TestBlockUser,
+        "real.user@example.com",
+        provider="apple",
+        email_verified=True,
+    )
+
+    assert kwargs["email"] == "real.user@example.com"
+    assert kwargs["is_verified"] is True
+    assert kwargs["authentication_types"] == ["APPLE"]
+
+
+def test_build_create_user_kwargs_skips_seeds_for_models_without_those_fields():
+    """auth.User has neither `is_verified` nor `authentication_types`. The
+    helper must skip those seeds silently so the kwargs stay valid for
+    `auth.User.objects.create_user(**kwargs)`."""
+    kwargs = SocialIdentityService._build_create_user_kwargs(
+        User,
+        "x@example.com",
+        provider="google",
+        email_verified=True,
+    )
+
+    assert "is_verified" not in kwargs
+    assert "authentication_types" not in kwargs
+    assert kwargs["email"] == "x@example.com"
+
+
+def test_build_create_user_kwargs_filters_extra_user_fields_to_model_schema():
+    """`extra_user_fields` is filtered against the user model's declared
+    fields and drops empty values. Keeps the call generic across schemas."""
+    kwargs = SocialIdentityService._build_create_user_kwargs(
+        User,
+        "x@example.com",
+        provider="google",
+        email_verified=True,
+        extra_user_fields={
+            "first_name": "Alice",
+            "last_name": "Smith",
+            "wallet_address": "0xdeadbeef",   # not on auth.User
+            "middle_name": "",                 # empty -> dropped
+        },
+    )
+
+    assert kwargs["first_name"] == "Alice"
+    assert kwargs["last_name"] == "Smith"
+    assert "wallet_address" not in kwargs
+    assert "middle_name" not in kwargs
+
+
+@pytest.mark.django_db
+def test_apply_identity_completion_flips_is_verified_and_appends_auth_type():
+    """First successful sign-in via a verified IdP brings the user up to
+    `is_verified=True` and adds the provider's enum value to
+    `authentication_types`. Returns True so callers can assert a write
+    happened."""
+    user = TestBlockUser.objects.create(
+        email="completion@example.com",
+        is_verified=False,
+        authentication_types=[],
+    )
+
+    wrote = SocialIdentityService._apply_identity_completion(
+        user=user, provider="apple", email_verified=True
+    )
+
+    assert wrote is True
+    user.refresh_from_db()
+    assert user.is_verified is True
+    assert user.authentication_types == ["APPLE"]
+
+
+@pytest.mark.django_db
+def test_apply_identity_completion_is_idempotent_on_repeat_signin():
+    """A second sign-in for the same provider produces no DB write — the
+    enum value is already present and `is_verified` is already True."""
+    user = TestBlockUser.objects.create(
+        email="repeat@example.com",
+        is_verified=True,
+        authentication_types=["APPLE"],
+    )
+
+    wrote = SocialIdentityService._apply_identity_completion(
+        user=user, provider="apple", email_verified=True
+    )
+
+    assert wrote is False
+
+
+@pytest.mark.django_db
+def test_apply_identity_completion_appends_second_provider_without_dropping_first():
+    """A user who originally signed in via Google and now signs in via Apple
+    should end up with both providers in `authentication_types`."""
+    user = TestBlockUser.objects.create(
+        email="multi@example.com",
+        is_verified=True,
+        authentication_types=["GOOGLE"],
+    )
+
+    SocialIdentityService._apply_identity_completion(
+        user=user, provider="apple", email_verified=True
+    )
+
+    user.refresh_from_db()
+    assert user.authentication_types == ["GOOGLE", "APPLE"]
