@@ -1,5 +1,10 @@
 from drf_spectacular.utils import OpenApiExample
 
+from blockauth.apple.serializers import (
+    AppleNativeVerifyRequestSerializer,
+    AppleServerToServerNotificationRequestSerializer,
+    AppleWebCallbackRequestSerializer,
+)
 from blockauth.schemas.factory import CustomOpenApiResponse
 
 """Apple Sign-In — Web Authorize"""
@@ -93,6 +98,7 @@ apple_authorize_schema = {
 
 apple_callback_schema = {
     "operation_id": "apple_web_callback",
+    "request": AppleWebCallbackRequestSerializer,
     "summary": "Handle Apple Sign-In callback (web, form_post)",
     "description": (
         "Processes Apple's `form_post` callback, exchanges the authorization code for tokens, "
@@ -258,6 +264,7 @@ apple_callback_schema = {
 
 apple_native_verify_schema = {
     "operation_id": "apple_native_verify",
+    "request": AppleNativeVerifyRequestSerializer,
     "summary": "Verify Apple id_token from native client",
     "description": (
         "Verifies an Apple-issued id_token obtained by a native iOS client (`ASAuthorizationAppleIDProvider`) "
@@ -425,6 +432,7 @@ apple_native_verify_schema = {
 
 apple_notifications_schema = {
     "operation_id": "apple_server_to_server_notifications",
+    "request": AppleServerToServerNotificationRequestSerializer,
     "summary": "Apple server-to-server notifications webhook",
     "description": (
         "Webhook endpoint that receives Apple's server-to-server notifications for the configured Services ID\n"

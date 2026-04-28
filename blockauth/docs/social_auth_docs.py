@@ -1,6 +1,9 @@
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter
 
 from blockauth.schemas.factory import CustomOpenApiResponse
+from blockauth.views.google_native_serializers import (
+    GoogleNativeIdTokenVerifyRequestSerializer,
+)
 
 """Google OAuth Authentication"""
 
@@ -749,6 +752,7 @@ linkedin_auth_callback_schema = {
 
 google_native_verify_schema = {
     "operation_id": "google_native_verify",
+    "request": GoogleNativeIdTokenVerifyRequestSerializer,
     "summary": "Verify Google id_token from native client",
     "description": (
         "Verifies a Google-issued id_token obtained by a native client (Android Credential Manager, "

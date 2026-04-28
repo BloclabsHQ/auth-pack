@@ -23,10 +23,12 @@ from rest_framework import status as drf_status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.serializers import CharField, Serializer
 from rest_framework.views import APIView
 
 from blockauth.docs.social_auth_docs import google_native_verify_schema
+from blockauth.views.google_native_serializers import (
+    GoogleNativeIdTokenVerifyRequestSerializer,
+)
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
     SocialIdentityConflictError,
@@ -106,11 +108,6 @@ def _build_google_native_verifier() -> OIDCTokenVerifier:
         )
         _verifier_cache[audiences] = verifier
         return verifier
-
-
-class GoogleNativeIdTokenVerifyRequestSerializer(Serializer):
-    id_token = CharField()
-    raw_nonce = CharField()
 
 
 class GoogleNativeIdTokenVerifyView(APIView):
