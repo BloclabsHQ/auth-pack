@@ -219,4 +219,129 @@ def test_link_uses_case_insensitive_email_match():
     )
 
     assert returned_user.id == user.id
-    assert identity.provider == "google"
+
+
+@pytest.mark.django_db
+def test_existing_identity_syncs_changed_verified_email():
+    """Apple Hide -> Share (and similar IdP-side email changes) overwrite the
+    stored email on an already-linked identity. Pins the
+    `_sync_user_email_from_provider` behavior — the bug was that subsequent
+    sign-ins kept the relay address even after the user re-consented to share
+    the real one.
+    """
+    user = User.objects.create_user(
+        username="apple_relay_user",
+        email="abc123@privaterelay.appleid.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_sub_relay",
+        user=user,
+        email_at_link="abc123@privaterelay.appleid.com",
+        email_verified_at_link=True,
+    )
+
+    SocialIdentityService().upsert_and_link(
+        provider="apple",
+        subject="a_sub_relay",
+        email="real.user@example.com",
+        email_verified=True,
+        extra_claims={"is_private_email": False},
+    )
+
+    user.refresh_from_db()
+    assert user.email == "real.user@example.com"
+
+
+@pytest.mark.django_db
+def test_existing_identity_keeps_email_when_unchanged():
+    """No-op when the IdP returns the same email (modulo case). Avoids a
+    needless write on every sign-in."""
+    user = User.objects.create_user(
+        username="stable_email_user",
+        email="stable@example.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="google",
+        subject="g_stable",
+        user=user,
+        email_at_link="stable@example.com",
+        email_verified_at_link=True,
+    )
+
+    SocialIdentityService().upsert_and_link(
+        provider="google",
+        subject="g_stable",
+        email="STABLE@example.com",
+        email_verified=True,
+        extra_claims={},
+    )
+
+    user.refresh_from_db()
+    assert user.email == "stable@example.com"
+
+
+@pytest.mark.django_db
+def test_existing_identity_skips_email_sync_when_unverified():
+    """Don't overwrite a verified email with an unverified one — the unverified
+    address could be spoofed and the user could lose access to the account."""
+    user = User.objects.create_user(
+        username="unverified_signin_user",
+        email="trusted@example.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="facebook",
+        subject="fb_sub",
+        user=user,
+        email_at_link="trusted@example.com",
+        email_verified_at_link=True,
+    )
+
+    SocialIdentityService().upsert_and_link(
+        provider="facebook",
+        subject="fb_sub",
+        email="attacker@example.com",
+        email_verified=False,
+        extra_claims={},
+    )
+
+    user.refresh_from_db()
+    assert user.email == "trusted@example.com"
+
+
+@pytest.mark.django_db
+def test_existing_identity_skips_email_sync_on_collision():
+    """Refusing the sync when the new email already belongs to another user
+    prevents a silent merge of two distinct accounts. The integrator gets a
+    warning log and can decide on a manual remediation path."""
+    user_a = User.objects.create_user(
+        username="user_a",
+        email="abc123@privaterelay.appleid.com",
+        password="pw",
+    )
+    User.objects.create_user(
+        username="user_b",
+        email="real.user@example.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_sub_collision",
+        user=user_a,
+        email_at_link="abc123@privaterelay.appleid.com",
+        email_verified_at_link=True,
+    )
+
+    SocialIdentityService().upsert_and_link(
+        provider="apple",
+        subject="a_sub_collision",
+        email="real.user@example.com",
+        email_verified=True,
+        extra_claims={"is_private_email": False},
+    )
+
+    user_a.refresh_from_db()
+    assert user_a.email == "abc123@privaterelay.appleid.com"
