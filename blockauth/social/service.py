@@ -2,7 +2,10 @@
 
 Single entrypoint `upsert_and_link` consolidates the four cases an OAuth/OIDC
 sign-in can produce:
-  1. Existing (provider, subject) — return the linked user.
+  1. Existing (provider, subject) — return the linked user. The user's
+     canonical email is also resynced from the id_token when the IdP returns
+     a different verified address (drives the Apple "Hide My Email" ->
+     "Share My Email" transition; see `_sync_user_email_from_provider`).
   2. New (provider, subject), email matches existing User, policy permits — link.
   3. New (provider, subject), email matches existing User, policy rejects — raise.
   4. No email match — create a new User.
@@ -67,6 +70,12 @@ class SocialIdentityService:
             SocialIdentity.objects.select_related("user").filter(provider=provider, subject=subject).first()
         )
         if existing_identity is not None:
+            self._sync_user_email_from_provider(
+                user=existing_identity.user,
+                provider=provider,
+                email=email,
+                email_verified=email_verified,
+            )
             refresh_changed = self._maybe_store_refresh(existing_identity, refresh_token, provider, subject)
             update_fields = ["last_used_at"]
             if refresh_changed:
@@ -176,6 +185,83 @@ class SocialIdentityService:
             bytes(identity.encrypted_refresh_token),
             aad_for(identity.provider, identity.subject),
         )
+
+    @staticmethod
+    def _sync_user_email_from_provider(
+        *,
+        user: Any,
+        provider: str,
+        email: str | None,
+        email_verified: bool,
+    ) -> bool:
+        """Update `user.email` when the IdP returns a verified email that differs
+        from the stored value. Returns True iff `user.email` was written.
+
+        Trust model: the caller has already verified the IdP's id_token, which
+        proves the (provider, subject) pair belongs to this user. The email
+        claim attached to that token is therefore authoritative for THIS user
+        even when `AccountLinkingPolicy` forbids auto-linking by email at
+        signup time (a different question — "trust the email enough to merge
+        with a separate account").
+
+        Drives the Apple "Hide My Email" -> "Share My Email" transition: the
+        relay address the user first signed up with is replaced with the real
+        address as soon as the user revokes + re-consents and picks Share.
+        Same mechanism keeps Google / Facebook / LinkedIn email up to date if
+        the upstream account email changes.
+
+        Skipped (no write, logged) when:
+          - IdP did not return an email                         → no signal
+          - IdP returned an unverified email                    → spoofable
+          - new email matches the stored one (case-insensitive) → no-op
+          - new email collides with another User row            → would silently
+            merge two distinct accounts; surface as a log line so the
+            integrator can decide (manual merge, account migration, etc.)
+        """
+        if not email:
+            return False
+        if not email_verified:
+            logger.info(
+                "social_identity.email_sync_skipped_unverified",
+                extra={"provider": provider, "user_id": str(user.id)},
+            )
+            return False
+
+        current_email = (user.email or "")
+        if email.lower() == current_email.lower():
+            return False
+
+        user_model = type(user)
+        collision = (
+            user_model._default_manager.filter(email__iexact=email)
+            .exclude(pk=user.pk)
+            .order_by("pk")
+            .first()
+        )
+        if collision is not None:
+            logger.warning(
+                "social_identity.email_sync_skipped_collision",
+                extra={
+                    "provider": provider,
+                    "user_id": str(user.id),
+                    "colliding_user_id": str(collision.pk),
+                    "email_domain_only": email.rsplit("@", 1)[-1],
+                },
+            )
+            return False
+
+        user.email = email
+        user.save(update_fields=["email"])
+        logger.info(
+            "social_identity.email_synced",
+            extra={
+                "provider": provider,
+                "user_id": str(user.id),
+                "email_domain_only": email.rsplit("@", 1)[-1],
+                "previous_was_apple_relay": current_email.endswith("@privaterelay.appleid.com"),
+            },
+        )
+        return True
 
     @staticmethod
     def _build_create_user_kwargs(user_model: Any, email: str) -> dict[str, Any]:
