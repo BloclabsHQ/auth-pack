@@ -222,7 +222,7 @@ class GoogleAuthCallbackView(APIView):
 
     Subclass and override :meth:`build_success_response` to ship tokens via
     HttpOnly cookies + a 302 to the shell origin instead of the default JSON
-    body (BFF pattern — fabric-auth#533).
+    body (BFF pattern).
     """
 
     permission_classes = (AllowAny,)

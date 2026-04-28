@@ -242,7 +242,7 @@ class SocialIdentityService:
           - DB unique constraint rejects the write at save time → covers
             integrators whose default manager filters rows the unique
             constraint still enforces (e.g. soft-delete managers that
-            hide `is_deleted=True` Creators while the underlying email
+            hide `is_deleted=True` rows while the underlying email
             uniqueness holds across all rows). Surfaces the same warning
             shape as the in-memory collision skip so dashboards stay
             uniform.
