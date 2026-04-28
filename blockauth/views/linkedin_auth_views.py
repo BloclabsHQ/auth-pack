@@ -296,7 +296,7 @@ class LinkedInAuthCallbackView(APIView):
                 "linkedin.web.id_token_verify_failed",
                 {"error_class": exc.__class__.__name__},
             )
-            raise ValidationError({"detail": str(exc)}, 4070)
+            raise ValidationError({"detail": "LinkedIn id_token verification failed"}, 4070) from exc
 
         # SocialIdentityConflictError extends APIException with status_code=409;
         # let it propagate to the HTTP-semantic Conflict response rather than

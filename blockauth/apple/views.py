@@ -182,7 +182,7 @@ class AppleWebCallbackView(APIView):
         try:
             client_secret = apple_client_secret_builder.build()
         except AppleClientSecretConfigError as exc:
-            raise ValidationError({"detail": str(exc)}, 4020)
+            raise ValidationError({"detail": "Apple Sign-In is not configured"}, 4020) from exc
 
         try:
             token_response = requests.post(
@@ -226,9 +226,17 @@ class AppleWebCallbackView(APIView):
         try:
             claims = AppleIdTokenVerifier().verify(id_token, expected_nonce=expected_nonce)
         except AppleNonceMismatch as exc:
-            raise ValidationError({"detail": str(exc)}, 4055)
+            blockauth_logger.warning(
+                "apple.web.id_token_nonce_mismatch",
+                {"error_class": exc.__class__.__name__},
+            )
+            raise ValidationError({"detail": "Apple id_token nonce mismatch"}, 4055) from exc
         except AppleIdTokenVerificationFailed as exc:
-            raise ValidationError({"detail": str(exc)}, 4054)
+            blockauth_logger.error(
+                "apple.web.id_token_verify_failed",
+                {"error_class": exc.__class__.__name__},
+            )
+            raise ValidationError({"detail": "Apple id_token verification failed"}, 4054) from exc
 
         # SocialIdentityConflictError extends APIException with
         # status_code=409 + default_code="SOCIAL_IDENTITY_CONFLICT"; let it
@@ -286,9 +294,17 @@ class AppleNativeVerifyView(APIView):
         try:
             claims = AppleIdTokenVerifier().verify(validated["id_token"], expected_nonce=expected_nonce)
         except AppleNonceMismatch as exc:
-            raise ValidationError({"detail": str(exc)}, 4055)
+            blockauth_logger.warning(
+                "apple.native.id_token_nonce_mismatch",
+                {"error_class": exc.__class__.__name__},
+            )
+            raise ValidationError({"detail": "Apple id_token nonce mismatch"}, 4055) from exc
         except AppleIdTokenVerificationFailed as exc:
-            raise ValidationError({"detail": str(exc)}, 4054)
+            blockauth_logger.error(
+                "apple.native.id_token_verify_failed",
+                {"error_class": exc.__class__.__name__},
+            )
+            raise ValidationError({"detail": "Apple id_token verification failed"}, 4054) from exc
 
         refresh_token: str | None = None
         authorization_code = validated.get("authorization_code")
@@ -296,7 +312,7 @@ class AppleNativeVerifyView(APIView):
             try:
                 client_secret = apple_client_secret_builder.build()
             except AppleClientSecretConfigError as exc:
-                raise ValidationError({"detail": str(exc)}, 4020)
+                raise ValidationError({"detail": "Apple Sign-In is not configured"}, 4020) from exc
 
             # Apple's native auth flow has no redirect_uri originally; pass empty
             # string to keep the form field present (Apple's token endpoint will

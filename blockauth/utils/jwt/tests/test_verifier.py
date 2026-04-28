@@ -142,7 +142,7 @@ def test_aud_as_list_accepted(google_config, build_id_token, patch_requests_get)
     verifier = OIDCTokenVerifier(google_config)
     claims = verifier.verify(token, expected_nonce=None)
     assert isinstance(claims["aud"], list)
-    assert "123-web.apps.googleusercontent.com" in claims["aud"]
+    assert claims["aud"] == ["123-web.apps.googleusercontent.com", "other"]
 
 
 # ---------------------------------------------------------------------------
