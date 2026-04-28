@@ -72,9 +72,7 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         else:
             # Ghost-free signup flow (fabric-auth#516): no user row exists yet.
             # Check for a pending SIGNUP OTP so we can resend with the same payload.
-            pending_otp = OTP.objects.filter(
-                identifier=identifier, subject=OTPSubject.SIGNUP, is_used=False
-            ).first()
+            pending_otp = OTP.objects.filter(identifier=identifier, subject=OTPSubject.SIGNUP, is_used=False).first()
             if pending_otp:
                 data["_otp_payload"] = pending_otp.payload
                 data["_should_send"] = True

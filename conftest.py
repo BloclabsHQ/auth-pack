@@ -99,6 +99,7 @@ def pytest_configure():
             "DEFAULT_AUTHENTICATION_CLASSES": [
                 "blockauth.authentication.JWTAuthentication",
             ],
+            "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
         },
     )
     django.setup()

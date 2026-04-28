@@ -17,6 +17,57 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.0] - 2026-04-25
+
+### Added
+
+- **Apple Sign-In** — full surface:
+  - `GET /apple/` web authorize (PKCE + nonce + form_post).
+  - `POST /apple/callback/` form_post callback (state + PKCE verify, id_token verify with conditional nonce, SocialIdentity link, blockauth JWT).
+  - `POST /apple/verify/` native id_token verify for iOS/macOS clients (optional `authorization_code` redemption for refresh-token-at-rest).
+  - `pre_delete` signal that revokes Apple refresh tokens at `/auth/revoke` when an integrator deletes a user (App Store Review Guideline 5.1.1(v)).
+  - `POST /apple/notifications/` server-to-server webhook (Korean SIWA mandate effective 2026-01-01) handling `consent-revoked`, `account-delete`, `email-disabled`, `email-enabled` events. Trigger hook receives `{event_type, sub, event_time}` only — full JWT claims are NOT exposed (PII safety).
+- **Google native id_token verify** — `POST /google/native/verify/` for Android Credential Manager, iOS Google Sign-In SDK, and Web One Tap. Audience set is `BLOCK_AUTH_SETTINGS["GOOGLE_NATIVE_AUDIENCES"]` (the integrator's web/server client IDs).
+- **Generic `OIDCTokenVerifier`** (`blockauth.utils.jwt`) reused by every OIDC provider:
+  - JWKSCache with TTL + rotation-on-kid-miss refetch + transient-failure preservation (a 5xx from the IdP no longer wipes a working cache).
+  - Algorithm pinning before signature work (defense against algorithm confusion). Algorithm-aware key dispatch via `pyjwt.algorithms.get_default_algorithms()` (RSA + EC + ed25519 — not just RSA).
+  - Audience allowlist, leeway, nonce check via `hmac.compare_digest`, required-email-claim option.
+  - 9 specific exception subclasses (AlgorithmNotAllowed, AudienceMismatch, IssuerMismatch, JWKSUnreachable, KidNotFound, NonceMismatch, RequiredClaimMissing, SignatureInvalid, TokenExpired) all under `OIDCVerificationError`.
+  - `OIDCVerifierConfig` validates fields at construction (no silent empty audiences/algorithms).
+- **`SocialIdentity` model** + `SocialIdentityService` — durable `(provider, subject) → User` link with AES-GCM-256 refresh-token-at-rest. AAD binds each ciphertext to the (provider, subject) so a row-level ciphertext cannot be replayed onto another row. New table `social_identity` (additive); no `User` columns added.
+- **`AccountLinkingPolicy`** — provider-aware verified-email auto-link:
+  - **Google**: gmail.com / googlemail.com or `hd` claim cross-validated against email domain (defends against malicious `hd` injection).
+  - **LinkedIn**: `email_verified=true` (LinkedIn requires verification at signup).
+  - **Facebook**: email present (Facebook only returns email when verified).
+  - **Apple**: never authoritative — pure `(apple, sub)` matching; collisions surface as HTTP 409.
+  - Provider name normalised case-insensitively.
+- **PKCE (RFC 7636)** on every web OAuth flow (Google/LinkedIn/Facebook/Apple). `compute_pkce_challenge` exposed for testing against the RFC 7636 Appendix B vector. Pair returned as a `NamedTuple` to defend against position-swap bugs at the four call sites.
+- **`AppleClientSecretBuilder`** — ES256-signed client_secret JWT for Apple's `/auth/token`, lock-guarded in-process cache, 5-hour lifetime with 5-minute rebuild margin. Module-level `apple_client_secret_builder` singleton.
+- New feature flags: `APPLE_LOGIN`, `GOOGLE_NATIVE_LOGIN` (independent of `SOCIAL_AUTH` so integrators can enable native-only or Apple-only without enabling the full social suite).
+- New configuration: `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY_PEM` / `APPLE_PRIVATE_KEY_PATH`, `APPLE_SERVICES_ID`, `APPLE_BUNDLE_IDS`, `APPLE_REDIRECT_URI`, `APPLE_NOTIFICATION_TRIGGER`, `APPLE_CALLBACK_COOKIE_SAMESITE`, `GOOGLE_NATIVE_AUDIENCES`, `OIDC_JWKS_CACHE_TTL_SECONDS`, `OIDC_VERIFIER_LEEWAY_SECONDS`, `SOCIAL_IDENTITY_ENCRYPTION_KEY`.
+- New constants: `Features.APPLE_LOGIN`, `Features.GOOGLE_NATIVE_LOGIN`, `SocialProviders.APPLE`, `AuthenticationType.APPLE`, `URLNames.APPLE_*`, `URLNames.GOOGLE_NATIVE_VERIFY`. Extended `SENSITIVE_FIELDS` with `client_secret`, `code_verifier`, `raw_nonce`, `apple_private_key_pem`, `payload`.
+
+### Changed
+
+- **Refactored Google web OAuth** (`/google/`, `/google/callback/`) — verifies the `id_token` cryptographically (drops the userinfo HTTP call), links via `SocialIdentity` by `sub`, adds PKCE + nonce. Existing email-based fallback path is preserved through `AccountLinkingPolicy` so legacy gmail-domain matches still link to the existing user.
+- **Refactored LinkedIn web OAuth** (`/linkedin/`, `/linkedin/callback/`) onto OIDC (LinkedIn finished its OIDC migration in 2024). Same id_token-verify + SocialIdentity + PKCE + nonce treatment as Google.
+- **Refactored Facebook web OAuth** (`/facebook/`, `/facebook/callback/`) — Facebook is not OIDC, so the Graph `/me` call is retained, but the flow now uses PKCE on the token exchange and matches by `(facebook, fb_user_id)` via `SocialIdentityService`. Email-present implies verified (Facebook only returns email when the user has verified it).
+- **`SocialIdentityConflictError`** now extends `rest_framework.exceptions.APIException` with `status_code=409` — auto-mapped to HTTP 409 (RFC 7231 §6.5.8) instead of 400. The internal `SOCIAL_IDENTITY_CONFLICT` code identifies the case for clients that branch on code.
+- **`oauth_state.verify_state` rewritten as a thin wrapper around the new `verify_state_values(cookie_state, provided_state)` pure helper** — supports Apple's form_post callback (state in body) without duplicating the CSRF logic.
+- **`set_state_cookie` / `clear_state_cookie`** gain optional `samesite=` overrides — Apple's form_post requires SameSite=None+Secure on the deployed callback hop.
+- **`social_login_data`** accepts `preexisting_user` in `provider_data` — when present, skips the `get_or_create(email=...)` step so `SocialIdentityService`'s subject-based linkage owns user creation. Backwards-compatible (`preexisting_user` is optional).
+
+### Migrations
+
+- New table `social_identity` (additive). `User` model unchanged; no `ALTER TABLE` on existing tables; no data backfill required. Existing users get a `SocialIdentity` row created on their next OAuth sign-in.
+
+### Breaking changes
+
+- **`SocialIdentityConflictError` HTTP status changed from 400 to 409** for any caller relying on the old behavior. The internal error code (`SOCIAL_IDENTITY_CONFLICT`, default code) is unchanged; clients branching on code only are unaffected.
+- Integrators storing Apple refresh tokens must set `BLOCK_AUTH_SETTINGS["SOCIAL_IDENTITY_ENCRYPTION_KEY"]` (base64-encoded 32 bytes); without it, refresh tokens are silently dropped with a warning log. No-key deployments continue to work for Apple sign-in (just no revocation later).
+
+---
+
 ## [0.14.0] - 2026-04-24
 
 ### Added

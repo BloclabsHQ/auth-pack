@@ -1,0 +1,527 @@
+"""SocialIdentityService.
+
+Single entrypoint `upsert_and_link` consolidates the four cases an OAuth/OIDC
+sign-in can produce:
+  1. Existing (provider, subject) — return the linked user. The user's
+     canonical email is also resynced from the id_token when the IdP returns
+     a different verified address (drives the Apple "Hide My Email" ->
+     "Share My Email" transition; see `_sync_user_email_from_provider`).
+     `is_verified` and `authentication_types` are also brought up to date
+     via `_apply_identity_completion`.
+  2. New (provider, subject), email matches existing User, policy permits —
+     link, then run identity completion on the linked user.
+  3. New (provider, subject), email matches existing User, policy rejects —
+     raise.
+  4. No email match — create a new User. `is_verified`, `authentication_types`,
+     and any `extra_user_fields` the caller forwards (e.g. first_name /
+     last_name from Apple's first-sign-in payload) are baked into the
+     initial `create_user` call so a single write produces a fully
+     provisioned account.
+
+Refresh tokens are encrypted with `AESGCMEncryptor` and stored as the
+`encrypted_refresh_token` blob; the AAD binds each ciphertext to the
+(provider, subject) pair so a stolen blob from one identity cannot be
+replayed onto another row.
+
+Plan deviations:
+  - User model is resolved via `django.contrib.auth.get_user_model()` rather
+    than `blockauth.utils.config.get_block_auth_user_model()`. The
+    `SocialIdentity.user` FK targets `settings.AUTH_USER_MODEL`; the
+    service must query the same model the FK points at. Same fix used
+    in Task 2.3.
+  - New-user creation routes the natural identifier through whichever
+    kwarg the integrator's user model exposes via `USERNAME_FIELD`.
+    `auth.User` keys on `username`, email-first models (e.g. fabric-auth's
+    `Creator`) key on `email`, and `BlockUser`-derived models key on the
+    auto-populated `id`. The service inspects `USERNAME_FIELD` and only
+    forwards `email` as a separate kwarg when it is a distinct field from
+    the natural key, so every supported user model accepts the call.
+    `create_user(password=None)` produces an unusable password (Django
+    default), so the integrator's password-reset flow still works.
+"""
+
+import logging
+from typing import Any
+
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+
+from blockauth.enums import AuthenticationType
+from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
+from blockauth.social.exceptions import (
+    SocialIdentityConflictError,
+    SocialIdentityMissingEmailError,
+)
+from blockauth.social.linking_policy import AccountLinkingPolicy
+from blockauth.social.models import SocialIdentity
+
+logger = logging.getLogger(__name__)
+
+
+class SocialIdentityService:
+    def __init__(self, encryptor: AESGCMEncryptor | None = None):
+        self._encryptor = encryptor or load_encryptor()
+
+    @transaction.atomic
+    def upsert_and_link(
+        self,
+        *,
+        provider: str,
+        subject: str,
+        email: str | None,
+        email_verified: bool,
+        extra_claims: dict[str, Any],
+        refresh_token: str | None = None,
+        extra_user_fields: dict[str, Any] | None = None,
+    ) -> tuple[Any, SocialIdentity, bool]:
+        User = get_user_model()
+
+        existing_identity = (
+            SocialIdentity.objects.select_related("user").filter(provider=provider, subject=subject).first()
+        )
+        if existing_identity is not None:
+            self._sync_user_email_from_provider(
+                user=existing_identity.user,
+                provider=provider,
+                email=email,
+                email_verified=email_verified,
+            )
+            self._apply_identity_completion(
+                user=existing_identity.user,
+                provider=provider,
+                email_verified=email_verified,
+            )
+            refresh_changed = self._maybe_store_refresh(existing_identity, refresh_token, provider, subject)
+            update_fields = ["last_used_at"]
+            if refresh_changed:
+                update_fields.append("encrypted_refresh_token")
+            existing_identity.save(update_fields=update_fields)
+            logger.info(
+                "social_identity.matched_existing_subject",
+                extra={"provider": provider, "user_id": str(existing_identity.user.id)},
+            )
+            return existing_identity.user, existing_identity, False
+
+        # Case-insensitive email match: a stored "CaseUser@Gmail.com" must still
+        # match an IdP-returned "caseuser@gmail.com" (RFC 5321 §2.4 — local-part
+        # is technically case-sensitive, but virtually all real mail providers
+        # treat it case-insensitively, and downstream views normalize on
+        # ingress). Using __iexact prevents a duplicate User row on
+        # already-existing accounts whose email differs only in case.
+        # `.order_by("id")` makes the choice deterministic across replicas if
+        # legacy data has two users sharing the same email modulo case. Without
+        # it, .first() ordering is unspecified.
+        existing_user = User.objects.filter(email__iexact=email).order_by("id").first() if email else None
+        if existing_user is not None:
+            if not AccountLinkingPolicy.can_link_to_existing_user(
+                provider=provider,
+                email=email,
+                email_verified=email_verified,
+                extra_claims=extra_claims,
+            ):
+                logger.warning(
+                    "social_identity.linking_rejected_unverified_email",
+                    extra={
+                        "provider": provider,
+                        "email_domain_only": (email or "").split("@")[-1],
+                    },
+                )
+                raise SocialIdentityConflictError(provider=provider, existing_user_id=str(existing_user.id))
+
+            identity = SocialIdentity(
+                provider=provider,
+                subject=subject,
+                user=existing_user,
+                email_at_link=email,
+                email_verified_at_link=email_verified,
+            )
+            self._maybe_store_refresh(identity, refresh_token, provider, subject)
+            try:
+                identity.save()
+            except IntegrityError:
+                # Concurrency race: another sign-in for the same (provider,
+                # subject) won the unique-constraint coin flip. Re-fetch the
+                # winner and return that. The @transaction.atomic decorator
+                # rolls back any half-applied state from this call. (See
+                # `_recover_from_race` for details.)
+                return self._recover_from_race(provider, subject, refresh_token)
+            self._apply_identity_completion(
+                user=existing_user,
+                provider=provider,
+                email_verified=email_verified,
+            )
+            logger.info(
+                "social_identity.linked_to_existing_user",
+                extra={
+                    "provider": provider,
+                    "user_id": str(existing_user.id),
+                    "linking_reason": self._linking_reason(provider, email, extra_claims),
+                },
+            )
+            return existing_user, identity, False
+
+        # New-user creation. See module docstring for the rationale behind
+        # `create_user` (model-agnostic) vs. the plan's `objects.create(...)`.
+        # The natural identifier is routed through the kwarg named by
+        # `USERNAME_FIELD`, so the same code path works against `auth.User`
+        # (`username`), email-keyed integrator models (`email`), and
+        # `BlockUser`-derived models that key on an auto-populated `id`.
+        if not email:
+            logger.warning(
+                "social_identity.creation_blocked_missing_email",
+                extra={"provider": provider},
+            )
+            raise SocialIdentityMissingEmailError(provider=provider)
+
+        new_user = User.objects.create_user(
+            **self._build_create_user_kwargs(
+                User, email, provider=provider, email_verified=email_verified, extra_user_fields=extra_user_fields
+            )
+        )
+        identity = SocialIdentity(
+            provider=provider,
+            subject=subject,
+            user=new_user,
+            email_at_link=email,
+            email_verified_at_link=email_verified,
+        )
+        self._maybe_store_refresh(identity, refresh_token, provider, subject)
+        try:
+            identity.save()
+        except IntegrityError:
+            # Lost the race against a concurrent sign-in. The @transaction.atomic
+            # decorator on this method ensures the just-created `new_user`
+            # row is rolled back along with everything else, so we won't leak
+            # an orphan User. Re-fetch the winning identity and return it.
+            return self._recover_from_race(provider, subject, refresh_token)
+        logger.info(
+            "social_identity.created_new_user",
+            extra={"provider": provider, "user_id": str(new_user.id)},
+        )
+        return new_user, identity, True
+
+    def decrypt_refresh_token(self, identity: SocialIdentity) -> str | None:
+        if identity.encrypted_refresh_token is None or self._encryptor is None:
+            return None
+        return self._encryptor.decrypt(
+            bytes(identity.encrypted_refresh_token),
+            aad_for(identity.provider, identity.subject),
+        )
+
+    @staticmethod
+    def _sync_user_email_from_provider(
+        *,
+        user: Any,
+        provider: str,
+        email: str | None,
+        email_verified: bool,
+    ) -> bool:
+        """Update `user.email` when the IdP returns a verified email that differs
+        from the stored value. Returns True iff `user.email` was written.
+
+        Trust model: the caller has already verified the IdP's id_token, which
+        proves the (provider, subject) pair belongs to this user. The email
+        claim attached to that token is therefore authoritative for THIS user
+        even when `AccountLinkingPolicy` forbids auto-linking by email at
+        signup time (a different question — "trust the email enough to merge
+        with a separate account").
+
+        Drives the Apple "Hide My Email" -> "Share My Email" transition: the
+        relay address the user first signed up with is replaced with the real
+        address as soon as the user revokes + re-consents and picks Share.
+        Same mechanism keeps Google / Facebook / LinkedIn email up to date if
+        the upstream account email changes.
+
+        Skipped (no write, logged) when:
+          - IdP did not return an email                         → no signal
+          - IdP returned an unverified email                    → spoofable
+          - new email matches the stored one (case-insensitive) → no-op
+          - new email collides with another User row            → would silently
+            merge two distinct accounts; surface as a log line so the
+            integrator can decide (manual merge, account migration, etc.)
+          - DB unique constraint rejects the write at save time → covers
+            integrators whose default manager filters rows the unique
+            constraint still enforces (e.g. soft-delete managers that
+            hide `is_deleted=True` rows while the underlying email
+            uniqueness holds across all rows). Surfaces the same warning
+            shape as the in-memory collision skip so dashboards stay
+            uniform.
+        """
+        if not email:
+            return False
+        if not email_verified:
+            logger.info(
+                "social_identity.email_sync_skipped_unverified",
+                extra={"provider": provider, "user_id": str(user.id)},
+            )
+            return False
+
+        current_email = user.email or ""
+        if email.lower() == current_email.lower():
+            return False
+
+        user_model = type(user)
+        collision = user_model._default_manager.filter(email__iexact=email).exclude(pk=user.pk).order_by("pk").first()
+        if collision is not None:
+            logger.warning(
+                "social_identity.email_sync_skipped_collision",
+                extra={
+                    "provider": provider,
+                    "user_id": str(user.id),
+                    "colliding_user_id": str(collision.pk),
+                    "email_domain_only": email.rsplit("@", 1)[-1],
+                },
+            )
+            return False
+
+        # DB-level email uniqueness can still reject the save when the
+        # default manager hides rows the constraint covers (soft-delete
+        # managers are the common case). Catch narrowly, restore the
+        # in-memory value, and surface the same warning shape as the
+        # in-memory collision skip — caller's @transaction.atomic rolls
+        # back the failed UPDATE.
+        previous_email = user.email
+        user.email = email
+        try:
+            user.save(update_fields=["email"])
+        except IntegrityError:
+            user.email = previous_email
+            logger.warning(
+                "social_identity.email_sync_skipped_db_collision",
+                extra={
+                    "provider": provider,
+                    "user_id": str(user.id),
+                    "email_domain_only": email.rsplit("@", 1)[-1],
+                },
+            )
+            return False
+        logger.info(
+            "social_identity.email_synced",
+            extra={
+                "provider": provider,
+                "user_id": str(user.id),
+                "email_domain_only": email.rsplit("@", 1)[-1],
+                "previous_was_apple_relay": current_email.endswith("@privaterelay.appleid.com"),
+            },
+        )
+        return True
+
+    @staticmethod
+    def _build_create_user_kwargs(
+        user_model: Any,
+        email: str,
+        *,
+        provider: str,
+        email_verified: bool,
+        extra_user_fields: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build the kwargs for `User.objects.create_user(...)` for a new social user.
+
+        The natural identifier is routed through whichever kwarg the user model
+        names via `USERNAME_FIELD`. `email` is forwarded as a separate kwarg
+        only when it is a distinct field from the natural key, avoiding both a
+        `TypeError` (passing `username=` to email-keyed models) and a redundant
+        `email=` (when email already serves as the natural key).
+
+        `extra_user_fields` lets the caller seed model-specific attributes
+        (e.g., `first_name`, `last_name`) at create time. Each entry is
+        accepted only if the user model declares a concrete field with that
+        name — keeps the call signature generic across integrators with
+        different schemas. Empty / None values are dropped so an integrator
+        passing through optional request data doesn't accidentally clear a
+        manager-supplied default.
+
+        `email_verified` and `provider` seed the BlockUser-shaped
+        `is_verified` and `authentication_types` fields so a freshly created
+        social-sign-in user lands fully provisioned (no second save). The
+        seeds are skipped silently when the integrator's user model lacks
+        those fields, so the helper still works against `auth.User`.
+        """
+        username_field: str = user_model.USERNAME_FIELD
+        kwargs: dict[str, Any] = {"password": None}
+
+        if username_field == "email":
+            kwargs["email"] = email
+        else:
+            has_email_field = SocialIdentityService._user_model_has_field(user_model, "email")
+            if has_email_field:
+                kwargs["email"] = email
+
+            # Only set the natural key kwarg when it is not auto-populated. Models
+            # keyed on `id` rely on the manager / default to assign the value, and
+            # passing a truncated email there would clash with the field type
+            # (e.g., `UUIDField`).
+            if username_field != "id":
+                try:
+                    username_field_obj = user_model._meta.get_field(username_field)
+                except Exception:
+                    username_field_obj = None
+                max_length = getattr(username_field_obj, "max_length", None) or 150
+                kwargs[username_field] = email[:max_length]
+
+        # Seed BlockUser-shaped completion fields so a brand-new social user is
+        # provisioned in one write. is_verified mirrors the IdP's
+        # email_verified claim; authentication_types records the provider
+        # using the canonical AuthenticationType enum value.
+        if email_verified and SocialIdentityService._user_model_has_field(user_model, "is_verified"):
+            kwargs["is_verified"] = True
+        auth_type = SocialIdentityService._authentication_type_for(provider)
+        if auth_type and SocialIdentityService._user_model_has_field(user_model, "authentication_types"):
+            kwargs["authentication_types"] = [auth_type]
+
+        # Forward integrator-supplied extras only when the field exists on the
+        # user model and the value is non-empty. Filtering keeps the
+        # SocialIdentityService API generic across user models with very
+        # different shapes.
+        for field_name, field_value in (extra_user_fields or {}).items():
+            if field_value in (None, ""):
+                continue
+            if not SocialIdentityService._user_model_has_field(user_model, field_name):
+                continue
+            kwargs[field_name] = field_value
+
+        return kwargs
+
+    @staticmethod
+    def _apply_identity_completion(
+        *,
+        user: Any,
+        provider: str,
+        email_verified: bool,
+    ) -> bool:
+        """Bring an existing user up to date with what the IdP has now confirmed.
+
+        Idempotent: only writes when there is something to change. Two pieces
+        kept in sync:
+          - `is_verified` flips False -> True the first time the IdP confirms
+            the email is verified. Never flips back — once verified, always
+            verified for this account.
+          - `authentication_types` accumulates the providers the user has
+            successfully authenticated through, using the canonical
+            `AuthenticationType` enum value (e.g., "APPLE", "GOOGLE"). Lets
+            downstream UI/SDK answer "which sign-in methods does this user
+            have?" without joining `SocialIdentity`.
+
+        Skipped silently when the integrator's user model doesn't declare
+        either field — keeps the helper safe to call against `auth.User`.
+
+        Returns True iff `user.save()` was called.
+        """
+        update_fields: list[str] = []
+
+        if (
+            email_verified
+            and SocialIdentityService._user_model_has_field(type(user), "is_verified")
+            and not getattr(user, "is_verified", False)
+        ):
+            user.is_verified = True
+            update_fields.append("is_verified")
+
+        auth_type = SocialIdentityService._authentication_type_for(provider)
+        if auth_type and SocialIdentityService._user_model_has_field(type(user), "authentication_types"):
+            current_types = list(getattr(user, "authentication_types", None) or [])
+            if auth_type not in current_types:
+                current_types.append(auth_type)
+                user.authentication_types = current_types
+                update_fields.append("authentication_types")
+
+        if not update_fields:
+            return False
+
+        user.save(update_fields=update_fields)
+        logger.info(
+            "social_identity.identity_completion_applied",
+            extra={
+                "provider": provider,
+                "user_id": str(user.pk),
+                "fields": update_fields,
+            },
+        )
+        return True
+
+    @staticmethod
+    def _authentication_type_for(provider: str) -> str | None:
+        """Map a provider literal (e.g. "apple") to the AuthenticationType enum
+        value (e.g. "APPLE"). Returns None when the provider has no enum
+        member, so unknown providers don't end up as free-form strings in
+        `authentication_types`."""
+        try:
+            return AuthenticationType(provider.upper()).value
+        except ValueError:
+            logger.warning(
+                "social_identity.authentication_type_unknown_provider",
+                extra={"provider": provider},
+            )
+            return None
+
+    @staticmethod
+    def _user_model_has_field(user_model: Any, field_name: str) -> bool:
+        """True iff the user model declares a concrete field with this name."""
+        try:
+            user_model._meta.get_field(field_name)
+            return True
+        except Exception:
+            return False
+
+    def _maybe_store_refresh(
+        self,
+        identity: SocialIdentity,
+        refresh_token: str | None,
+        provider: str,
+        subject: str,
+    ) -> bool:
+        """Encrypt and stage `refresh_token` on `identity` if conditions allow.
+
+        Returns True iff `identity.encrypted_refresh_token` was actually
+        mutated. Callers use the bool to decide whether to include the field
+        in `save(update_fields=...)`, so logins that don't carry a fresh
+        refresh token avoid a needless write.
+        """
+        if refresh_token is None:
+            return False
+        if self._encryptor is None:
+            logger.warning(
+                "social_identity.refresh_token_dropped_no_key",
+                extra={"provider": provider},
+            )
+            return False
+        identity.encrypted_refresh_token = self._encryptor.encrypt(refresh_token, aad_for(provider, subject))
+        return True
+
+    def _recover_from_race(
+        self,
+        provider: str,
+        subject: str,
+        refresh_token: str | None,
+    ) -> tuple[Any, SocialIdentity, bool]:
+        """Re-fetch the (provider, subject) winner after a lost-race IntegrityError.
+
+        Called from the IntegrityError handlers in upsert_and_link. The outer
+        @transaction.atomic has already rolled back any partial state from
+        this call (including a freshly-created User in Branch 4). We bump
+        last_used_at on the winner so the caller still sees a "saw this
+        identity recently" signal.
+        """
+        winner = SocialIdentity.objects.select_related("user").get(provider=provider, subject=subject)
+        # Don't re-store the refresh token here — the winning insert already
+        # wrote the AAD-bound ciphertext (or decided not to). Updating it on
+        # the loser's behalf would write a different ciphertext under an AAD
+        # that's already valid, with no benefit.
+        winner.save(update_fields=["last_used_at"])
+        logger.info(
+            "social_identity.race_recovered",
+            extra={"provider": provider, "user_id": str(winner.user.id)},
+        )
+        return winner.user, winner, False
+
+    @staticmethod
+    def _linking_reason(provider: str, email: str | None, extra: dict[str, Any]) -> str:
+        if provider == "google" and email and email.lower().endswith("@gmail.com"):
+            return "google_authoritative_domain"
+        if provider == "google" and extra.get("hd"):
+            return "google_workspace_domain"
+        if provider == "linkedin":
+            return "linkedin_email_verified"
+        if provider == "facebook":
+            return "facebook_email_present"
+        return "unknown"

@@ -18,7 +18,6 @@ Key Features:
 
 import hashlib
 import hmac
-import importlib
 import json
 import logging
 import os
@@ -145,9 +144,7 @@ class PBKDF2Service(BaseKDFService):
 
     def __init__(self, iterations: int = 100000, hash_algorithm: str = "sha256"):
         if iterations < SecurityConstants.MIN_ITERATIONS:
-            raise ValueError(
-                f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS}, got {iterations}"
-            )
+            raise ValueError(f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS}, got {iterations}")
         self.iterations = iterations
         self.hash_algorithm = hash_algorithm
 
@@ -439,9 +436,7 @@ class KeyDerivationService:
             if not user_salt:
                 # Derive a per-user salt from the email only. Password security
                 # comes from the KDF (PBKDF2/Argon2) applied on top of this salt.
-                user_salt = hashlib.sha256(
-                    f"wallet-salt-v1:{email.lower().strip()}".encode()
-                ).hexdigest()
+                user_salt = hashlib.sha256(f"wallet-salt-v1:{email.lower().strip()}".encode()).hexdigest()
 
             # Derive private key
             private_key = self.derive_private_key(email, password, user_salt)
@@ -916,9 +911,7 @@ class KDFManager:
             "encryption_version": "1.0",
         }
 
-    def verify_and_decrypt_key(
-        self, email: str, password: str, salt: str, encrypted_private_key: str
-    ) -> str:
+    def verify_and_decrypt_key(self, email: str, password: str, salt: str, encrypted_private_key: str) -> str:
         """
         Verify credentials and decrypt the stored private key.
 

@@ -35,7 +35,6 @@ def _create_tables(django_db_setup, django_db_blocker):
 @pytest.fixture(autouse=True)
 def _use_tables(_create_tables):
     """Ensure tables exist for every test."""
-    pass
 
 
 def _run_command(*args):

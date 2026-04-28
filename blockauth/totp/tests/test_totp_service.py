@@ -13,7 +13,6 @@ Security-focused test suite covering:
 Per SECURITY_STANDARDS.md requirements.
 """
 
-import time
 import unittest
 from datetime import datetime, timezone
 
@@ -28,7 +27,6 @@ from ..exceptions import (
     TOTPInvalidBackupCodeError,
     TOTPInvalidCodeError,
     TOTPNotEnabledError,
-    TOTPSetupError,
     TOTPTooManyAttemptsError,
     TOTPVerificationError,
 )

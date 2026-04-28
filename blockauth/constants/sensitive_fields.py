@@ -72,6 +72,12 @@ SENSITIVE_FIELDS = {
     "checksum",
     "fingerprint",
     "biometric_data",
+    # OAuth / OIDC / Apple Sign-In
+    "client_secret",
+    "code_verifier",
+    "raw_nonce",
+    "apple_private_key_pem",
+    "payload",
 }
 
 # Additional patterns that might contain sensitive data
