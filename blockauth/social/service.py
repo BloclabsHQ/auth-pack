@@ -18,10 +18,13 @@ Plan deviations:
     `SocialIdentity.user` FK targets `settings.AUTH_USER_MODEL`; the
     service must query the same model the FK points at. Same fix used
     in Task 2.3.
-  - New-user creation goes through `User.objects.create_user(username=...,
-    email=..., password=None)` rather than the plan's
-    `User.objects.create(email=..., is_verified=...)`. The latter fails
-    against `auth.User` (no `is_verified` field, required `username`).
+  - New-user creation routes the natural identifier through whichever
+    kwarg the integrator's user model exposes via `USERNAME_FIELD`.
+    `auth.User` keys on `username`, email-first models (e.g. fabric-auth's
+    `Creator`) key on `email`, and `BlockUser`-derived models key on the
+    auto-populated `id`. The service inspects `USERNAME_FIELD` and only
+    forwards `email` as a separate kwarg when it is a distinct field from
+    the natural key, so every supported user model accepts the call.
     `create_user(password=None)` produces an unusable password (Django
     default), so the integrator's password-reset flow still works.
 """
@@ -33,7 +36,10 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
 from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
-from blockauth.social.exceptions import SocialIdentityConflictError
+from blockauth.social.exceptions import (
+    SocialIdentityConflictError,
+    SocialIdentityMissingEmailError,
+)
 from blockauth.social.linking_policy import AccountLinkingPolicy
 from blockauth.social.models import SocialIdentity
 
@@ -127,16 +133,19 @@ class SocialIdentityService:
 
         # New-user creation. See module docstring for the rationale behind
         # `create_user` (model-agnostic) vs. the plan's `objects.create(...)`.
-        # `username` is required by `auth.User`; we derive it from email or
-        # synthesize one from (provider, subject) to guarantee uniqueness
-        # for users without an email (e.g., Apple "hide my email" without
-        # a relay address, edge case). Truncated to Django's 150-char limit.
-        username = email if email else f"social_{provider}_{subject}"
-        username = username[:150]
+        # The natural identifier is routed through the kwarg named by
+        # `USERNAME_FIELD`, so the same code path works against `auth.User`
+        # (`username`), email-keyed integrator models (`email`), and
+        # `BlockUser`-derived models that key on an auto-populated `id`.
+        if not email:
+            logger.warning(
+                "social_identity.creation_blocked_missing_email",
+                extra={"provider": provider},
+            )
+            raise SocialIdentityMissingEmailError(provider=provider)
+
         new_user = User.objects.create_user(
-            username=username,
-            email=email or "",
-            password=None,
+            **self._build_create_user_kwargs(User, email)
         )
         identity = SocialIdentity(
             provider=provider,
@@ -167,6 +176,44 @@ class SocialIdentityService:
             bytes(identity.encrypted_refresh_token),
             aad_for(identity.provider, identity.subject),
         )
+
+    @staticmethod
+    def _build_create_user_kwargs(user_model: Any, email: str) -> dict[str, Any]:
+        """Build the kwargs for `User.objects.create_user(...)` for a new social user.
+
+        The natural identifier is routed through whichever kwarg the user model
+        names via `USERNAME_FIELD`. `email` is forwarded as a separate kwarg
+        only when it is a distinct field from the natural key, avoiding both a
+        `TypeError` (passing `username=` to email-keyed models) and a redundant
+        `email=` (when email already serves as the natural key).
+        """
+        username_field: str = user_model.USERNAME_FIELD
+        kwargs: dict[str, Any] = {"password": None}
+
+        if username_field == "email":
+            kwargs["email"] = email
+            return kwargs
+
+        has_email_field = any(
+            getattr(field, "name", None) == "email"
+            for field in user_model._meta.get_fields()
+        )
+        if has_email_field:
+            kwargs["email"] = email
+
+        # Only set the natural key kwarg when it is not auto-populated. Models
+        # keyed on `id` rely on the manager / default to assign the value, and
+        # passing a truncated email there would clash with the field type
+        # (e.g., `UUIDField`).
+        if username_field != "id":
+            try:
+                username_field_obj = user_model._meta.get_field(username_field)
+            except Exception:
+                username_field_obj = None
+            max_length = getattr(username_field_obj, "max_length", None) or 150
+            kwargs[username_field] = email[:max_length]
+
+        return kwargs
 
     def _maybe_store_refresh(
         self,

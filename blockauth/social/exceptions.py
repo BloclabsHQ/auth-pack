@@ -3,6 +3,30 @@
 from rest_framework.exceptions import APIException
 
 
+class SocialIdentityMissingEmailError(APIException):
+    """Raised when an OAuth/OIDC sign-in did not return an email and the
+    integrator's user model requires one to create a new account.
+
+    Every supported provider (Google, Apple, Facebook, LinkedIn) returns
+    either a verified email or — in Apple's "hide my email" case — a
+    relay address. A missing email therefore indicates either a missing
+    scope on the client request or a misconfigured provider, both of
+    which are surfaced to the integrator as HTTP 400 rather than papered
+    over with a synthetic identifier that would corrupt the user table.
+    """
+
+    status_code = 400
+    default_detail = "Provider did not return an email address."
+    default_code = "SOCIAL_IDENTITY_MISSING_EMAIL"
+
+    def __init__(self, *, provider: str):
+        self.provider = provider
+        super().__init__(
+            detail=f"social identity provider {provider!r} did not return an email",
+            code=self.default_code,
+        )
+
+
 class SocialIdentityConflictError(APIException):
     """Raised when an OAuth/OIDC sign-in claims an email that maps to an
     existing user but the issuing provider is not authoritative for that
