@@ -138,9 +138,5 @@ class AppleNotificationService:
         """Return the integrator's user_id for an (apple, sub) pair without
         mutating any row. Used for read-only events (email-disabled /
         email-enabled) so the trigger still receives a usable identifier."""
-        identity = (
-            SocialIdentity.objects.select_related("user")
-            .filter(provider="apple", subject=sub)
-            .first()
-        )
+        identity = SocialIdentity.objects.select_related("user").filter(provider="apple", subject=sub).first()
         return str(identity.user.pk) if identity is not None else None

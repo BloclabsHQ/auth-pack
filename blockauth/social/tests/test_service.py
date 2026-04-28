@@ -353,7 +353,9 @@ def test_existing_identity_skips_email_sync_on_collision():
 # in sync across BlockUser-derived integrators (fabric-auth's Creator).
 # ---------------------------------------------------------------------------
 
-from tests.models import TestBlockUser  # noqa: E402  (import at top of file would force Django app loading before pytest_configure)
+from tests.models import (  # noqa: E402  (import at top of file would force Django app loading before pytest_configure)
+    TestBlockUser,
+)
 
 
 def test_authentication_type_for_known_provider_returns_enum_value():
@@ -413,8 +415,8 @@ def test_build_create_user_kwargs_filters_extra_user_fields_to_model_schema():
         extra_user_fields={
             "first_name": "Alice",
             "last_name": "Smith",
-            "wallet_address": "0xdeadbeef",   # not on auth.User
-            "middle_name": "",                 # empty -> dropped
+            "wallet_address": "0xdeadbeef",  # not on auth.User
+            "middle_name": "",  # empty -> dropped
         },
     )
 
@@ -436,9 +438,7 @@ def test_apply_identity_completion_flips_is_verified_and_appends_auth_type():
         authentication_types=[],
     )
 
-    wrote = SocialIdentityService._apply_identity_completion(
-        user=user, provider="apple", email_verified=True
-    )
+    wrote = SocialIdentityService._apply_identity_completion(user=user, provider="apple", email_verified=True)
 
     assert wrote is True
     user.refresh_from_db()
@@ -456,9 +456,7 @@ def test_apply_identity_completion_is_idempotent_on_repeat_signin():
         authentication_types=["APPLE"],
     )
 
-    wrote = SocialIdentityService._apply_identity_completion(
-        user=user, provider="apple", email_verified=True
-    )
+    wrote = SocialIdentityService._apply_identity_completion(user=user, provider="apple", email_verified=True)
 
     assert wrote is False
 
@@ -473,9 +471,7 @@ def test_apply_identity_completion_appends_second_provider_without_dropping_firs
         authentication_types=["GOOGLE"],
     )
 
-    SocialIdentityService._apply_identity_completion(
-        user=user, provider="apple", email_verified=True
-    )
+    SocialIdentityService._apply_identity_completion(user=user, provider="apple", email_verified=True)
 
     user.refresh_from_db()
     assert user.authentication_types == ["GOOGLE", "APPLE"]

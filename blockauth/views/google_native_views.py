@@ -26,9 +26,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from blockauth.docs.social_auth_docs import google_native_verify_schema
-from blockauth.views.google_native_serializers import (
-    GoogleNativeIdTokenVerifyRequestSerializer,
-)
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
 from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
     SocialIdentityConflictError,
@@ -43,6 +40,9 @@ from blockauth.utils.jwt import (
 )
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.social import social_login_data
+from blockauth.views.google_native_serializers import (
+    GoogleNativeIdTokenVerifyRequestSerializer,
+)
 
 logger = logging.getLogger(__name__)
 

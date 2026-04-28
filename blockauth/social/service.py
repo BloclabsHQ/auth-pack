@@ -249,17 +249,12 @@ class SocialIdentityService:
             )
             return False
 
-        current_email = (user.email or "")
+        current_email = user.email or ""
         if email.lower() == current_email.lower():
             return False
 
         user_model = type(user)
-        collision = (
-            user_model._default_manager.filter(email__iexact=email)
-            .exclude(pk=user.pk)
-            .order_by("pk")
-            .first()
-        )
+        collision = user_model._default_manager.filter(email__iexact=email).exclude(pk=user.pk).order_by("pk").first()
         if collision is not None:
             logger.warning(
                 "social_identity.email_sync_skipped_collision",
@@ -397,9 +392,7 @@ class SocialIdentityService:
             update_fields.append("is_verified")
 
         auth_type = SocialIdentityService._authentication_type_for(provider)
-        if auth_type and SocialIdentityService._user_model_has_field(
-            type(user), "authentication_types"
-        ):
+        if auth_type and SocialIdentityService._user_model_has_field(type(user), "authentication_types"):
             current_types = list(getattr(user, "authentication_types", None) or [])
             if auth_type not in current_types:
                 current_types.append(auth_type)

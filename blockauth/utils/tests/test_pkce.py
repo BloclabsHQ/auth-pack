@@ -3,7 +3,6 @@
 import base64
 import hashlib
 
-
 from blockauth.utils.pkce import PkcePair, compute_pkce_challenge, generate_pkce_pair
 
 
