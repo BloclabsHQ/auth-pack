@@ -239,6 +239,13 @@ class SocialIdentityService:
           - new email collides with another User row            → would silently
             merge two distinct accounts; surface as a log line so the
             integrator can decide (manual merge, account migration, etc.)
+          - DB unique constraint rejects the write at save time → covers
+            integrators whose default manager filters rows the unique
+            constraint still enforces (e.g. soft-delete managers that
+            hide `is_deleted=True` Creators while the underlying email
+            uniqueness holds across all rows). Surfaces the same warning
+            shape as the in-memory collision skip so dashboards stay
+            uniform.
         """
         if not email:
             return False
@@ -267,8 +274,27 @@ class SocialIdentityService:
             )
             return False
 
+        # DB-level email uniqueness can still reject the save when the
+        # default manager hides rows the constraint covers (soft-delete
+        # managers are the common case). Catch narrowly, restore the
+        # in-memory value, and surface the same warning shape as the
+        # in-memory collision skip — caller's @transaction.atomic rolls
+        # back the failed UPDATE.
+        previous_email = user.email
         user.email = email
-        user.save(update_fields=["email"])
+        try:
+            user.save(update_fields=["email"])
+        except IntegrityError:
+            user.email = previous_email
+            logger.warning(
+                "social_identity.email_sync_skipped_db_collision",
+                extra={
+                    "provider": provider,
+                    "user_id": str(user.id),
+                    "email_domain_only": email.rsplit("@", 1)[-1],
+                },
+            )
+            return False
         logger.info(
             "social_identity.email_synced",
             extra={

@@ -347,6 +347,56 @@ def test_existing_identity_skips_email_sync_on_collision():
     assert user_a.email == "abc123@privaterelay.appleid.com"
 
 
+@pytest.mark.django_db
+def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
+    """Soft-delete-style integrator schemas (e.g. fabric-auth's Creator with
+    `CreatorManager.get_queryset()` filtering `is_deleted=False`) hide rows
+    from the in-memory collision check while the DB-level unique constraint
+    on `email` still covers them. When the save raises `IntegrityError`,
+    the sync must skip cleanly — restore the in-memory email, log a
+    warning, and return False — rather than 500 the request."""
+    from django.db import IntegrityError
+
+    user = User.objects.create_user(
+        username="db_collide_user",
+        email="abc123@privaterelay.appleid.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_sub_db_collide",
+        user=user,
+        email_at_link="abc123@privaterelay.appleid.com",
+        email_verified_at_link=True,
+    )
+
+    # Force the save to raise IntegrityError without seeding a second User
+    # row — simulates "soft-deleted row hidden from the manager but still
+    # holding the unique constraint." Patch the unbound `User.save` so the
+    # call inside `_sync_user_email_from_provider` raises while leaving the
+    # rest of the suite unaffected.
+    original_save = User.save
+
+    def fake_save(self, *args, **kwargs):
+        if kwargs.get("update_fields") == ["email"]:
+            raise IntegrityError("duplicate key violates unique constraint")
+        return original_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(User, "save", fake_save)
+
+    SocialIdentityService().upsert_and_link(
+        provider="apple",
+        subject="a_sub_db_collide",
+        email="real.user@example.com",
+        email_verified=True,
+        extra_claims={"is_private_email": False},
+    )
+
+    monkeypatch.setattr(User, "save", original_save)
+    user.refresh_from_db()
+    assert user.email == "abc123@privaterelay.appleid.com"
+
+
 # ---------------------------------------------------------------------------
 # Identity-completion helpers — exercised directly because they're the
 # primary mechanism for keeping `is_verified` and `authentication_types`
