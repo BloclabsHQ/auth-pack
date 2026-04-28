@@ -13,11 +13,15 @@ Event handling:
   - email-disabled / email-enabled -> log only
 
 Trigger contract (APPLE_NOTIFICATION_TRIGGER):
-  Integrators receive a trimmed dict containing only `event_type`, `sub`, and
-  `event_time` — NOT the full decoded JWT claims. This is intentional to
-  reduce the surface for accidental PII leaks if the integrator logs the
-  trigger payload. If the integrator needs additional claim fields, they
-  must extend the trigger contract explicitly here.
+  Integrators receive a trimmed dict containing `event_type`, `sub`,
+  `event_time`, and `user_id` — NOT the full decoded JWT claims. The
+  payload is intentionally minimal to reduce the surface for accidental
+  PII leaks if the integrator logs it. `user_id` is the integrator's own
+  user identifier (resolved from the SocialIdentity before the affected
+  row is mutated), so a downstream handler can publish events or run
+  side-effects that need the local id without doing a second lookup
+  against state we just dropped. It is `None` when no SocialIdentity row
+  matched the (apple, sub) pair.
 """
 
 import json
@@ -62,13 +66,20 @@ class AppleNotificationService:
         sub = str(events.get("sub") or "")
         logger.info("apple.notification.received", extra={"event_type": event_type})
 
+        # Pre-resolve the affected user_id so the post-handler trigger can
+        # still reference it after consent-revoked / account-delete have
+        # mutated state. Returning the id alongside the boolean keeps the
+        # handler API minimal and avoids a second lookup against rows the
+        # handler may have just deleted.
         handled = False
+        affected_user_id: str | None = None
         if event_type == AppleNotificationEvents.CONSENT_REVOKED:
-            handled = self._handle_consent_revoked(sub)
+            handled, affected_user_id = self._handle_consent_revoked(sub)
         elif event_type == AppleNotificationEvents.ACCOUNT_DELETE:
-            handled = self._handle_account_delete(sub)
+            handled, affected_user_id = self._handle_account_delete(sub)
         elif event_type in (AppleNotificationEvents.EMAIL_DISABLED, AppleNotificationEvents.EMAIL_ENABLED):
             handled = True
+            affected_user_id = self._lookup_user_id_for_subject(sub)
         else:
             # Unknown / unsupported event type. Log so integrators see new
             # event types Apple may add in the future without crashing.
@@ -81,13 +92,14 @@ class AppleNotificationService:
         trigger = import_string_or_none(trigger_path) if trigger_path else None
         if trigger:
             try:
-                # Trim the trigger payload to event_type/sub/event_time only.
+                # Trim the trigger payload to event_type/sub/event_time/user_id.
                 # The full JWT claims are NOT passed — see module docstring.
                 trigger().run(
                     {
                         "event_type": event_type,
                         "sub": sub,
                         "event_time": events.get("event_time"),
+                        "user_id": affected_user_id,
                     }
                 )
             except Exception as exc:  # never let an integrator hook bring down the webhook
@@ -97,24 +109,38 @@ class AppleNotificationService:
 
     @staticmethod
     @transaction.atomic
-    def _handle_consent_revoked(sub: str) -> bool:
-        identity = SocialIdentity.objects.filter(provider="apple", subject=sub).first()
+    def _handle_consent_revoked(sub: str) -> tuple[bool, str | None]:
+        identity = SocialIdentity.objects.select_related("user").filter(provider="apple", subject=sub).first()
         if identity is None:
-            return False
+            return False, None
+        user_id = str(identity.user.pk)
         identity.delete()
-        return True
+        return True, user_id
 
     @staticmethod
     @transaction.atomic
-    def _handle_account_delete(sub: str) -> bool:
+    def _handle_account_delete(sub: str) -> tuple[bool, str | None]:
         identity = SocialIdentity.objects.select_related("user").filter(provider="apple", subject=sub).first()
         if identity is None:
-            return False
+            return False, None
         user = identity.user
+        user_id = str(user.pk)
         other_count = SocialIdentity.objects.filter(user=user).exclude(provider="apple", subject=sub).count()
         if other_count == 0:
             user.delete()  # CASCADE removes the apple identity row too
-            logger.info("apple.notification.account_deleted", extra={"user_id": str(user.id)})
-            return True
+            logger.info("apple.notification.account_deleted", extra={"user_id": user_id})
+            return True, user_id
         identity.delete()
-        return True
+        return True, user_id
+
+    @staticmethod
+    def _lookup_user_id_for_subject(sub: str) -> str | None:
+        """Return the integrator's user_id for an (apple, sub) pair without
+        mutating any row. Used for read-only events (email-disabled /
+        email-enabled) so the trigger still receives a usable identifier."""
+        identity = (
+            SocialIdentity.objects.select_related("user")
+            .filter(provider="apple", subject=sub)
+            .first()
+        )
+        return str(identity.user.pk) if identity is not None else None

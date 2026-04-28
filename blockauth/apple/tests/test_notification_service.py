@@ -220,7 +220,11 @@ def test_account_delete_for_unknown_sub_returns_handled_false(apple_settings, bu
 @pytest.mark.django_db
 def test_trigger_hook_called_with_trimmed_payload(apple_settings, build_id_token, jwks_response):
     """When APPLE_NOTIFICATION_TRIGGER is configured, the hook is called with
-    {event_type, sub, event_time} only — NOT the full JWT claims."""
+    {event_type, sub, event_time, user_id} only — NOT the full JWT claims.
+    `user_id` is pre-resolved before the consent-revoked handler deletes
+    the SocialIdentity, so the trigger can publish events / run side
+    effects that reference the integrator's local id without doing a
+    second lookup against the row that was just dropped."""
     user = User.objects.create_user(username="trigger_user", email="trigger@example.com", password="pw")
     SocialIdentity.objects.create(
         provider="apple",
@@ -265,6 +269,7 @@ def test_trigger_hook_called_with_trimmed_payload(apple_settings, build_id_token
         "event_type": "consent-revoked",
         "sub": "001234.trigger",
         "event_time": 1700000020,
+        "user_id": str(user.pk),
     }
     # Critically: the full JWT claims (iss, aud, etc.) must NOT be in the
     # payload — that's the PII-leak defense the trigger trim implements.
