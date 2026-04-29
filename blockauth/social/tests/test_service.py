@@ -398,8 +398,13 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
     """Soft-delete-style integrator schemas with managers that hide rows from
     the in-memory collision check can still trip a DB-level unique constraint
     on `email`. When the save raises `IntegrityError`, the sync must skip
-    cleanly — restore the in-memory email, log a warning, and return False —
-    rather than 500 the request."""
+    cleanly — restore the in-memory email, log a warning, return False — and
+    the surrounding `upsert_and_link` must still complete. The savepoint
+    around the failing save is what keeps the outer transaction usable on
+    postgres; without it, the post-sync `existing_identity.save(...)` would
+    raise `TransactionManagementError`."""
+    import time
+
     from django.db import IntegrityError
 
     user = User.objects.create_user(
@@ -407,13 +412,15 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
         email="abc123@privaterelay.appleid.com",
         password="pw",
     )
-    SocialIdentity.objects.create(
+    identity = SocialIdentity.objects.create(
         provider="apple",
         subject="a_sub_db_collide",
         user=user,
         email_at_link="abc123@privaterelay.appleid.com",
         email_verified_at_link=True,
     )
+    initial_last_used_at = identity.last_used_at
+    time.sleep(0.01)  # auto_now resolution can collapse same-microsecond saves
 
     # Force the save to raise IntegrityError without seeding a second User
     # row — simulates "soft-deleted row hidden from the manager but still
@@ -429,7 +436,7 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
 
     monkeypatch.setattr(User, "save", fake_save)
 
-    SocialIdentityService().upsert_and_link(
+    returned_user, returned_identity, created = SocialIdentityService().upsert_and_link(
         provider="apple",
         subject="a_sub_db_collide",
         email="real.user@example.com",
@@ -440,6 +447,14 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
     monkeypatch.setattr(User, "save", original_save)
     user.refresh_from_db()
     assert user.email == "abc123@privaterelay.appleid.com"
+
+    # The post-sync `existing_identity.save(update_fields=["last_used_at"])`
+    # inside `upsert_and_link` must still succeed after the swallowed
+    # IntegrityError — that's what the savepoint protects.
+    assert returned_user.id == user.id
+    assert created is False
+    returned_identity.refresh_from_db()
+    assert returned_identity.last_used_at > initial_last_used_at
 
 
 # ---------------------------------------------------------------------------

@@ -278,14 +278,19 @@ class SocialIdentityService:
 
         # DB-level email uniqueness can still reject the save when the
         # default manager hides rows the constraint covers (soft-delete
-        # managers are the common case). Catch narrowly, restore the
+        # managers are the common case). Wrap the save in a savepoint so
+        # the IntegrityError rolls back only the failed UPDATE — without
+        # the savepoint, postgres would mark the outer
+        # `upsert_and_link` transaction as aborted and the subsequent
+        # `existing_identity.save(...)` would raise
+        # TransactionManagementError. Catch narrowly, restore the
         # in-memory value, and surface the same warning shape as the
-        # in-memory collision skip — caller's @transaction.atomic rolls
-        # back the failed UPDATE.
+        # in-memory collision skip.
         previous_email = user.email
         user.email = email
         try:
-            user.save(update_fields=["email"])
+            with transaction.atomic():
+                user.save(update_fields=["email"])
         except IntegrityError:
             user.email = previous_email
             logger.warning(

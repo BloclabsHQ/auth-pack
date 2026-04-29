@@ -24,6 +24,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 - Renamed the SocialIdentity table from `social_identity` to `blockauth_social_identity` with a forward migration so the table is package-scoped for reusable Django deployments.
 - Replaced downstream-specific examples and comments with generic consumer-app guidance.
 - Social identity sign-in now fails closed with `SOCIAL_IDENTITY_USER_UNAVAILABLE` when an existing identity points at a user hidden by the configured user model's default manager, preventing soft-deleted accounts from receiving fresh tokens through FK traversal.
+- Wrapped the email-resync `user.save()` in `_sync_user_email_from_provider` in a savepoint so a DB-level unique violation on integrators with soft-delete-style managers no longer poisons the surrounding `upsert_and_link` transaction (subsequent saves on `existing_identity` previously failed with `TransactionManagementError` on PostgreSQL).
 
 ### Fixed
 
