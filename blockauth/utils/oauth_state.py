@@ -15,8 +15,9 @@ authorization code to be exchanged. The cookie is cleared on the successful
 response so it cannot be replayed.
 
 Why a cookie (rather than a server-side session store):
-  - fabric-auth is stateless behind Kong; adding a session store just for
-    OAuth state is heavier than a scoped, short-lived cookie.
+  - Many API deployments are stateless behind a reverse proxy; adding a
+    session store just for OAuth state is heavier than a scoped, short-lived
+    cookie.
   - Short TTL (10 min) + HttpOnly + SameSite=Lax + compare_digest is the
     pattern documented by OWASP for browser-initiated OAuth flows.
 
@@ -25,8 +26,8 @@ Why Secure and SameSite are configurable:
     production-equivalent mode — Chrome treats localhost as secure, but
     Firefox doesn't. A hardcoded `secure=True` locks out Firefox-based
     local dev entirely.
-  - Tailscale hosts on `*.fabric.test` typically run http until an operator
-    provisions a local TLS cert.
+  - Internal development hosts often run http until an operator provisions a
+    local TLS cert.
   - Deployed envs run TLS end-to-end and want `Secure=True` + the
     strictest SameSite policy the callback hop permits.
 

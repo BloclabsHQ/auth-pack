@@ -22,7 +22,7 @@ class SocialIdentityMissingEmailError(APIException):
     def __init__(self, *, provider: str):
         self.provider = provider
         super().__init__(
-            detail=f"social identity provider {provider!r} did not return an email",
+            detail=f"provider {provider!r} did not return an email",
             code=self.default_code,
         )
 
@@ -48,5 +48,29 @@ class SocialIdentityConflictError(APIException):
         self.existing_user_id = existing_user_id
         super().__init__(
             detail=f"social identity conflict for provider={provider}",
+            code=self.default_code,
+        )
+
+
+class SocialIdentityUserUnavailableError(APIException):
+    """Raised when a stored identity points at a user hidden by the default
+    manager.
+
+    Soft-delete integrations commonly keep the database row while excluding it
+    from the model's default manager. The FK still resolves through Django's
+    base manager, but returning that user would mint tokens for an account the
+    application considers deleted or unavailable. Fail closed and let the
+    integrator decide whether to restore, purge, or relink the identity.
+    """
+
+    status_code = 409
+    default_detail = "This identity is linked to an unavailable account."
+    default_code = "SOCIAL_IDENTITY_USER_UNAVAILABLE"
+
+    def __init__(self, *, provider: str, existing_user_id: str):
+        self.provider = provider
+        self.existing_user_id = existing_user_id
+        super().__init__(
+            detail=f"linked user unavailable for provider={provider}",
             code=self.default_code,
         )

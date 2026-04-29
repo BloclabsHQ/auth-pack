@@ -5,7 +5,7 @@ This module contains comprehensive Swagger/OpenAPI documentation for TOTP 2FA en
 Separated from business logic for better maintainability and organization.
 
 TOTP (Time-based One-Time Password) provides two-factor authentication using:
-- Authenticator Apps: Google Authenticator, Authy, 1Password, Microsoft Authenticator
+- Authenticator Apps: Google Authenticator, Authy, Microsoft Authenticator, or another TOTP app
 - Backup Codes: One-time recovery codes for emergency access
 - RFC 6238 Compliance: Industry-standard time-based OTP algorithm
 """

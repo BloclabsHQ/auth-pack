@@ -36,11 +36,14 @@ class AppleClientSecretBuilder:
         self._lock = threading.Lock()
         self._cached_secret: str | None = None
         self._cached_secret_expires_at: float = 0.0
+        self._cached_subject: str | None = None
 
-    def build(self) -> str:
+    def build(self, *, client_id: str | None = None) -> str:
+        team_id, key_id, private_pem, subject = self._read_settings(client_id=client_id)
         now = time.time()
         if (
             self._cached_secret is not None
+            and self._cached_subject == subject
             and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS
         ):
             return self._cached_secret
@@ -49,11 +52,11 @@ class AppleClientSecretBuilder:
             now = time.time()
             if (
                 self._cached_secret is not None
+                and self._cached_subject == subject
                 and (self._cached_secret_expires_at - now) > CLIENT_SECRET_REBUILD_MARGIN_SECONDS
             ):
                 return self._cached_secret
 
-            team_id, key_id, private_pem, services_id = self._read_settings()
             issued_at = int(now)
             expires_at = issued_at + CLIENT_SECRET_LIFETIME_SECONDS
             secret = pyjwt.encode(
@@ -62,7 +65,7 @@ class AppleClientSecretBuilder:
                     "iat": issued_at,
                     "exp": expires_at,
                     "aud": AppleEndpoints.AUDIENCE,
-                    "sub": services_id,
+                    "sub": subject,
                 },
                 private_pem,
                 algorithm="ES256",
@@ -72,14 +75,16 @@ class AppleClientSecretBuilder:
             )
             self._cached_secret = secret
             self._cached_secret_expires_at = float(expires_at)
+            self._cached_subject = subject
             logger.info("apple.client_secret.built", extra={"team_id_suffix": team_id[-4:]})
             return secret
 
     @staticmethod
-    def _read_settings() -> tuple[str, str, str, str]:
+    def _read_settings(*, client_id: str | None = None) -> tuple[str, str, str, str]:
         team_id = apple_setting("APPLE_TEAM_ID")
         key_id = apple_setting("APPLE_KEY_ID")
         services_id = apple_setting("APPLE_SERVICES_ID")
+        subject = client_id or services_id
         private_pem = apple_setting("APPLE_PRIVATE_KEY_PEM")
         if not private_pem:
             path = apple_setting("APPLE_PRIVATE_KEY_PATH")
@@ -94,7 +99,7 @@ class AppleClientSecretBuilder:
                     raise AppleClientSecretConfigError(
                         f"APPLE_PRIVATE_KEY_PATH is set but file does not exist: {path}"
                     ) from exc
-        if not all([team_id, key_id, services_id, private_pem]):
+        if not all([team_id, key_id, subject, private_pem]):
             logger.warning(
                 "apple.client_secret.config_missing",
                 extra={
@@ -104,7 +109,7 @@ class AppleClientSecretBuilder:
                         for name, value in [
                             ("APPLE_TEAM_ID", team_id),
                             ("APPLE_KEY_ID", key_id),
-                            ("APPLE_SERVICES_ID", services_id),
+                            ("client_id_or_APPLE_SERVICES_ID", subject),
                             ("APPLE_PRIVATE_KEY_PEM_or_PATH", private_pem),
                         ]
                         if not value
@@ -112,10 +117,10 @@ class AppleClientSecretBuilder:
                 },
             )
             raise AppleClientSecretConfigError(
-                "APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_SERVICES_ID, and "
+                "APPLE_TEAM_ID, APPLE_KEY_ID, client_id or APPLE_SERVICES_ID, and "
                 "APPLE_PRIVATE_KEY_PEM (or APPLE_PRIVATE_KEY_PATH) must all be set"
             )
-        return team_id, key_id, private_pem, services_id
+        return team_id, key_id, private_pem, subject
 
 
 # Module-level singleton — import this from views/services so the

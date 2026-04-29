@@ -72,11 +72,27 @@ def test_build_returns_es256_jwt_with_required_claims(configured_settings, es256
     assert claims["exp"] - claims["iat"] == CLIENT_SECRET_LIFETIME_SECONDS
 
 
+def test_build_can_use_explicit_client_id_for_native_app_ids(configured_settings, es256_keypair):
+    _, public_pem = es256_keypair
+    builder = AppleClientSecretBuilder()
+    secret = builder.build(client_id="com.example.app")
+
+    claims = pyjwt.decode(secret, public_pem, algorithms=["ES256"], audience="https://appleid.apple.com")
+    assert claims["sub"] == "com.example.app"
+
+
 def test_cached_secret_reused_within_window(configured_settings):
     builder = AppleClientSecretBuilder()
     a = builder.build()
     b = builder.build()
     assert a == b
+
+
+def test_cache_rebuilds_for_different_client_id(configured_settings):
+    builder = AppleClientSecretBuilder()
+    service_secret = builder.build()
+    app_secret = builder.build(client_id="com.example.app")
+    assert service_secret != app_secret
 
 
 def test_cache_rebuilt_when_near_expiry(configured_settings):

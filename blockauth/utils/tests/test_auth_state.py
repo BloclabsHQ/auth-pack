@@ -1,7 +1,7 @@
 """Tests for ``blockauth.utils.auth_state.build_user_payload``.
 
 Covers the shape fix (#128) where the helper drifted from the
-``@bloclabshq/auth`` shell ``AuthUser`` schema:
+Public ``AuthUser`` response shape:
 
 * ``is_active`` always present (true + false cases).
 * ``date_joined`` always present and serialized as ISO-8601 string.
@@ -70,7 +70,7 @@ class TestWallets:
 
     def test_wallets_populated_when_set(self):
         """#537: wallets must be ``WalletItem[]`` not ``string[]`` — the
-        shell's Zod schema rejects bare address strings."""
+        object shape can evolve without breaking clients."""
         address = "0x1234567890abcdef1234567890abcdef12345678"
         payload = build_user_payload(_make_user(wallet_address=address))
         assert payload["wallet_address"] == address

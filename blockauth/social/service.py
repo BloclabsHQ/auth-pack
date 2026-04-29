@@ -31,8 +31,8 @@ Plan deviations:
     in Task 2.3.
   - New-user creation routes the natural identifier through whichever
     kwarg the integrator's user model exposes via `USERNAME_FIELD`.
-    `auth.User` keys on `username`, email-first models (e.g. fabric-auth's
-    `Creator`) key on `email`, and `BlockUser`-derived models key on the
+    `auth.User` keys on `username`, email-first models key on `email`, and
+    `BlockUser`-derived models key on the
     auto-populated `id`. The service inspects `USERNAME_FIELD` and only
     forwards `email` as a separate kwarg when it is a distinct field from
     the natural key, so every supported user model accepts the call.
@@ -51,6 +51,7 @@ from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
 from blockauth.social.exceptions import (
     SocialIdentityConflictError,
     SocialIdentityMissingEmailError,
+    SocialIdentityUserUnavailableError,
 )
 from blockauth.social.linking_policy import AccountLinkingPolicy
 from blockauth.social.models import SocialIdentity
@@ -80,14 +81,15 @@ class SocialIdentityService:
             SocialIdentity.objects.select_related("user").filter(provider=provider, subject=subject).first()
         )
         if existing_identity is not None:
+            existing_user = self._linked_user_or_raise(User, existing_identity, provider)
             self._sync_user_email_from_provider(
-                user=existing_identity.user,
+                user=existing_user,
                 provider=provider,
                 email=email,
                 email_verified=email_verified,
             )
             self._apply_identity_completion(
-                user=existing_identity.user,
+                user=existing_user,
                 provider=provider,
                 email_verified=email_verified,
             )
@@ -98,9 +100,9 @@ class SocialIdentityService:
             existing_identity.save(update_fields=update_fields)
             logger.info(
                 "social_identity.matched_existing_subject",
-                extra={"provider": provider, "user_id": str(existing_identity.user.id)},
+                extra={"provider": provider, "user_id": str(existing_user.id)},
             )
-            return existing_identity.user, existing_identity, False
+            return existing_user, existing_identity, False
 
         # Case-insensitive email match: a stored "CaseUser@Gmail.com" must still
         # match an IdP-returned "caseuser@gmail.com" (RFC 5321 §2.4 — local-part
@@ -463,6 +465,26 @@ class SocialIdentityService:
         except Exception:
             return False
 
+    @staticmethod
+    def _linked_user_or_raise(user_model: Any, identity: SocialIdentity, provider: str) -> Any:
+        """Return the linked user only if the default manager still exposes it.
+
+        Django FK traversal uses the related model's base manager, so a
+        soft-deleted user can still be reachable through `identity.user` even
+        when normal application queries exclude it. Treat that as unavailable
+        and fail closed before syncing fields or minting tokens.
+        """
+        if user_model._default_manager.filter(pk=identity.user_id).exists():
+            return identity.user
+        logger.warning(
+            "social_identity.linked_user_unavailable",
+            extra={"provider": provider, "user_id": str(identity.user_id)},
+        )
+        raise SocialIdentityUserUnavailableError(
+            provider=provider,
+            existing_user_id=str(identity.user_id),
+        )
+
     def _maybe_store_refresh(
         self,
         identity: SocialIdentity,
@@ -503,6 +525,7 @@ class SocialIdentityService:
         identity recently" signal.
         """
         winner = SocialIdentity.objects.select_related("user").get(provider=provider, subject=subject)
+        winner_user = self._linked_user_or_raise(get_user_model(), winner, provider)
         # Don't re-store the refresh token here — the winning insert already
         # wrote the AAD-bound ciphertext (or decided not to). Updating it on
         # the loser's behalf would write a different ciphertext under an AAD
@@ -510,9 +533,9 @@ class SocialIdentityService:
         winner.save(update_fields=["last_used_at"])
         logger.info(
             "social_identity.race_recovered",
-            extra={"provider": provider, "user_id": str(winner.user.id)},
+            extra={"provider": provider, "user_id": str(winner_user.id)},
         )
-        return winner.user, winner, False
+        return winner_user, winner, False
 
     @staticmethod
     def _linking_reason(provider: str, email: str | None, extra: dict[str, Any]) -> str:

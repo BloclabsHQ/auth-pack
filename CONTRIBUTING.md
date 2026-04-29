@@ -39,7 +39,7 @@ make check
 
 - **Format**: black (120 char line length) + isort
 - **Lint**: flake8
-- **Security**: See [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md)
+- **Security**: See [Security Standards](docs/security/security-standards.md)
 
 Key rules:
 - No hardcoded secrets or credentials

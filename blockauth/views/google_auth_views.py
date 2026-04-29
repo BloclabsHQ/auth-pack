@@ -221,8 +221,8 @@ class GoogleAuthCallbackView(APIView):
     """Handle Google OAuth callback — verify state + PKCE + nonce + id_token.
 
     Subclass and override :meth:`build_success_response` to ship tokens via
-    HttpOnly cookies + a 302 to the shell origin instead of the default JSON
-    body (BFF pattern).
+    HttpOnly cookies + a 302 to the application origin instead of the
+    default JSON body (BFF pattern).
     """
 
     permission_classes = (AllowAny,)
@@ -243,11 +243,11 @@ class GoogleAuthCallbackView(APIView):
     def build_success_response(self, request, result) -> Response:
         """Default: return the `{access, refresh, user}` JSON body.
 
-        Integrator override (fabric-auth): set HttpOnly cookies carrying
-        the JWTs and return a redirect to the shell origin, so tokens
-        never reach JavaScript or the URL bar. The base implementation
-        is kept for backwards compatibility and for deployments where
-        the callback is consumed programmatically (e.g. mobile SDK).
+        Integrator override: set HttpOnly cookies carrying the JWTs and
+        return a redirect to the application origin, so tokens never reach
+        JavaScript or the URL bar. The base implementation is kept for
+        backwards compatibility and for deployments where the callback is
+        consumed programmatically (e.g. mobile SDK).
         """
         serializer = AuthStateResponseSerializer(
             {

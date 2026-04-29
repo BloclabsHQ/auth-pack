@@ -1,6 +1,6 @@
 # Security Standards
 
-This page summarizes the mandatory security standards for BlockAuth. The full standards document is maintained at [`.claude/SECURITY_STANDARDS.md`](https://github.com/BloclabsHQ/auth-pack/blob/dev/.claude/SECURITY_STANDARDS.md) in the repository.
+This page summarizes the mandatory security standards for BlockAuth.
 
 ## Immediate Rules
 

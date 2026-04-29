@@ -3,7 +3,7 @@ TOTP 2FA API Views
 
 DRF views for TOTP 2FA operations.
 
-Security: All endpoints implement rate limiting per SECURITY_STANDARDS.md
+Security: All endpoints implement rate limiting per the public security standards
 - Django @ratelimit decorators for primary rate limiting
 - EnhancedThrottle for additional controls (daily limits, failure tracking, cooldowns)
 """
@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# TOTP Rate Limiting Configuration (per SECURITY_STANDARDS.md)
+# TOTP Rate Limiting Configuration (per the public security standards)
 # =============================================================================
 
 
@@ -149,7 +149,7 @@ class TOTPSetupView(APIView):
 
     User must confirm setup with a valid TOTP code.
 
-    Rate Limit: 3/hour (sensitive operation - per SECURITY_STANDARDS.md mfa_setup)
+    Rate Limit: 3/hour (sensitive operation - per the public security standards mfa_setup)
     """
 
     permission_classes = [IsAuthenticated]
@@ -157,7 +157,7 @@ class TOTPSetupView(APIView):
     @extend_schema(**totp_setup_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP setup request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        # Rate limiting check (security standards compliance)
         throttle = TOTPThrottles.SETUP
         if not throttle.allow_request(request, TOTPSubject.SETUP):
             logger.warning(
@@ -216,7 +216,7 @@ class TOTPConfirmView(APIView):
 
     Verifies the code and enables TOTP if valid.
 
-    Rate Limit: 5/minute (verification attempts - per SECURITY_STANDARDS.md)
+    Rate Limit: 5/minute (verification attempts - per the public security standards)
     """
 
     permission_classes = [IsAuthenticated]
@@ -224,7 +224,7 @@ class TOTPConfirmView(APIView):
     @extend_schema(**totp_confirm_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP confirmation request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        # Rate limiting check (security standards compliance)
         throttle = TOTPThrottles.CONFIRM
         if not throttle.allow_request(request, TOTPSubject.CONFIRM):
             logger.warning(
@@ -273,7 +273,7 @@ class TOTPVerifyView(APIView):
     Used during login to complete 2FA verification.
     Accepts both 6-digit TOTP codes and backup codes.
 
-    Rate Limit: 5/minute (CRITICAL - login security - per SECURITY_STANDARDS.md)
+    Rate Limit: 5/minute (CRITICAL - login security - per the public security standards)
     """
 
     permission_classes = [IsAuthenticated]
@@ -281,7 +281,7 @@ class TOTPVerifyView(APIView):
     @extend_schema(**totp_verify_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP verification request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance - CRITICAL)
+        # Rate limiting check (security standards compliance - CRITICAL)
         throttle = TOTPThrottles.VERIFY
         if not throttle.allow_request(request, TOTPSubject.VERIFY):
             logger.warning(
@@ -351,7 +351,7 @@ class TOTPStatusView(APIView):
     - Status (disabled, pending_confirmation, enabled)
     - Number of backup codes remaining
 
-    Rate Limit: 30/minute (read-only - per SECURITY_STANDARDS.md api_read)
+    Rate Limit: 30/minute (read-only - per the public security standards api_read)
     """
 
     permission_classes = [IsAuthenticated]
@@ -359,7 +359,7 @@ class TOTPStatusView(APIView):
     @extend_schema(**totp_status_docs)
     def get(self, request: Request) -> Response:
         """Handle TOTP status request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        # Rate limiting check (security standards compliance)
         throttle = TOTPThrottles.STATUS
         if not throttle.allow_request(request, TOTPSubject.STATUS):
             return Response(
@@ -407,7 +407,7 @@ class TOTPDisableView(APIView):
 
     Requires verification before disabling for security.
 
-    Rate Limit: 3/hour (sensitive security operation - per SECURITY_STANDARDS.md)
+    Rate Limit: 3/hour (sensitive security operation - per the public security standards)
     """
 
     permission_classes = [IsAuthenticated]
@@ -415,7 +415,7 @@ class TOTPDisableView(APIView):
     @extend_schema(**totp_disable_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP disable request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        # Rate limiting check (security standards compliance)
         throttle = TOTPThrottles.DISABLE
         if not throttle.allow_request(request, TOTPSubject.DISABLE):
             logger.warning(
@@ -478,7 +478,7 @@ class TOTPRegenerateBackupCodesView(APIView):
     Requires TOTP verification before regenerating codes.
     Old backup codes are invalidated.
 
-    Rate Limit: 3/hour (sensitive operation - per SECURITY_STANDARDS.md mfa_setup)
+    Rate Limit: 3/hour (sensitive operation - per the public security standards mfa_setup)
     """
 
     permission_classes = [IsAuthenticated]
@@ -486,7 +486,7 @@ class TOTPRegenerateBackupCodesView(APIView):
     @extend_schema(**totp_regenerate_backup_codes_docs)
     def post(self, request: Request) -> Response:
         """Handle TOTP backup codes regeneration request."""
-        # Rate limiting check (SECURITY_STANDARDS.md compliance)
+        # Rate limiting check (security standards compliance)
         throttle = TOTPThrottles.REGENERATE_BACKUP
         if not throttle.allow_request(request, TOTPSubject.REGENERATE_BACKUP):
             logger.warning(

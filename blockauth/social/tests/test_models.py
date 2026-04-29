@@ -122,3 +122,7 @@ def test_last_used_at_updates_on_save():
     identity.save()
     identity.refresh_from_db()
     assert identity.last_used_at > initial_last_used_at
+
+
+def test_social_identity_table_name_is_package_scoped():
+    assert SocialIdentity._meta.db_table == "blockauth_social_identity"

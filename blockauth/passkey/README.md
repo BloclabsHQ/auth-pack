@@ -62,13 +62,13 @@ urlpatterns = [
 ## Multi-Origin Backends (Per-Request RP_ID)
 
 A single WebAuthn credential is bound to one RP_ID (a registrable domain). That
-matches most deployments: one shell origin per backend. Two common topologies
+matches most deployments: one frontend origin per backend. Two common topologies
 break it:
 
-1. **Local dev shell against a deployed backend** — `https://localhost:5173`
+1. **Local dev frontend against a deployed backend** — `https://localhost:5173`
    hitting `https://api.dev.example.com`. The browser requires `rp.id` to be a
    registrable suffix of `localhost`, not `dev.example.com`.
-2. **Multiple shell origins sharing one backend** — e.g., a staging environment
+2. **Multiple frontend origins sharing one backend** — e.g., a staging environment
    serving `app.staging.example.com` and `app.preview.example.com` with
    different registrable suffixes.
 
@@ -111,7 +111,7 @@ def resolve_rp_id(origin: str) -> str | None:
 **Credential scoping:** Passkeys registered under different RP_IDs are
 separate credentials. A user who registers on `localhost` won't see that
 credential when they visit `app.example.com`. Keep your `RP_ID` consistent
-per environment; use per-request resolution only where the shell origin
+per environment; use per-request resolution only where the frontend origin
 legitimately differs from the deployed RP.
 
 **`ALLOWED_ORIGINS` is unchanged.** Origin verification still uses the

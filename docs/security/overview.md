@@ -50,7 +50,7 @@ BlockAuth is designed with security as a core principle. This page summarizes th
 - No biometric data processed server-side
 - Credential sign counter validation (clone detection)
 - Challenge expiration
-- GDPR compliant (see [DPIA](https://github.com/BloclabsHQ/auth-pack/blob/dev/docs/WEBAUTHN_PASSKEY_DPIA.md))
+- GDPR compliant (see [DPIA](../WEBAUTHN_PASSKEY_DPIA.md))
 
 ## Step-Up Authentication
 

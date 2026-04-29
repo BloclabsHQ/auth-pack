@@ -8,6 +8,7 @@ import hashlib
 import json
 from unittest.mock import MagicMock, patch
 
+import jwt as pyjwt
 import pytest
 from django.test import override_settings
 
@@ -115,7 +116,14 @@ def test_native_verify_redeems_authorization_code(apple_settings, client, build_
 
     assert response.status_code == 200, response.content
     assert mock_post.call_args.kwargs["data"]["code"] == "auth-code"
+    assert mock_post.call_args.kwargs["data"]["client_id"] == "com.example.app"
     assert mock_post.call_args.kwargs["data"]["grant_type"] == "authorization_code"
+    assert "redirect_uri" not in mock_post.call_args.kwargs["data"]
+    client_secret_claims = pyjwt.decode(
+        mock_post.call_args.kwargs["data"]["client_secret"],
+        options={"verify_signature": False},
+    )
+    assert client_secret_claims["sub"] == "com.example.app"
 
 
 @pytest.mark.django_db

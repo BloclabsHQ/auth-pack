@@ -1,6 +1,6 @@
 # TOTP 2FA
 
-BlockAuth includes a TOTP (Time-based One-Time Password) module for two-factor authentication. Compatible with Google Authenticator, Authy, 1Password, and other TOTP apps.
+BlockAuth includes a TOTP (Time-based One-Time Password) module for two-factor authentication. Compatible with Google Authenticator, Authy, and other TOTP apps.
 
 ## Architecture
 

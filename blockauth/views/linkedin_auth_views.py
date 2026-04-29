@@ -200,8 +200,8 @@ class LinkedInAuthCallbackView(APIView):
     """Handle LinkedIn OAuth callback — verify state + PKCE + nonce + id_token.
 
     Subclass and override :meth:`build_success_response` to ship tokens via
-    HttpOnly cookies + a 302 to the shell origin instead of the default JSON
-    body (BFF pattern).
+    HttpOnly cookies + a 302 to the application origin instead of the
+    default JSON body (BFF pattern).
     """
 
     permission_classes = (AllowAny,)

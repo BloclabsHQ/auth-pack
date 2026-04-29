@@ -25,7 +25,7 @@ class OTP(models.Model):
     subject = models.CharField(max_length=30, choices=OTPSubject.choices)
     # Carries data that must survive until OTP confirmation. Used by the
     # ghost-free signup flow to defer user-row creation until inbox ownership
-    # is proven (fabric-auth#516).
+    # is proven.
     payload = models.JSONField(null=True, blank=True, default=None)
 
     @classmethod

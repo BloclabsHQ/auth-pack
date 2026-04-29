@@ -2,7 +2,7 @@
 
 ## CRITICAL SECURITY NOTICE
 
-**MANDATORY: ALL code MUST comply with [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md)**
+**MANDATORY: ALL code MUST comply with [Security Standards](docs/security/security-standards.md)**
 
 Before writing ANY code, review the security standards. NO EXCEPTIONS.
 
@@ -111,7 +111,7 @@ blockauth/
 ├── schemas/                 # API documentation schemas
 │   ├── factory.py          # Schema factory
 │   └── examples/           # Request/response examples
-├── docs/                    # Internal API documentation helpers
+├── docs/                    # OpenAPI documentation helpers
 │   ├── auth_docs.py        # Auth endpoint docs
 │   ├── social_auth_docs.py # OAuth endpoint docs
 │   └── wallet_auth_docs.py # Wallet endpoint docs
@@ -273,7 +273,7 @@ Trigger context includes `user_id`, `username`, `email`, `trigger_type`, `timest
 
 ## Security Requirements
 
-See [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md) for full details.
+See [Security Standards](docs/security/security-standards.md) for full details.
 
 Key rules:
 - Passwords hashed with Django's `set_password()` (bcrypt recommended)
@@ -329,15 +329,15 @@ uv run flake8 blockauth/
 
 ## Common Issues
 
-### fabric-auth Not Picking Up auth-pack Changes
+### Consumer App Not Picking Up auth-pack Changes
 
-**Symptom**: `ModuleNotFoundError` in fabric-auth CI for modules that exist in auth-pack.
+**Symptom**: `ModuleNotFoundError` in a consuming app for modules that exist in auth-pack.
 
-**Cause**: fabric-auth's lockfile pins blockauth to a specific git commit.
+**Cause**: the consuming app's lockfile pins blockauth to a specific git commit or release.
 
 **Fix**: After pushing auth-pack changes:
 ```bash
-cd services/fabric-auth
+cd path/to/consumer-app
 uv lock --upgrade-package blockauth
 git add uv.lock && git commit -m "chore: update blockauth to latest dev"
 ```
@@ -352,12 +352,9 @@ git add uv.lock && git commit -m "chore: update blockauth to latest dev"
 - Check ALLOWED_HOSTS includes callback domain
 - Ensure HTTPS in production
 
-## Platform Integration
+## Integration Notes
 
-BlockAuth is the authentication package for the FabricBloc platform:
-- Used by `fabric-auth` service for authentication
-- Provides JWT tokens consumed by Kong Gateway
-- Supports platform-wide custom claims
-- Enables Web3 features for all services
-
-For service-specific authentication implementation, see `fabric-auth`.
+BlockAuth is a reusable authentication package. Keep framework code generic:
+- Do not add downstream service names, private hostnames, or product-specific workflows.
+- Prefer extension hooks for app-specific behavior.
+- Keep JWT claims, redirect handling, and triggers configurable by the consuming app.

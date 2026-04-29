@@ -15,7 +15,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 
-from blockauth.social.exceptions import SocialIdentityConflictError
+from blockauth.social.exceptions import (
+    SocialIdentityConflictError,
+    SocialIdentityUserUnavailableError,
+)
 from blockauth.social.models import SocialIdentity
 from blockauth.social.service import SocialIdentityService
 
@@ -59,6 +62,49 @@ def test_existing_identity_returns_same_user():
     assert created is False
     identity.refresh_from_db()
     assert identity.last_used_at > initial_last_used
+
+
+@pytest.mark.django_db
+def test_existing_identity_refuses_user_hidden_by_default_manager(monkeypatch):
+    """FK traversal can still resolve soft-deleted users through Django's base
+    manager. The service must honor the user model's default-manager scope and
+    fail closed before syncing fields or minting tokens."""
+    user = User.objects.create_user(
+        username="hidden_user",
+        email="hidden@example.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_hidden",
+        user=user,
+        email_at_link="hidden@example.com",
+        email_verified_at_link=True,
+    )
+
+    original_filter = User._default_manager.filter
+
+    def fake_filter(*args, **kwargs):
+        if kwargs == {"pk": user.pk}:
+            return original_filter(pk=-1)
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(User._default_manager, "filter", fake_filter)
+
+    with pytest.raises(SocialIdentityUserUnavailableError) as excinfo:
+        SocialIdentityService().upsert_and_link(
+            provider="apple",
+            subject="a_hidden",
+            email="updated@example.com",
+            email_verified=True,
+            extra_claims={},
+        )
+
+    assert excinfo.value.provider == "apple"
+    assert excinfo.value.existing_user_id == str(user.pk)
+
+    user.refresh_from_db()
+    assert user.email == "hidden@example.com"
 
 
 @pytest.mark.django_db
@@ -349,12 +395,11 @@ def test_existing_identity_skips_email_sync_on_collision():
 
 @pytest.mark.django_db
 def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
-    """Soft-delete-style integrator schemas (e.g. fabric-auth's Creator with
-    `CreatorManager.get_queryset()` filtering `is_deleted=False`) hide rows
-    from the in-memory collision check while the DB-level unique constraint
-    on `email` still covers them. When the save raises `IntegrityError`,
-    the sync must skip cleanly — restore the in-memory email, log a
-    warning, and return False — rather than 500 the request."""
+    """Soft-delete-style integrator schemas with managers that hide rows from
+    the in-memory collision check can still trip a DB-level unique constraint
+    on `email`. When the save raises `IntegrityError`, the sync must skip
+    cleanly — restore the in-memory email, log a warning, and return False —
+    rather than 500 the request."""
     from django.db import IntegrityError
 
     user = User.objects.create_user(
@@ -400,7 +445,7 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
 # ---------------------------------------------------------------------------
 # Identity-completion helpers — exercised directly because they're the
 # primary mechanism for keeping `is_verified` and `authentication_types`
-# in sync across BlockUser-derived integrators (fabric-auth's Creator).
+# in sync across BlockUser-derived integrators.
 # ---------------------------------------------------------------------------
 
 from tests.models import (  # noqa: E402  (import at top of file would force Django app loading before pytest_configure)

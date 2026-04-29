@@ -6,7 +6,7 @@ Background
 Before this model, ``POST /login/wallet/`` accepted any client-supplied
 message and had no replay protection. A captured
 ``{wallet_address, message, signature}`` payload authenticated indefinitely.
-That defect is tracked as issue #90 (upstream) / fabric-auth #401.
+That defect is tracked as issue #90.
 
 The fix is a two-round-trip flow:
 

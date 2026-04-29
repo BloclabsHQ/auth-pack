@@ -10,7 +10,7 @@ Security-focused test suite covering:
 - Encryption requirements
 - Secret length requirements
 
-Per SECURITY_STANDARDS.md requirements.
+Per security standards requirements.
 """
 
 import unittest
