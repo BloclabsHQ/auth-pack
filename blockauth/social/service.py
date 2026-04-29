@@ -59,6 +59,10 @@ from blockauth.social.models import SocialIdentity
 logger = logging.getLogger(__name__)
 
 
+class _SocialIdentityRaceLost(Exception):
+    """Internal sentinel used to roll back a branch savepoint before recovery."""
+
+
 class SocialIdentityService:
     def __init__(self, encryptor: AESGCMEncryptor | None = None):
         self._encryptor = encryptor or load_encryptor()
@@ -139,13 +143,13 @@ class SocialIdentityService:
             )
             self._maybe_store_refresh(identity, refresh_token, provider, subject)
             try:
-                identity.save()
+                with transaction.atomic():
+                    identity.save()
             except IntegrityError:
                 # Concurrency race: another sign-in for the same (provider,
                 # subject) won the unique-constraint coin flip. Re-fetch the
-                # winner and return that. The @transaction.atomic decorator
-                # rolls back any half-applied state from this call. (See
-                # `_recover_from_race` for details.)
+                # winner and return that. The inner savepoint keeps the outer
+                # transaction usable on postgres after the failed INSERT.
                 return self._recover_from_race(provider, subject, refresh_token)
             self._apply_identity_completion(
                 user=existing_user,
@@ -175,26 +179,36 @@ class SocialIdentityService:
             )
             raise SocialIdentityMissingEmailError(provider=provider)
 
-        new_user = User.objects.create_user(
-            **self._build_create_user_kwargs(
-                User, email, provider=provider, email_verified=email_verified, extra_user_fields=extra_user_fields
-            )
-        )
-        identity = SocialIdentity(
-            provider=provider,
-            subject=subject,
-            user=new_user,
-            email_at_link=email,
-            email_verified_at_link=email_verified,
-        )
-        self._maybe_store_refresh(identity, refresh_token, provider, subject)
         try:
-            identity.save()
-        except IntegrityError:
-            # Lost the race against a concurrent sign-in. The @transaction.atomic
-            # decorator on this method ensures the just-created `new_user`
-            # row is rolled back along with everything else, so we won't leak
-            # an orphan User. Re-fetch the winning identity and return it.
+            with transaction.atomic():
+                new_user = User.objects.create_user(
+                    **self._build_create_user_kwargs(
+                        User,
+                        email,
+                        provider=provider,
+                        email_verified=email_verified,
+                        extra_user_fields=extra_user_fields,
+                    )
+                )
+                identity = SocialIdentity(
+                    provider=provider,
+                    subject=subject,
+                    user=new_user,
+                    email_at_link=email,
+                    email_verified_at_link=email_verified,
+                )
+                self._maybe_store_refresh(identity, refresh_token, provider, subject)
+                try:
+                    with transaction.atomic():
+                        identity.save()
+                except IntegrityError as exc:
+                    # Roll back the branch savepoint too, not just the failed
+                    # identity INSERT, so a losing concurrent social sign-in
+                    # does not leak the freshly-created user row.
+                    raise _SocialIdentityRaceLost from exc
+        except _SocialIdentityRaceLost:
+            # Lost the race against a concurrent sign-in. Re-fetch the winning
+            # identity and return it after the branch savepoint has rolled back.
             return self._recover_from_race(provider, subject, refresh_token)
         logger.info(
             "social_identity.created_new_user",
@@ -523,11 +537,11 @@ class SocialIdentityService:
     ) -> tuple[Any, SocialIdentity, bool]:
         """Re-fetch the (provider, subject) winner after a lost-race IntegrityError.
 
-        Called from the IntegrityError handlers in upsert_and_link. The outer
-        @transaction.atomic has already rolled back any partial state from
-        this call (including a freshly-created User in Branch 4). We bump
-        last_used_at on the winner so the caller still sees a "saw this
-        identity recently" signal.
+        Called from the IntegrityError handlers in upsert_and_link after the
+        losing write has rolled back to a savepoint. In the new-user branch,
+        that savepoint includes the freshly-created User so a failed identity
+        insert cannot leak an unlinked account. We bump last_used_at on the
+        winner so the caller still sees a "saw this identity recently" signal.
         """
         winner = SocialIdentity.objects.select_related("user").get(provider=provider, subject=subject)
         winner_user = self._linked_user_or_raise(get_user_model(), winner, provider)

@@ -184,6 +184,8 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
     `identity.save()` collides on the unique constraint and the recovery
     path runs.
     """
+    import time
+
     user_a = User.objects.create_user(username="alice", email="alice@gmail.com", password="pw")
     winner = SocialIdentity.objects.create(
         provider="google",
@@ -192,21 +194,24 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
         email_at_link="alice@gmail.com",
         email_verified_at_link=True,
     )
+    initial_last_used_at = winner.last_used_at
+    time.sleep(0.01)
 
     # Force the existing-identity lookup to miss exactly once, so the service
     # falls through to a save() that hits the unique constraint.
-    original_filter = SocialIdentity.objects.filter
+    original_select_related = SocialIdentity.objects.select_related
     call_count = {"n": 0}
 
-    def fake_filter(*args, **kwargs):
+    def fake_select_related(*args, **kwargs):
         call_count["n"] += 1
+        queryset = original_select_related(*args, **kwargs)
         if call_count["n"] == 1:
             # First call is the existing-identity check inside upsert_and_link.
             # Pretend nothing's there to force the new-insert path.
-            return original_filter(provider="__nonexistent__", subject="__nonexistent__")
-        return original_filter(*args, **kwargs)
+            return queryset.filter(provider="__nonexistent__", subject="__nonexistent__")
+        return queryset
 
-    monkeypatch.setattr(SocialIdentity.objects, "filter", fake_filter)
+    monkeypatch.setattr(SocialIdentity.objects, "select_related", fake_select_related)
 
     service = SocialIdentityService()
     returned_user, identity, created = service.upsert_and_link(
@@ -220,6 +225,58 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
     assert returned_user.id == user_a.id
     assert identity.pk == winner.pk
     assert created is False
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used_at
+
+
+@pytest.mark.django_db
+def test_concurrent_new_user_create_rolls_back_loser_user(monkeypatch):
+    """If Branch 4 loses the social-identity insert race, the newly-created
+    user must roll back before recovering the winning identity.
+
+    This pins the nested savepoint: wrapping only `identity.save()` would keep
+    postgres usable after the IntegrityError, but it would still leak the
+    loser User row.
+    """
+    import time
+
+    winner_user = User.objects.create_user(username="race_winner", email="winner@gmail.com", password="pw")
+    winner = SocialIdentity.objects.create(
+        provider="google",
+        subject="g_new_user_race",
+        user=winner_user,
+        email_at_link="winner@gmail.com",
+        email_verified_at_link=True,
+    )
+    initial_last_used_at = winner.last_used_at
+    time.sleep(0.01)
+
+    original_select_related = SocialIdentity.objects.select_related
+    call_count = {"n": 0}
+
+    def fake_select_related(*args, **kwargs):
+        call_count["n"] += 1
+        queryset = original_select_related(*args, **kwargs)
+        if call_count["n"] == 1:
+            return queryset.filter(provider="__nonexistent__", subject="__nonexistent__")
+        return queryset
+
+    monkeypatch.setattr(SocialIdentity.objects, "select_related", fake_select_related)
+
+    returned_user, identity, created = SocialIdentityService().upsert_and_link(
+        provider="google",
+        subject="g_new_user_race",
+        email="loser@gmail.com",
+        email_verified=True,
+        extra_claims={},
+    )
+
+    assert returned_user.id == winner_user.id
+    assert identity.pk == winner.pk
+    assert created is False
+    assert not User.objects.filter(email="loser@gmail.com").exists()
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used_at
 
 
 @pytest.mark.django_db
