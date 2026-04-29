@@ -71,6 +71,12 @@ def pytest_configure():
             "LINKEDIN_CLIENT_ID": "test-linkedin-client-id",
             "LINKEDIN_CLIENT_SECRET": "test-linkedin-client-secret",
             "LINKEDIN_REDIRECT_URI": "http://localhost/auth/linkedin/callback/",
+            "PASSKEY_CONFIG": {
+                "RP_ID": "localhost",
+                "RP_NAME": "BlockAuth Test",
+                "ALLOWED_ORIGINS": ["http://localhost"],
+                "STORAGE_BACKEND": "memory",
+            },
             "AUTH_PROVIDERS": {
                 "GOOGLE": {
                     "CLIENT_ID": "test-google-client-id",
@@ -93,6 +99,7 @@ def pytest_configure():
             "DEFAULT_AUTHENTICATION_CLASSES": [
                 "blockauth.authentication.JWTAuthentication",
             ],
+            "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
         },
     )
     django.setup()

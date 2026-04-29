@@ -80,10 +80,10 @@ class TestBasicLoginView:
 
     def test_login_user_payload_omits_first_last_name_when_unset(self, api_client, create_user):
         """Issue #131: first_name / last_name are omitted from the response
-        when the underlying user has no value, matching the shell's AuthUser
-        Zod schema which models these fields with ``z.optional()`` (rejects
-        ``null``). BlockUser abstract base does not define the fields, so
-        the test fixture exercises the unset branch."""
+        when the underlying user has no value, matching the public response
+        contract where these fields are optional, not nullable. BlockUser
+        abstract base does not define the fields, so the test fixture
+        exercises the unset branch."""
         create_user(email="user@test.com", password=_TEST_PASSWORD)
         response = api_client.post(
             BASIC_LOGIN_URL,
@@ -99,9 +99,8 @@ class TestBasicLoginView:
 
     def test_login_user_payload_full_shape(self, api_client, create_user):
         """Issue #131: pin the full top-level key set of the user payload
-        so the shell's AuthUser Zod schema (is_active, date_joined,
-        wallets) cannot silently regress. Wallet-first / email-first
-        variants are covered by dedicated cases below."""
+        so the public response shape cannot silently regress. Wallet-first /
+        email-first variants are covered by dedicated cases below."""
         user = create_user(email="user@test.com", password=_TEST_PASSWORD)
         response = api_client.post(
             BASIC_LOGIN_URL,
@@ -127,9 +126,12 @@ class TestBasicLoginView:
         assert user_payload["wallets"] == []  # email-first user has no wallet
 
     def test_login_user_payload_wallets_populated_when_linked(self, api_client, create_user):
-        """Issue #131: a user with a linked wallet surfaces the address
-        inside ``wallets`` as a single-row array, alongside the legacy
-        ``wallet_address`` scalar (kept for transitional compatibility)."""
+        """Issue #131 + #537: a user with a linked wallet surfaces the
+        address inside ``wallets`` as a single-row array of
+        ``WalletItem`` objects, alongside the legacy ``wallet_address``
+        scalar (kept for transitional compatibility). Clients expect
+        objects, not bare strings — before #537 this endpoint returned
+        ``[address]`` and the shape was harder to evolve."""
         wallet = "0xabc0000000000000000000000000000000000002"
         create_user(
             email="bothwallet@test.com",
@@ -146,7 +148,13 @@ class TestBasicLoginView:
         assert response.status_code == status.HTTP_200_OK
         user_payload = response.data["user"]
         assert user_payload["wallet_address"] == wallet
-        assert user_payload["wallets"] == [wallet]
+        assert len(user_payload["wallets"]) == 1
+        wallet_item = user_payload["wallets"][0]
+        assert wallet_item["address"] == wallet
+        assert wallet_item["chain_id"] == 1
+        assert wallet_item["primary"] is True
+        assert wallet_item["label"] is None
+        assert "linked_at" in wallet_item
         assert user_payload["email"] == "bothwallet@test.com"
 
     def test_login_user_payload_does_not_leak_credentials(self, api_client, create_user):
@@ -362,8 +370,8 @@ class TestPasswordlessLoginConfirmView:
 
     def test_confirm_user_payload_full_shape(self, api_client, create_user, create_otp):
         """Issue #131: passwordless-confirm pins the same {is_active,
-        date_joined, wallets} keys as basic-login so the shell's AuthUser
-        Zod schema can ``parseAuthUser()`` either response interchangeably."""
+        date_joined, wallets} keys as basic-login so clients can parse either
+        response interchangeably."""
         create_user(email="user@test.com")
         create_otp(identifier="user@test.com", subject=OTPSubject.LOGIN, code="ABC123")
         response = api_client.post(

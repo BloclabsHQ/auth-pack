@@ -24,6 +24,7 @@ def main():
                 "django.contrib.contenttypes",
                 "rest_framework",
                 "blockauth",
+                "blockauth.social",
             ],
             SECRET_KEY="dev-only-not-for-production",
             DEFAULT_AUTO_FIELD="django.db.models.BigAutoField",

@@ -68,6 +68,23 @@ DEFAULTS = {
     "WALLET_MESSAGE_TTL": 300,
     # Refresh token rotation
     "ROTATE_REFRESH_TOKENS": True,  # Blacklist old refresh token on rotation
+    # Apple Sign-In configuration
+    "APPLE_TEAM_ID": None,
+    "APPLE_KEY_ID": None,
+    "APPLE_PRIVATE_KEY_PEM": None,  # one of these two must be set when APPLE_LOGIN is enabled
+    "APPLE_PRIVATE_KEY_PATH": None,
+    "APPLE_SERVICES_ID": None,
+    "APPLE_BUNDLE_IDS": (),  # tuple of bundle IDs accepted in native id_token aud
+    "APPLE_REDIRECT_URI": None,
+    "APPLE_NOTIFICATION_TRIGGER": None,  # optional integrator hook for S2S notifications
+    "APPLE_CALLBACK_COOKIE_SAMESITE": "None",  # form_post requires SameSite=None+Secure on deployed TLS
+    # Google native id_token verify
+    "GOOGLE_NATIVE_AUDIENCES": (),  # tuple of web client IDs accepted in id_token.aud
+    # Generic OIDC verifier
+    "OIDC_JWKS_CACHE_TTL_SECONDS": 3600,
+    "OIDC_VERIFIER_LEEWAY_SECONDS": 60,
+    # SocialIdentity refresh-token-at-rest (base64-encoded 32 bytes)
+    "SOCIAL_IDENTITY_ENCRYPTION_KEY": None,
 }
 
 
@@ -91,6 +108,7 @@ IMPORT_STRINGS = (
     "POST_PASSWORD_RESET_TRIGGER",
     "POST_WALLET_LINK_TRIGGER",
     "BLOCK_AUTH_LOGGER_CLASS",
+    "APPLE_NOTIFICATION_TRIGGER",
 )
 
 auth_settings = APISettings(user_settings=None, defaults=DEFAULTS, import_strings=IMPORT_STRINGS)

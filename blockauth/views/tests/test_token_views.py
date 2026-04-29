@@ -26,7 +26,7 @@ class TestAuthRefreshTokenView:
 
     def test_refresh_returns_user_payload(self, api_client, create_user):
         """api-optimization v0.9.0: refresh response includes the user so
-        the shell can drop the 5-min /me/ poller. The view already loads
+        clients can drop the 5-min /me/ poller. The view already loads
         the user for custom-claims population."""
         user = create_user(email="ref@test.com")
         token = Token()
@@ -40,9 +40,9 @@ class TestAuthRefreshTokenView:
         assert user_payload["email"] == "ref@test.com"
         assert user_payload["is_verified"] is True
         assert "wallet_address" in user_payload
-        # Issue #131: AuthUser shell schema requires is_active, date_joined,
-        # wallets in every login-shaped response. first_name / last_name are
-        # intentionally omitted when unset (z.optional() rejects null).
+        # Issue #131: clients require is_active, date_joined, and wallets in
+        # every login-shaped response. first_name / last_name are intentionally
+        # omitted when unset.
         assert user_payload["is_active"] is True
         assert "date_joined" in user_payload
         assert user_payload["wallets"] == []

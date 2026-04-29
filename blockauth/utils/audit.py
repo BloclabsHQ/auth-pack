@@ -1,8 +1,7 @@
 """
 Audit Trail Decorator and Utilities
 
-SOC2 compliant audit logging for sensitive operations.
-See .claude/AUDIT_TRAIL_IMPLEMENTATION.md for full specification.
+Audit logging helpers for sensitive operations.
 """
 
 from datetime import datetime
@@ -90,7 +89,7 @@ def audit_trail(
     Decorator for audit logging sensitive function calls.
 
     Automatically logs function entry, success, and failure with context.
-    Compliant with SOC2 and SECURITY_STANDARDS.md requirements.
+    Follows the public security standards for sensitive audit logging.
 
     Args:
         event_type: Override event type (default: module.function_name)

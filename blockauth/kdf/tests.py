@@ -8,8 +8,6 @@ This module tests all KDF functionality including:
 - Security features
 """
 
-import json
-import os
 import unittest
 from unittest.mock import patch
 
@@ -375,9 +373,7 @@ class TestKDFManager(unittest.TestCase):
         wallet_data = manager.create_wallet(self.email, self.password)
 
         # Decrypt with platform key
-        private_key = manager.platform_encryption_service.decrypt_private_key(
-            wallet_data["platform_encrypted_key"]
-        )
+        private_key = manager.platform_encryption_service.decrypt_private_key(wallet_data["platform_encrypted_key"])
 
         # Should return a valid private key
         self.assertTrue(private_key.startswith("0x"))

@@ -759,6 +759,22 @@ class TestWalletLoginEndpoints:
         # email may be null for wallet-first accounts
         assert "email" in user_payload
 
+        # #537: wallets must be WalletItem[], not string[]. Bare address
+        # strings cannot evolve to multi-wallet accounts without changing
+        # the response shape.
+        assert isinstance(user_payload["wallets"], list)
+        assert len(user_payload["wallets"]) == 1
+        wallet_item = user_payload["wallets"][0]
+        assert wallet_item["address"] == _TEST_ADDRESS_LC
+        assert wallet_item["chain_id"] == 1
+        assert wallet_item["primary"] is True
+        assert "linked_at" in wallet_item
+
+        # #537: SIWE proves control of the private key — stronger than
+        # email verification. Wallet-first accounts must be created as
+        # is_verified=True so downstream gates don't bounce them.
+        assert user_payload["is_verified"] is True
+
         replay = client.post(
             reverse("wallet-login"),
             {
@@ -782,8 +798,8 @@ class TestWalletLoginEndpoints:
         assert login_resp.status_code == 200, login_resp.content
         assert_no_credential_leak(login_resp.json()["user"])
 
-    def test_login_returns_null_email_for_wallet_first_creator_autocreate(self):
-        """Issue #99: wallet-first Creators have no email on first SIWE
+    def test_login_returns_null_email_for_wallet_first_user_autocreate(self):
+        """Issue #99: wallet-first users have no email on first SIWE
         login. The auto-create path must expose ``user.email`` as
         ``None`` (a supported case) rather than coercing to an empty
         string or tripping the serializer's validation.
@@ -810,9 +826,9 @@ class TestWalletLoginEndpoints:
         created = TestBlockUser.objects.get(wallet_address=_TEST_ADDRESS_LC)
         assert created.email is None
 
-    def test_login_returns_null_email_for_existing_wallet_first_creator(self):
+    def test_login_returns_null_email_for_existing_wallet_first_user(self):
         """Issue #99: the response must also expose ``user.email`` as
-        ``None`` for a *pre-existing* wallet-first Creator -- not just
+        ``None`` for a *pre-existing* wallet-first user -- not just
         on the auto-create branch.
 
         The auto-create variant alone is too weak: if a future change

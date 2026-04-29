@@ -23,15 +23,24 @@ class OTP(models.Model):
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     subject = models.CharField(max_length=30, choices=OTPSubject.choices)
+    # Carries data that must survive until OTP confirmation. Used by the
+    # ghost-free signup flow to defer user-row creation until inbox ownership
+    # is proven.
+    payload = models.JSONField(null=True, blank=True, default=None)
 
     @classmethod
-    def validate_otp(cls, identifier: str, subject: str, code: str) -> None:
+    def validate_otp(cls, identifier: str, subject: str, code: str) -> dict | None:
+        """Validate an OTP and return its payload (may be None).
+
+        Raises ValidationError on invalid/expired code. Deletes the OTP on
+        success so it cannot be replayed.
+        """
         otp_instance = (
             cls.objects.filter(
                 identifier=identifier,
                 subject=subject,
             )
-            .values("code", "created_at", "is_used")
+            .values("code", "created_at", "is_used", "payload")
             .order_by("-created_at")
             .first()
         )
@@ -48,6 +57,7 @@ class OTP(models.Model):
         if timezone.now() > otp_instance["created_at"] + get_config("OTP_VALIDITY") or otp_instance["is_used"]:
             raise ValidationError(detail={"code": "otp has expired."}, code=4011)
         cls.clear_otp(identifier, subject)
+        return otp_instance.get("payload")
 
     @classmethod
     def clear_otp(cls, identifier: str, subject: str) -> None:

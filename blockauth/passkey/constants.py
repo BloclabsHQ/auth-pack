@@ -48,6 +48,13 @@ class PasskeyConfigKeys:
     RP_NAME = "RP_NAME"
     ALLOWED_ORIGINS = "ALLOWED_ORIGINS"
 
+    # Multi-origin RP_ID resolution (optional)
+    # RP_ID_RESOLVER: dotted-path string to a callable (origin: str) -> Optional[str]
+    # RP_ID_BY_ORIGIN: dict mapping request origin to RP_ID
+    # Precedence at request time: resolver -> map -> RP_ID fallback.
+    RP_ID_RESOLVER = "RP_ID_RESOLVER"
+    RP_ID_BY_ORIGIN = "RP_ID_BY_ORIGIN"
+
     # Attestation
     ATTESTATION = "ATTESTATION"
 
@@ -220,6 +227,8 @@ PASSKEY_DEFAULTS = {
     PasskeyConfigKeys.RP_ID: None,  # Must be set by user
     PasskeyConfigKeys.RP_NAME: "BlockAuth Application",
     PasskeyConfigKeys.ALLOWED_ORIGINS: [],
+    PasskeyConfigKeys.RP_ID_RESOLVER: None,  # Optional dotted-path to callable
+    PasskeyConfigKeys.RP_ID_BY_ORIGIN: {},  # Optional origin->rp_id map
     PasskeyConfigKeys.ATTESTATION: AttestationConveyance.NONE.value,
     PasskeyConfigKeys.AUTHENTICATOR_ATTACHMENT: None,  # Allow any
     PasskeyConfigKeys.RESIDENT_KEY: ResidentKeyRequirement.PREFERRED.value,
