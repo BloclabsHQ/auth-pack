@@ -6,43 +6,30 @@ consumer (Apple, Google native, LinkedIn, etc.) would also break — fix the
 export before fixing this test.
 """
 
-from blockauth.utils.jwt import (  # noqa: F401
-    AlgorithmNotAllowed,
-    AudienceMismatch,
-    IssuerMismatch,
-    JWKSCache,
-    JWKSUnreachable,
-    KidNotFound,
-    NonceMismatch,
-    OIDCTokenVerifier,
-    OIDCVerificationError,
-    OIDCVerifierConfig,
-    RequiredClaimMissing,
-    SignatureInvalid,
-    TokenExpired,
-)
+import blockauth.utils.jwt as jwt_public
+
+EXPECTED_PUBLIC_SURFACE = {
+    "AlgorithmNotAllowed",
+    "AudienceMismatch",
+    "IssuerMismatch",
+    "JWKSCache",
+    "JWKSUnreachable",
+    "KidNotFound",
+    "NonceMismatch",
+    "OIDCTokenVerifier",
+    "OIDCVerificationError",
+    "OIDCVerifierConfig",
+    "RequiredClaimMissing",
+    "SignatureInvalid",
+    "TokenExpired",
+}
 
 
 def test_public_surface_exports_match_all():
     """`__all__` must list exactly the public surface — nothing missing, nothing extra."""
-    import blockauth.utils.jwt as pkg
-
-    expected = {
-        "AlgorithmNotAllowed",
-        "AudienceMismatch",
-        "IssuerMismatch",
-        "JWKSCache",
-        "JWKSUnreachable",
-        "KidNotFound",
-        "NonceMismatch",
-        "OIDCTokenVerifier",
-        "OIDCVerificationError",
-        "OIDCVerifierConfig",
-        "RequiredClaimMissing",
-        "SignatureInvalid",
-        "TokenExpired",
-    }
-    assert set(pkg.__all__) == expected
+    assert set(jwt_public.__all__) == EXPECTED_PUBLIC_SURFACE
+    for name in EXPECTED_PUBLIC_SURFACE:
+        assert getattr(jwt_public, name)
 
 
 def test_oidc_subclasses_share_base():
@@ -52,13 +39,13 @@ def test_oidc_subclasses_share_base():
     Uses __subclasses__() so adding a new subclass without updating __all__
     will fail this test. (And vice versa.)
     """
-    import blockauth.utils.jwt as pkg
-
-    subclasses = OIDCVerificationError.__subclasses__()
+    subclasses = jwt_public.OIDCVerificationError.__subclasses__()
     # Must be at least the 9 currently-known failure modes.
     assert len(subclasses) >= 9
 
     for sub in subclasses:
-        assert issubclass(sub, OIDCVerificationError), f"{sub.__name__} does not subclass OIDCVerificationError"
+        assert issubclass(
+            sub, jwt_public.OIDCVerificationError
+        ), f"{sub.__name__} does not subclass OIDCVerificationError"
         # Each declared subclass must also be exported.
-        assert sub.__name__ in pkg.__all__, f"{sub.__name__} missing from __all__"
+        assert sub.__name__ in jwt_public.__all__, f"{sub.__name__} missing from __all__"

@@ -27,9 +27,6 @@ from rest_framework.views import APIView
 
 from blockauth.docs.social_auth_docs import google_native_verify_schema
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
-    SocialIdentityConflictError,
-)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.jwt import (

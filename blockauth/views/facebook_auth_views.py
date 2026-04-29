@@ -29,9 +29,6 @@ from blockauth.schemas.examples.social_auth import (
     social_user_info_missing,
 )
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-from blockauth.social.exceptions import (  # noqa: F401  intentional: documented as the propagating-409
-    SocialIdentityConflictError,
-)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.logger import blockauth_logger

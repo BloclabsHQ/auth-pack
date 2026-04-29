@@ -22,6 +22,24 @@ __all__ = [
     "SocialIdentityService",
 ]
 
+from blockauth.social.exceptions import (  # noqa: E402
+    SocialIdentityConflictError,
+    SocialIdentityUserUnavailableError,
+)
+from blockauth.social.linking_policy import AccountLinkingPolicy  # noqa: E402
+
+try:
+    from blockauth.social.models import SocialIdentity  # noqa: E402
+except Exception:
+    # Keep package import safe before Django finishes app setup. __getattr__
+    # below preserves lazy resolution once the app registry is ready.
+    pass
+
+try:
+    from blockauth.social.service import SocialIdentityService  # noqa: E402
+except Exception:
+    pass
+
 
 def __getattr__(name):
     if name == "SocialIdentityConflictError":
