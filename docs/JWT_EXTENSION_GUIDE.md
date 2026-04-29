@@ -14,7 +14,7 @@ This guide explains the JWT extension implementation that allows any service to 
 │  │         JWT Token Manager                       │     │
 │  │                                                 │     │
 │  │  1. Base Claims (user_id, email)              │     │
-│  │  2. Custom Claims Provider Interface ←─────────┼─────┼── Fabric-Auth injects
+│  │  2. Custom Claims Provider Interface ←─────────┼─────┼── consuming apps inject
 │  │  3. Generate Token with merged claims          │     │    custom claims
 │  └────────────────────────────────────────────────┘     │
 └─────────────────────────────────────────────────────────┘
@@ -68,7 +68,7 @@ class SmartAccountClaimsProvider(CustomClaimsProvider):
         }
 ```
 
-**Note**: This is just an example implementation in fabric-auth. The blockauth library itself is completely generic and doesn't know about smart accounts or any specific data types.
+**Note**: This is just an example implementation. The blockauth library itself is completely generic and doesn't know about smart accounts or any specific data types.
 
 ## Usage Examples
 
@@ -126,7 +126,7 @@ deployed_chains = claims.get('deployed_chains', [])
   "iat": 1704063600,
   "type": "access",
 
-  // Custom claims from any provider (example from fabric-auth)
+  // Custom claims from any provider
   "smart_account": "0xABC123...",
   "smart_account_status": "ACTIVE",
   "deployed_chains": ["ethereum_sepolia", "base_sepolia"],

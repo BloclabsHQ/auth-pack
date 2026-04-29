@@ -70,7 +70,7 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         elif user:
             logger.info("OTP resend requested for already verified account.")
         else:
-            # Ghost-free signup flow (fabric-auth#516): no user row exists yet.
+            # Ghost-free signup flow: no user row exists yet.
             # Check for a pending SIGNUP OTP so we can resend with the same payload.
             pending_otp = OTP.objects.filter(identifier=identifier, subject=OTPSubject.SIGNUP, is_used=False).first()
             if pending_otp:
@@ -285,13 +285,12 @@ and clients can share a single generated type.
 class WalletItemSerializer(serializers.Serializer):
     """One row in the ``user.wallets`` array.
 
-    Shape matches the ``@bloclabshq/auth`` shell ``WalletItem`` Zod schema.
     ``label`` is nullable because a wallet has no label until the user sets
-    one in dashboard; ``chain_id`` is required (defaults to mainnet = 1 at
-    the builder layer); ``primary`` is always present so the shell can pick
-    a default wallet when multiple rows land. Issue #537: before this row
-    existed, wallets were serialised as bare address strings and the shell
-    schema rejected every login response as a result.
+    one; ``chain_id`` is required (defaults to mainnet = 1 at the builder
+    layer); ``primary`` is always present so clients can pick a default
+    wallet when multiple rows land. Issue #537: before this row existed,
+    wallets were serialised as bare address strings, which made the response
+    shape harder to evolve.
     """
 
     address = serializers.CharField(help_text="Ethereum address, 0x-prefixed, lowercase")
@@ -318,10 +317,9 @@ class LoginUserSerializer(serializers.Serializer):
     Do not add anything here that isn't safe to surface to the client --
     this object goes into the success response of an unauthenticated call.
 
-    Shape mirrors the ``@bloclabshq/auth`` shell ``AuthUser`` Zod schema
-    (issue #131): ``is_active``, ``date_joined``, ``wallets`` are always
-    present so the shell can ``parseAuthUser()`` without a follow-up
-    ``GET /me/`` round-trip. ``first_name`` / ``last_name`` are
+    ``is_active``, ``date_joined``, and ``wallets`` are always present so
+    clients can consume the login response without a follow-up ``GET /me/``
+    round-trip. ``first_name`` / ``last_name`` are
     ``required=False`` (Zod's ``.optional()`` rejects ``null``) — callers
     must omit the keys entirely when the underlying value is unset, which
     ``build_user_payload`` already does.
@@ -353,18 +351,17 @@ class LoginUserSerializer(serializers.Serializer):
     wallets = serializers.ListField(
         child=WalletItemSerializer(),
         help_text=(
-            "Linked wallets as ``WalletItem`` objects — matches the shell's "
-            "``@bloclabshq/auth`` Zod schema. Single-element array derived "
-            "from ``wallet_address`` until the user model supports multiples; "
-            "empty when no wallet is linked. Issue #537: previously serialised "
-            "as ``string[]``, which the shell schema rejected."
+            "Linked wallets as ``WalletItem`` objects. Single-element array "
+            "derived from ``wallet_address`` until the user model supports "
+            "multiples; empty when no wallet is linked. Issue #537: previously "
+            "serialised as ``string[]``, which was harder for clients to evolve."
         ),
     )
     # first_name / last_name are optional because the abstract BlockUser
     # model does not define them; concrete downstream user models may.
     # build_user_payload omits the keys entirely when the underlying value
     # is null — required=False keeps the serializer from synthesizing a
-    # null entry, matching the shell's z.optional() contract.
+    # null entry, matching optional-field client contracts.
     first_name = serializers.CharField(
         required=False,
         help_text="Given name (omitted entirely when unset)",
@@ -415,12 +412,12 @@ class AuthStateResponseSerializer(serializers.Serializer):
 
 
 class SignUpConfirmResponseSerializer(serializers.Serializer):
-    """Response body for successful ``POST /signup/confirm/`` (fabric-auth#420).
+    """Response body for successful ``POST /signup/confirm/``.
 
     Signup confirmation now issues JWTs so the client is signed in
     immediately instead of following up with ``POST /login/basic/`` using
     the just-set password. Same shape as the login responses so the OpenAPI
-    surface stays consistent and shells can share a single post-auth code
+    surface stays consistent and clients can share a single post-auth code
     path.
     """
 

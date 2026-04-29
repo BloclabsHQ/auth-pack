@@ -17,10 +17,9 @@ DEFAULT_WALLET_CHAIN_ID = 1
 def _build_wallet_items(user, date_joined) -> list[dict]:
     """Shape wallet rows as ``WalletItem`` objects, not bare address strings.
 
-    The ``@bloclabshq/auth`` shell schema expects
-    ``{address, chain_id, linked_at, label, primary}`` objects so the
-    model can grow to many-wallet-per-user without changing the wire
-    shape. Today the ``BlockUser`` abstract has a single
+    Clients receive ``{address, chain_id, linked_at, label, primary}``
+    objects so the model can grow to many-wallet-per-user without changing
+    the wire shape. Today the ``BlockUser`` abstract has a single
     ``wallet_address`` column plus ``authentication_types`` list, so we
     project the single linked address into a one-element array with
     ``primary=True``. Default chain id is mainnet (1) until downstream
@@ -46,15 +45,12 @@ def _build_wallet_items(user, date_joined) -> list[dict]:
 def build_user_payload(user) -> dict:
     """Shape the ``user`` block used by every post-auth-state response.
 
-    Matches the ``@bloclabshq/auth`` shell ``AuthUser`` schema:
     ``is_active`` and ``date_joined`` (ISO-8601) are always present;
-    ``wallets`` is an array (empty when unlinked) so the model can grow
-    to many-wallet-per-user without another payload change;
-    ``wallet_address`` stays alongside ``wallets`` for transitional
-    compatibility. ``first_name`` / ``last_name`` are omitted when
-    unset (the shell models these as ``z.optional``, which rejects
-    ``null``) and use ``getattr`` so downstream user models that never
-    added those fields stay compatible.
+    ``wallets`` is an array (empty when unlinked) so the model can grow to
+    many-wallet-per-user without another payload change; ``wallet_address``
+    stays alongside ``wallets`` for transitional compatibility.
+    ``first_name`` / ``last_name`` are omitted when unset and use ``getattr``
+    so downstream user models that never added those fields stay compatible.
 
     ``is_active`` and ``date_joined`` are also read via ``getattr`` —
     ``BlockUser`` extends ``AbstractBaseUser``, which exposes

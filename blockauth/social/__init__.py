@@ -1,4 +1,6 @@
-"""SocialIdentity layer: durable links between OIDC `(provider, subject)` and User.
+"""SocialIdentity layer.
+
+Durable links between OIDC `(provider, subject)` and User.
 
 `SocialIdentity` lives under the umbrella `blockauth` app (same convention as
 sibling sub-packages `totp` and `passkey`), so consumers only add `"blockauth"`
@@ -16,6 +18,7 @@ __all__ = [
     "AccountLinkingPolicy",
     "SocialIdentity",
     "SocialIdentityConflictError",
+    "SocialIdentityUserUnavailableError",
     "SocialIdentityService",
 ]
 
@@ -25,6 +28,12 @@ def __getattr__(name):
         from blockauth.social.exceptions import SocialIdentityConflictError
 
         return SocialIdentityConflictError
+    if name == "SocialIdentityUserUnavailableError":
+        from blockauth.social.exceptions import (
+            SocialIdentityUserUnavailableError,
+        )
+
+        return SocialIdentityUserUnavailableError
     if name == "AccountLinkingPolicy":
         from blockauth.social.linking_policy import AccountLinkingPolicy
 

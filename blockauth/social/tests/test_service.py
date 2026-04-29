@@ -15,7 +15,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 
-from blockauth.social.exceptions import SocialIdentityConflictError
+from blockauth.social.exceptions import (
+    SocialIdentityConflictError,
+    SocialIdentityUserUnavailableError,
+)
 from blockauth.social.models import SocialIdentity
 from blockauth.social.service import SocialIdentityService
 
@@ -59,6 +62,49 @@ def test_existing_identity_returns_same_user():
     assert created is False
     identity.refresh_from_db()
     assert identity.last_used_at > initial_last_used
+
+
+@pytest.mark.django_db
+def test_existing_identity_refuses_user_hidden_by_default_manager(monkeypatch):
+    """FK traversal can still resolve soft-deleted users through Django's base
+    manager. The service must honor the user model's default-manager scope and
+    fail closed before syncing fields or minting tokens."""
+    user = User.objects.create_user(
+        username="hidden_user",
+        email="hidden@example.com",
+        password="pw",
+    )
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="a_hidden",
+        user=user,
+        email_at_link="hidden@example.com",
+        email_verified_at_link=True,
+    )
+
+    original_filter = User._default_manager.filter
+
+    def fake_filter(*args, **kwargs):
+        if kwargs == {"pk": user.pk}:
+            return original_filter(pk=-1)
+        return original_filter(*args, **kwargs)
+
+    monkeypatch.setattr(User._default_manager, "filter", fake_filter)
+
+    with pytest.raises(SocialIdentityUserUnavailableError) as excinfo:
+        SocialIdentityService().upsert_and_link(
+            provider="apple",
+            subject="a_hidden",
+            email="updated@example.com",
+            email_verified=True,
+            extra_claims={},
+        )
+
+    assert excinfo.value.provider == "apple"
+    assert excinfo.value.existing_user_id == str(user.pk)
+
+    user.refresh_from_db()
+    assert user.email == "hidden@example.com"
 
 
 @pytest.mark.django_db
@@ -138,6 +184,8 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
     `identity.save()` collides on the unique constraint and the recovery
     path runs.
     """
+    import time
+
     user_a = User.objects.create_user(username="alice", email="alice@gmail.com", password="pw")
     winner = SocialIdentity.objects.create(
         provider="google",
@@ -146,21 +194,24 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
         email_at_link="alice@gmail.com",
         email_verified_at_link=True,
     )
+    initial_last_used_at = winner.last_used_at
+    time.sleep(0.01)
 
     # Force the existing-identity lookup to miss exactly once, so the service
     # falls through to a save() that hits the unique constraint.
-    original_filter = SocialIdentity.objects.filter
+    original_select_related = SocialIdentity.objects.select_related
     call_count = {"n": 0}
 
-    def fake_filter(*args, **kwargs):
+    def fake_select_related(*args, **kwargs):
         call_count["n"] += 1
+        queryset = original_select_related(*args, **kwargs)
         if call_count["n"] == 1:
             # First call is the existing-identity check inside upsert_and_link.
             # Pretend nothing's there to force the new-insert path.
-            return original_filter(provider="__nonexistent__", subject="__nonexistent__")
-        return original_filter(*args, **kwargs)
+            return queryset.filter(provider="__nonexistent__", subject="__nonexistent__")
+        return queryset
 
-    monkeypatch.setattr(SocialIdentity.objects, "filter", fake_filter)
+    monkeypatch.setattr(SocialIdentity.objects, "select_related", fake_select_related)
 
     service = SocialIdentityService()
     returned_user, identity, created = service.upsert_and_link(
@@ -174,6 +225,58 @@ def test_concurrent_create_loses_gracefully(monkeypatch):
     assert returned_user.id == user_a.id
     assert identity.pk == winner.pk
     assert created is False
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used_at
+
+
+@pytest.mark.django_db
+def test_concurrent_new_user_create_rolls_back_loser_user(monkeypatch):
+    """If Branch 4 loses the social-identity insert race, the newly-created
+    user must roll back before recovering the winning identity.
+
+    This pins the nested savepoint: wrapping only `identity.save()` would keep
+    postgres usable after the IntegrityError, but it would still leak the
+    loser User row.
+    """
+    import time
+
+    winner_user = User.objects.create_user(username="race_winner", email="winner@gmail.com", password="pw")
+    winner = SocialIdentity.objects.create(
+        provider="google",
+        subject="g_new_user_race",
+        user=winner_user,
+        email_at_link="winner@gmail.com",
+        email_verified_at_link=True,
+    )
+    initial_last_used_at = winner.last_used_at
+    time.sleep(0.01)
+
+    original_select_related = SocialIdentity.objects.select_related
+    call_count = {"n": 0}
+
+    def fake_select_related(*args, **kwargs):
+        call_count["n"] += 1
+        queryset = original_select_related(*args, **kwargs)
+        if call_count["n"] == 1:
+            return queryset.filter(provider="__nonexistent__", subject="__nonexistent__")
+        return queryset
+
+    monkeypatch.setattr(SocialIdentity.objects, "select_related", fake_select_related)
+
+    returned_user, identity, created = SocialIdentityService().upsert_and_link(
+        provider="google",
+        subject="g_new_user_race",
+        email="loser@gmail.com",
+        email_verified=True,
+        extra_claims={},
+    )
+
+    assert returned_user.id == winner_user.id
+    assert identity.pk == winner.pk
+    assert created is False
+    assert not User.objects.filter(email="loser@gmail.com").exists()
+    identity.refresh_from_db()
+    assert identity.last_used_at > initial_last_used_at
 
 
 @pytest.mark.django_db
@@ -349,12 +452,16 @@ def test_existing_identity_skips_email_sync_on_collision():
 
 @pytest.mark.django_db
 def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
-    """Soft-delete-style integrator schemas (e.g. fabric-auth's Creator with
-    `CreatorManager.get_queryset()` filtering `is_deleted=False`) hide rows
-    from the in-memory collision check while the DB-level unique constraint
-    on `email` still covers them. When the save raises `IntegrityError`,
-    the sync must skip cleanly — restore the in-memory email, log a
-    warning, and return False — rather than 500 the request."""
+    """Soft-delete-style integrator schemas with managers that hide rows from
+    the in-memory collision check can still trip a DB-level unique constraint
+    on `email`. When the save raises `IntegrityError`, the sync must skip
+    cleanly — restore the in-memory email, log a warning, return False — and
+    the surrounding `upsert_and_link` must still complete. The savepoint
+    around the failing save is what keeps the outer transaction usable on
+    postgres; without it, the post-sync `existing_identity.save(...)` would
+    raise `TransactionManagementError`."""
+    import time
+
     from django.db import IntegrityError
 
     user = User.objects.create_user(
@@ -362,13 +469,15 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
         email="abc123@privaterelay.appleid.com",
         password="pw",
     )
-    SocialIdentity.objects.create(
+    identity = SocialIdentity.objects.create(
         provider="apple",
         subject="a_sub_db_collide",
         user=user,
         email_at_link="abc123@privaterelay.appleid.com",
         email_verified_at_link=True,
     )
+    initial_last_used_at = identity.last_used_at
+    time.sleep(0.01)  # auto_now resolution can collapse same-microsecond saves
 
     # Force the save to raise IntegrityError without seeding a second User
     # row — simulates "soft-deleted row hidden from the manager but still
@@ -384,7 +493,7 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
 
     monkeypatch.setattr(User, "save", fake_save)
 
-    SocialIdentityService().upsert_and_link(
+    returned_user, returned_identity, created = SocialIdentityService().upsert_and_link(
         provider="apple",
         subject="a_sub_db_collide",
         email="real.user@example.com",
@@ -396,11 +505,19 @@ def test_existing_identity_skips_email_sync_on_db_unique_violation(monkeypatch):
     user.refresh_from_db()
     assert user.email == "abc123@privaterelay.appleid.com"
 
+    # The post-sync `existing_identity.save(update_fields=["last_used_at"])`
+    # inside `upsert_and_link` must still succeed after the swallowed
+    # IntegrityError — that's what the savepoint protects.
+    assert returned_user.id == user.id
+    assert created is False
+    returned_identity.refresh_from_db()
+    assert returned_identity.last_used_at > initial_last_used_at
+
 
 # ---------------------------------------------------------------------------
 # Identity-completion helpers — exercised directly because they're the
 # primary mechanism for keeping `is_verified` and `authentication_types`
-# in sync across BlockUser-derived integrators (fabric-auth's Creator).
+# in sync across BlockUser-derived integrators.
 # ---------------------------------------------------------------------------
 
 from tests.models import (  # noqa: E402  (import at top of file would force Django app loading before pytest_configure)

@@ -88,6 +88,12 @@ from blockauth.utils.social import social_login_data
 logger = logging.getLogger(__name__)
 
 
+def _client_id_from_audience(audience) -> str:
+    if isinstance(audience, (list, tuple)):
+        return str(audience[0]) if audience else ""
+    return str(audience or "")
+
+
 def _samesite_for_callback() -> str:
     return str(apple_setting("APPLE_CALLBACK_COOKIE_SAMESITE") or "None")
 
@@ -310,24 +316,23 @@ class AppleNativeVerifyView(APIView):
         authorization_code = validated.get("authorization_code")
         if authorization_code:
             try:
-                client_secret = apple_client_secret_builder.build()
+                client_id = _client_id_from_audience(claims.raw.get("aud")) or apple_setting("APPLE_SERVICES_ID")
+                client_secret = apple_client_secret_builder.build(client_id=client_id)
             except AppleClientSecretConfigError as exc:
                 raise ValidationError({"detail": "Apple Sign-In is not configured"}, 4020) from exc
 
-            # Apple's native auth flow has no redirect_uri originally; pass empty
-            # string to keep the form field present (Apple's token endpoint will
-            # accept the empty value for native code redemption). Production
-            # integrators may also leave APPLE_REDIRECT_URI configured for the web
-            # flow without affecting this code path.
+            # Apple's native auth flow has no redirect_uri. Apple requires
+            # client_secret.sub to match the client_id used to generate tokens,
+            # so redeem against the id_token audience (App ID / bundle ID for
+            # native, Services ID for web-style clients).
             try:
                 token_response = requests.post(
                     AppleEndpoints.TOKEN,
                     data={
-                        "client_id": apple_setting("APPLE_SERVICES_ID"),
+                        "client_id": client_id,
                         "client_secret": client_secret,
                         "code": authorization_code,
                         "grant_type": "authorization_code",
-                        "redirect_uri": apple_setting("APPLE_REDIRECT_URI") or "",
                     },
                     timeout=10,
                 )

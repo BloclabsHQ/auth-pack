@@ -484,11 +484,11 @@ class TestLinkedInAuthCallbackView:
 
 @pytest.mark.django_db
 class TestCallbackSuccessResponseHook:
-    """The BFF-cookie integration (fabric-auth#533) subclasses these
-    callback views and overrides ``build_success_response`` to ship tokens
-    via HttpOnly cookies + a 302 to the shell origin, instead of the
-    default JSON body. These tests pin the hook surface so the override
-    point doesn't silently disappear in a future refactor.
+    """BFF-cookie integrations subclass these callback views and override
+    ``build_success_response`` to ship tokens via HttpOnly cookies + a 302
+    to the application origin, instead of the default JSON body. These tests
+    pin the hook surface so the override point doesn't silently disappear in
+    a future refactor.
     """
 
     @patch("blockauth.views.google_auth_views.SocialIdentityService")
@@ -624,9 +624,9 @@ class TestSocialLoginResponseShape:
         assert response.data["refresh"]
         assert "user" in response.data
         user_payload = response.data["user"]
-        # Issue #131: AuthUser shell schema requires these to always be
-        # present; first_name / last_name are intentionally omitted when
-        # unset (z.optional() rejects null) and are covered separately.
+        # Issue #131: clients require these to always be present; first_name /
+        # last_name are intentionally omitted when unset and are covered
+        # separately.
         for field in ("id", "email", "is_verified", "is_active", "date_joined", "wallet_address", "wallets"):
             assert field in user_payload, f"OAuth response missing {field}"
 

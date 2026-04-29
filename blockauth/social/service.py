@@ -31,8 +31,8 @@ Plan deviations:
     in Task 2.3.
   - New-user creation routes the natural identifier through whichever
     kwarg the integrator's user model exposes via `USERNAME_FIELD`.
-    `auth.User` keys on `username`, email-first models (e.g. fabric-auth's
-    `Creator`) key on `email`, and `BlockUser`-derived models key on the
+    `auth.User` keys on `username`, email-first models key on `email`, and
+    `BlockUser`-derived models key on the
     auto-populated `id`. The service inspects `USERNAME_FIELD` and only
     forwards `email` as a separate kwarg when it is a distinct field from
     the natural key, so every supported user model accepts the call.
@@ -51,11 +51,16 @@ from blockauth.social.encryption import AESGCMEncryptor, aad_for, load_encryptor
 from blockauth.social.exceptions import (
     SocialIdentityConflictError,
     SocialIdentityMissingEmailError,
+    SocialIdentityUserUnavailableError,
 )
 from blockauth.social.linking_policy import AccountLinkingPolicy
 from blockauth.social.models import SocialIdentity
 
 logger = logging.getLogger(__name__)
+
+
+class _SocialIdentityRaceLost(Exception):
+    """Internal sentinel used to roll back a branch savepoint before recovery."""
 
 
 class SocialIdentityService:
@@ -80,14 +85,15 @@ class SocialIdentityService:
             SocialIdentity.objects.select_related("user").filter(provider=provider, subject=subject).first()
         )
         if existing_identity is not None:
+            existing_user = self._linked_user_or_raise(User, existing_identity, provider)
             self._sync_user_email_from_provider(
-                user=existing_identity.user,
+                user=existing_user,
                 provider=provider,
                 email=email,
                 email_verified=email_verified,
             )
             self._apply_identity_completion(
-                user=existing_identity.user,
+                user=existing_user,
                 provider=provider,
                 email_verified=email_verified,
             )
@@ -98,9 +104,9 @@ class SocialIdentityService:
             existing_identity.save(update_fields=update_fields)
             logger.info(
                 "social_identity.matched_existing_subject",
-                extra={"provider": provider, "user_id": str(existing_identity.user.id)},
+                extra={"provider": provider, "user_id": str(existing_user.id)},
             )
-            return existing_identity.user, existing_identity, False
+            return existing_user, existing_identity, False
 
         # Case-insensitive email match: a stored "CaseUser@Gmail.com" must still
         # match an IdP-returned "caseuser@gmail.com" (RFC 5321 §2.4 — local-part
@@ -137,13 +143,13 @@ class SocialIdentityService:
             )
             self._maybe_store_refresh(identity, refresh_token, provider, subject)
             try:
-                identity.save()
+                with transaction.atomic():
+                    identity.save()
             except IntegrityError:
                 # Concurrency race: another sign-in for the same (provider,
                 # subject) won the unique-constraint coin flip. Re-fetch the
-                # winner and return that. The @transaction.atomic decorator
-                # rolls back any half-applied state from this call. (See
-                # `_recover_from_race` for details.)
+                # winner and return that. The inner savepoint keeps the outer
+                # transaction usable on postgres after the failed INSERT.
                 return self._recover_from_race(provider, subject, refresh_token)
             self._apply_identity_completion(
                 user=existing_user,
@@ -173,26 +179,36 @@ class SocialIdentityService:
             )
             raise SocialIdentityMissingEmailError(provider=provider)
 
-        new_user = User.objects.create_user(
-            **self._build_create_user_kwargs(
-                User, email, provider=provider, email_verified=email_verified, extra_user_fields=extra_user_fields
-            )
-        )
-        identity = SocialIdentity(
-            provider=provider,
-            subject=subject,
-            user=new_user,
-            email_at_link=email,
-            email_verified_at_link=email_verified,
-        )
-        self._maybe_store_refresh(identity, refresh_token, provider, subject)
         try:
-            identity.save()
-        except IntegrityError:
-            # Lost the race against a concurrent sign-in. The @transaction.atomic
-            # decorator on this method ensures the just-created `new_user`
-            # row is rolled back along with everything else, so we won't leak
-            # an orphan User. Re-fetch the winning identity and return it.
+            with transaction.atomic():
+                new_user = User.objects.create_user(
+                    **self._build_create_user_kwargs(
+                        User,
+                        email,
+                        provider=provider,
+                        email_verified=email_verified,
+                        extra_user_fields=extra_user_fields,
+                    )
+                )
+                identity = SocialIdentity(
+                    provider=provider,
+                    subject=subject,
+                    user=new_user,
+                    email_at_link=email,
+                    email_verified_at_link=email_verified,
+                )
+                self._maybe_store_refresh(identity, refresh_token, provider, subject)
+                try:
+                    with transaction.atomic():
+                        identity.save()
+                except IntegrityError as exc:
+                    # Roll back the branch savepoint too, not just the failed
+                    # identity INSERT, so a losing concurrent social sign-in
+                    # does not leak the freshly-created user row.
+                    raise _SocialIdentityRaceLost from exc
+        except _SocialIdentityRaceLost:
+            # Lost the race against a concurrent sign-in. Re-fetch the winning
+            # identity and return it after the branch savepoint has rolled back.
             return self._recover_from_race(provider, subject, refresh_token)
         logger.info(
             "social_identity.created_new_user",
@@ -276,14 +292,19 @@ class SocialIdentityService:
 
         # DB-level email uniqueness can still reject the save when the
         # default manager hides rows the constraint covers (soft-delete
-        # managers are the common case). Catch narrowly, restore the
+        # managers are the common case). Wrap the save in a savepoint so
+        # the IntegrityError rolls back only the failed UPDATE — without
+        # the savepoint, postgres would mark the outer
+        # `upsert_and_link` transaction as aborted and the subsequent
+        # `existing_identity.save(...)` would raise
+        # TransactionManagementError. Catch narrowly, restore the
         # in-memory value, and surface the same warning shape as the
-        # in-memory collision skip — caller's @transaction.atomic rolls
-        # back the failed UPDATE.
+        # in-memory collision skip.
         previous_email = user.email
         user.email = email
         try:
-            user.save(update_fields=["email"])
+            with transaction.atomic():
+                user.save(update_fields=["email"])
         except IntegrityError:
             user.email = previous_email
             logger.warning(
@@ -463,6 +484,26 @@ class SocialIdentityService:
         except Exception:
             return False
 
+    @staticmethod
+    def _linked_user_or_raise(user_model: Any, identity: SocialIdentity, provider: str) -> Any:
+        """Return the linked user only if the default manager still exposes it.
+
+        Django FK traversal uses the related model's base manager, so a
+        soft-deleted user can still be reachable through `identity.user` even
+        when normal application queries exclude it. Treat that as unavailable
+        and fail closed before syncing fields or minting tokens.
+        """
+        if user_model._default_manager.filter(pk=identity.user_id).exists():
+            return identity.user
+        logger.warning(
+            "social_identity.linked_user_unavailable",
+            extra={"provider": provider, "user_id": str(identity.user_id)},
+        )
+        raise SocialIdentityUserUnavailableError(
+            provider=provider,
+            existing_user_id=str(identity.user_id),
+        )
+
     def _maybe_store_refresh(
         self,
         identity: SocialIdentity,
@@ -496,13 +537,14 @@ class SocialIdentityService:
     ) -> tuple[Any, SocialIdentity, bool]:
         """Re-fetch the (provider, subject) winner after a lost-race IntegrityError.
 
-        Called from the IntegrityError handlers in upsert_and_link. The outer
-        @transaction.atomic has already rolled back any partial state from
-        this call (including a freshly-created User in Branch 4). We bump
-        last_used_at on the winner so the caller still sees a "saw this
-        identity recently" signal.
+        Called from the IntegrityError handlers in upsert_and_link after the
+        losing write has rolled back to a savepoint. In the new-user branch,
+        that savepoint includes the freshly-created User so a failed identity
+        insert cannot leak an unlinked account. We bump last_used_at on the
+        winner so the caller still sees a "saw this identity recently" signal.
         """
         winner = SocialIdentity.objects.select_related("user").get(provider=provider, subject=subject)
+        winner_user = self._linked_user_or_raise(get_user_model(), winner, provider)
         # Don't re-store the refresh token here — the winning insert already
         # wrote the AAD-bound ciphertext (or decided not to). Updating it on
         # the loser's behalf would write a different ciphertext under an AAD
@@ -510,9 +552,9 @@ class SocialIdentityService:
         winner.save(update_fields=["last_used_at"])
         logger.info(
             "social_identity.race_recovered",
-            extra={"provider": provider, "user_id": str(winner.user.id)},
+            extra={"provider": provider, "user_id": str(winner_user.id)},
         )
-        return winner.user, winner, False
+        return winner_user, winner, False
 
     @staticmethod
     def _linking_reason(provider: str, email: str | None, extra: dict[str, Any]) -> str:

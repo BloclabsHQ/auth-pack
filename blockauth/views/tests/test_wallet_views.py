@@ -51,7 +51,7 @@ class TestWalletAuthLoginView:
         ``utils/tests/test_wallet_login_siwe.py``.
         """
         # Wallet-first user (no email) — the canonical case the issue calls
-        # out: shell schema requires ``wallets`` to be populated even when
+        # out: clients require ``wallets`` to be populated even when
         # ``email`` is null.
         wallet = "0xabc0000000000000000000000000000000000003"
         user = create_user(email=None, wallet_address=wallet, password=None)

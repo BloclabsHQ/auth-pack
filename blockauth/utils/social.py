@@ -6,9 +6,9 @@ callers can decide the wire shape (JSON body, redirect + cookie, etc).
 
 `social_login()` wraps that data into the legacy JSON response so existing
 callers that expect a DRF ``Response`` back continue to work unchanged.
-Integrators who want to BFF-ify the OAuth callback (set HttpOnly cookies +
-302 to the shell — fabric-auth#533) subclass the view and use
-`social_login_data()` directly.
+Integrators who want to BFF-ify the OAuth callback (set HttpOnly cookies
+and return a redirect) subclass the view and use `social_login_data()`
+directly.
 """
 
 from dataclasses import dataclass
@@ -34,7 +34,7 @@ class SocialLoginResult:
     Carries the raw user model + freshly-issued token pair so callers
     can build whatever response shape their integration needs:
     - legacy JSON body (via ``social_login()``)
-    - BFF cookie + redirect (fabric-auth#533)
+    - BFF cookie + redirect
     - popup + postMessage
     """
 
@@ -73,7 +73,7 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
     # Defensive: only honor `preexisting_user` when it's an instance of the
     # configured `BLOCK_AUTH_USER_MODEL`. SocialIdentityService resolves users
     # via Django's `get_user_model()` (the FK target), which in production
-    # equals `BLOCK_AUTH_USER_MODEL` since integrators set both to the same
+    # equals `BLOCK_AUTH_USER_MODEL` when integrators set both to the same
     # class. In test envs where AUTH_USER_MODEL is the default Django User
     # but BLOCK_AUTH_USER_MODEL points at TestBlockUser, the SocialIdentity
     # user lacks BlockUser-specific attributes (`is_verified`,
@@ -100,7 +100,7 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
     if provider in [AuthenticationType.GOOGLE, AuthenticationType.FACEBOOK, AuthenticationType.LINKEDIN]:
         user.add_authentication_type(provider)
 
-    # #533/#537 side-bug: Google returns OIDC-verified email claims. If the
+    # Google returns OIDC-verified email claims. If the
     # account was previously created by email/password and the user never
     # clicked the verification link, the Google sign-in is proof the address
     # is theirs — promote so downstream gates on ``is_verified`` don't bounce
@@ -134,8 +134,8 @@ def social_login(email: str, name: str, provider_data: dict) -> Response:
     """Legacy JSON-body wrapper around ``social_login_data``.
 
     Kept so existing integrators that expect a ``Response`` back don't
-    break during the BFF-cookie migration (fabric-auth#533). New code
-    should call ``social_login_data()`` directly.
+    break as callback response customization moves into provider views. New
+    code should call ``social_login_data()`` directly.
     """
     result = social_login_data(email=email, name=name, provider_data=provider_data)
     # api-optimization: return the full {access, refresh, user} tuple so

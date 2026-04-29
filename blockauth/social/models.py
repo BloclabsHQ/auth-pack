@@ -34,10 +34,10 @@ class SocialIdentity(models.Model):
 
     class Meta:
         # Lives under the umbrella `blockauth` app — same convention as
-        # `passkey` and `totp` sibling sub-packages. Downstream consumers
-        # (e.g. fabric-auth) keep one INSTALLED_APPS entry and one
-        # MIGRATION_MODULES override for the whole package.
+        # `passkey` and `totp` sibling sub-packages. Consumers keep one
+        # INSTALLED_APPS entry and one MIGRATION_MODULES override for the
+        # whole package.
         app_label = "blockauth"
-        db_table = "social_identity"
+        db_table = "blockauth_social_identity"
         unique_together = (("provider", "subject"),)
         indexes = [models.Index(fields=["user", "provider"])]

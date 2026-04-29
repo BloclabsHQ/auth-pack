@@ -46,7 +46,7 @@ class TestSignUpView:
     def test_signup_creates_otp_without_user_row(self, api_client):
         """Ghost-free flow: SignUpView creates the OTP but NOT the user row.
         The user row is created in SignUpConfirmView after inbox ownership is
-        proven (fabric-auth#516).
+        proven.
         """
         from blockauth.utils.config import get_block_auth_user_model
 
@@ -64,11 +64,11 @@ class TestSignUpView:
         # No user row until confirm
         assert not User.objects.filter(
             email="new@test.com"
-        ).exists(), "fabric_user row must not exist until SignUpConfirmView succeeds"
+        ).exists(), "user row must not exist until SignUpConfirmView succeeds"
 
     def test_signup_otp_send_failure_leaves_no_user_row(self, api_client):
-        """If send_otp raises, no orphan fabric_user row is left behind and
-        the same email can be retried immediately (fabric-auth#516 regression guard).
+        """If send_otp raises, no orphan user row is left behind and
+        the same email can be retried immediately.
         """
         from blockauth.utils.config import get_block_auth_user_model
 
@@ -81,12 +81,10 @@ class TestSignUpView:
             response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": _TEST_PW})
 
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert not User.objects.filter(
-            email="new@test.com"
-        ).exists(), "No fabric_user row must remain after a failed OTP send"
+        assert not User.objects.filter(email="new@test.com").exists(), "No user row must remain after a failed OTP send"
 
     def test_signup_retry_after_otp_send_failure_succeeds(self, api_client):
-        """A Creator can retry signup with the same email after a failed OTP send."""
+        """A user can retry signup with the same email after a failed OTP send."""
         from blockauth.utils.config import get_block_auth_user_model
 
         User = get_block_auth_user_model()
@@ -108,7 +106,7 @@ class TestSignUpView:
         assert not User.objects.filter(email="new@test.com").exists(), "User row must still not exist until confirm"
 
     def test_signup_duplicate_email_blocked_after_confirm(self, api_client, create_user):
-        """Existing verified Creator blocks re-signup (code 4002 unchanged)."""
+        """Existing verified user blocks re-signup (code 4002 unchanged)."""
         create_user(email="exists@test.com", is_verified=True)
         response = api_client.post(
             SIGNUP_URL,
@@ -191,7 +189,7 @@ class TestSignUpConfirmView:
 
     def test_confirm_creates_user_from_otp_payload(self, api_client, create_otp):
         """Ghost-free path: user row must be created by SignUpConfirmView
-        from the OTP payload (fabric-auth#516).
+        from the OTP payload.
         """
         from blockauth.utils.config import get_block_auth_user_model
 
@@ -211,7 +209,7 @@ class TestSignUpConfirmView:
 
         assert response.status_code == status.HTTP_200_OK, response.content
         user = User.objects.filter(email="new@test.com").first()
-        assert user is not None, "fabric_user row must be created on confirm"
+        assert user is not None, "user row must be created on confirm"
         assert user.is_verified is True
 
     def test_confirm_credential_is_usable_after_creation(self, api_client, create_otp):
@@ -268,7 +266,7 @@ class TestSignUpConfirmView:
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_confirm_returns_tokens_and_user(self, api_client, create_otp):
-        """fabric-auth#420: signup confirmation issues JWTs + user payload."""
+        """Signup confirmation issues JWTs + user payload."""
         create_otp(
             identifier="new@test.com",
             subject=OTPSubject.SIGNUP,
@@ -290,7 +288,7 @@ class TestSignUpConfirmView:
         assert user_payload["email"] == "new@test.com"
         assert user_payload["is_verified"] is True
         assert user_payload["wallet_address"] is None
-        # Issue #131: AuthUser shell schema requires is_active, date_joined, wallets[]
+        # Issue #131: clients require is_active, date_joined, wallets[]
         assert user_payload["is_active"] is True
         assert "date_joined" in user_payload
         assert user_payload["wallets"] == []

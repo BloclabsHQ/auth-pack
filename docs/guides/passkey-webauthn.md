@@ -117,7 +117,7 @@ class MyCredentialStore(ICredentialStore):
 | Fingerprints, face scans | **Never stored** -- device only |
 | Private keys | **Never stored** -- device only |
 
-This implementation is GDPR compliant with low privacy risk. See the [Data Protection Impact Assessment](https://github.com/BloclabsHQ/auth-pack/blob/dev/docs/WEBAUTHN_PASSKEY_DPIA.md) for details.
+This implementation is GDPR compliant with low privacy risk. See the [Data Protection Impact Assessment](../WEBAUTHN_PASSKEY_DPIA.md) for details.
 
 ## Cleanup
 

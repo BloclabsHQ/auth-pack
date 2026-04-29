@@ -12,7 +12,7 @@ timestamps -- and surface everything else as-is for downstream callers.
 
 Spec: https://eips.ethereum.org/EIPS/eip-4361
 
-Hardening applied in this port of fabric-auth#402 (see issue #90):
+Hardening tracked by issue #90:
 
 * CRLF tolerant line splits. Clients that emit ``\\r\\n`` don't get rejected
   with an obscure missing-field error (#7).

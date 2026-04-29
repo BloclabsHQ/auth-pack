@@ -4,7 +4,7 @@ TOTP Service - RFC 6238 Implementation
 Implements Time-based One-Time Password (TOTP) algorithm per RFC 6238,
 with backup codes, rate limiting, and replay attack prevention.
 
-Security: All sensitive operations are audit logged per SECURITY_STANDARDS.md
+Security: All sensitive operations are audit logged per the public security standards
 """
 
 import base64
@@ -146,7 +146,7 @@ class TOTPService:
         """
         Generate a cryptographically secure TOTP secret.
 
-        Security: Default 32 bytes (256 bits) per SECURITY_STANDARDS.md.
+        Security: Default 32 bytes (256 bits) per the public security standards.
         RFC 4226 minimum is 16 bytes (128 bits), but we enforce 20 bytes
         (160 bits) as the absolute minimum for compatibility while
         defaulting to 256-bit security.

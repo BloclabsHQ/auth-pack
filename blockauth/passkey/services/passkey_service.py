@@ -328,7 +328,7 @@ class PasskeyService:
             # https://w3c.github.io/webauthn/#sctn-credential-backup
             # =========================================================================
             # BE (Backup Eligible) = credential_device_type:
-            #   - MULTI_DEVICE: Can be synced (iCloud Keychain, Google Password Manager, 1Password)
+            #   - MULTI_DEVICE: Can be synced by a platform credential manager
             #   - SINGLE_DEVICE: Device-bound, cannot be synced (hardware security keys)
             #
             # BS (Backup State) = credential_backed_up:

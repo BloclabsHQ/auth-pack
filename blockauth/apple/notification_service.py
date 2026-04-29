@@ -9,7 +9,8 @@ object (newer). We parse defensively.
 
 Event handling:
   - consent-revoked -> drop the SocialIdentity for (apple, sub)
-  - account-delete  -> if user has no other social identities, delete the User
+  - account-delete  -> if user has no other social identities, delete the
+    SocialIdentity and then delete the User
   - email-disabled / email-enabled -> log only
 
 Trigger contract (APPLE_NOTIFICATION_TRIGGER):
@@ -127,7 +128,12 @@ class AppleNotificationService:
         user_id = str(user.pk)
         other_count = SocialIdentity.objects.filter(user=user).exclude(provider="apple", subject=sub).count()
         if other_count == 0:
-            user.delete()  # CASCADE removes the apple identity row too
+            # Do not rely solely on FK CASCADE here. Reusable apps may use
+            # soft-delete user models whose delete() implementation keeps the
+            # row in place, so explicitly remove the Apple identity before
+            # invoking the integrator's user-delete behavior.
+            identity.delete()
+            user.delete()
             logger.info("apple.notification.account_deleted", extra={"user_id": user_id})
             return True, user_id
         identity.delete()

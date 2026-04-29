@@ -98,6 +98,39 @@ def test_account_delete_with_only_apple_link_deletes_user(apple_settings, build_
         AppleNotificationService().dispatch(payload_jwt)
 
     assert not User.objects.filter(id=user.id).exists()
+    assert not SocialIdentity.objects.filter(provider="apple", subject="001234.acct").exists()
+
+
+@pytest.mark.django_db
+def test_account_delete_removes_identity_when_user_delete_does_not_cascade(
+    apple_settings, build_id_token, jwks_response
+):
+    user = User.objects.create_user(username="soft_user", email="soft@example.com", password="pw")
+    SocialIdentity.objects.create(
+        provider="apple",
+        subject="001234.soft",
+        user=user,
+        email_at_link=None,
+        email_verified_at_link=False,
+    )
+
+    payload_jwt = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "apple-server",
+            "events": {"type": "account-delete", "sub": "001234.soft", "event_time": 1700000005},
+        }
+    )
+
+    with (
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch.object(User, "delete", return_value=None),
+    ):
+        AppleNotificationService().dispatch(payload_jwt)
+
+    assert User.objects.filter(id=user.id).exists()
+    assert not SocialIdentity.objects.filter(provider="apple", subject="001234.soft").exists()
 
 
 @pytest.mark.django_db

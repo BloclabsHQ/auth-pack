@@ -4,16 +4,16 @@ This guide walks through every credential the BlockAuth Apple flow consumes and 
 
 ## Settings the implementation reads
 
-The Apple sub-package reads these keys from `BLOCK_AUTH_SETTINGS` (verified via `grep "apple_setting(" blockauth/apple/`):
+The Apple sub-package reads these keys from `BLOCK_AUTH_SETTINGS`:
 
 | Setting | Required for | What it is |
 |---|---|---|
 | `APPLE_TEAM_ID` | web + native | 10-char Apple Developer team ID |
 | `APPLE_KEY_ID` | web + native | 10-char ID of the Sign in with Apple key |
 | `APPLE_PRIVATE_KEY_PEM` *or* `APPLE_PRIVATE_KEY_PATH` | web + native | Contents of the `.p8` file (or path to it) |
-| `APPLE_SERVICES_ID` | web only | OAuth `client_id` for the web flow |
+| `APPLE_SERVICES_ID` | web + S2S notifications | OAuth `client_id` for the web flow and webhook JWT audience |
 | `APPLE_REDIRECT_URI` | web only | Must exactly match the URL registered on the Services ID |
-| `APPLE_BUNDLE_IDS` | native only | List of bundle IDs accepted as `aud` on id_tokens |
+| `APPLE_BUNDLE_IDS` | native only | List of bundle IDs accepted as `aud` on id_tokens; native authorization-code redemption uses this audience as Apple `client_id` |
 | `APPLE_NOTIFICATION_TRIGGER` | S2S notifications | Dotted path to a `BaseTrigger` subclass invoked on Apple webhook events |
 | `APPLE_CALLBACK_COOKIE_SAMESITE` | optional | Override SameSite on state/PKCE/nonce cookies (default `None` for cross-site form_post) |
 
@@ -37,8 +37,8 @@ Skip this if your iOS/macOS app already has an explicit App ID with Sign in with
 
 1. **Certificates, IDs & Profiles → Identifiers → +**
 2. Type: **App IDs** → **Continue** → **App** → **Continue**
-3. **Description**: human-readable name (e.g. "BlocLabs iOS App")
-4. **Bundle ID**: **Explicit**, e.g. `com.bloclabs.app`
+3. **Description**: human-readable name (e.g. "Example iOS App")
+4. **Bundle ID**: **Explicit**, e.g. `com.example.app`
 5. Scroll to **Capabilities** → tick **Sign In with Apple**
 6. Click the **Edit** button next to it → choose **Enable as a primary App ID** → **Save**
 7. **Continue → Register**
@@ -52,16 +52,16 @@ Skip this if your iOS/macOS app already has an explicit App ID with Sign in with
 Skip this section if you only need native (iOS/macOS) sign-in.
 
 1. **Identifiers → +** → **Services IDs** → **Continue**
-2. **Description**: e.g. "BlocLabs Web"
-3. **Identifier**: reverse-DNS string, e.g. `com.bloclabs.web` (this is `APPLE_SERVICES_ID`)
+2. **Description**: e.g. "Example Web"
+3. **Identifier**: reverse-DNS string, e.g. `com.example.web` (this is `APPLE_SERVICES_ID`)
 4. **Continue → Register**
 5. Click into the new Services ID → tick **Sign In with Apple** → **Configure**:
    - **Primary App ID**: the App ID from Step 2
    - **Domains and Subdomains**: hostnames only (no scheme, no path). Apple does **not** allow `localhost` here.
-     - Production example: `auth.bloclabs.com`
-     - Local dev: your reserved ngrok hostname, e.g. `ozone-proton-spinout.ngrok-free.dev` — see [Local development with ngrok](#local-development-with-ngrok) for how to reserve a free static domain.
+     - Production example: `auth.example.com`
+     - Local dev: your reserved ngrok hostname, e.g. `ozone-proton-spinout.ngrok-free.dev` — see [Local development with an HTTPS tunnel](#local-development-with-an-https-tunnel) for how to reserve a free static domain.
    - **Return URLs**: full HTTPS callback URL. This is exactly what `APPLE_REDIRECT_URI` must equal — string-for-string.
-     - Production example: `https://auth.bloclabs.com/v1/auth/apple/callback/`
+     - Production example: `https://auth.example.com/v1/auth/apple/callback/`
      - Local dev: `https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/callback/`
 6. **Save → Continue → Save**
 
@@ -78,14 +78,14 @@ Skip this section if you only need native (iOS/macOS) sign-in.
 This is the private key used to sign client_secret JWTs sent to Apple's `/auth/token` endpoint.
 
 1. **Keys → +**
-2. **Key Name**: e.g. "BlocLabs Sign in with Apple"
+2. **Key Name**: e.g. "Example Sign in with Apple"
 3. Tick **Sign In with Apple** → click **Configure**
 4. **Primary App ID**: same App ID from Step 2 → **Save**
 5. **Continue → Register**
 6. **Download the `.p8` file immediately** — Apple does not show it again. If you lose it, you must revoke the key and create a new one (and update production).
 7. After download, Apple shows the **Key ID** (10 chars) → this is `APPLE_KEY_ID`.
 
-→ Stash the `.p8` and Key ID in 1Password.
+→ Store the `.p8` and Key ID in your secret manager.
 
 The `.p8` contents (the entire PEM block including `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----`) go into `APPLE_PRIVATE_KEY_PEM`. Alternatively, drop the file on the server and point `APPLE_PRIVATE_KEY_PATH` at it.
 
@@ -104,7 +104,7 @@ Without S2S notifications, you'll keep stale `SocialIdentity` rows for users who
 
 1. Go back to your **Services ID → Sign In with Apple → Configure**
 2. **Server-to-Server Notification Endpoint**: full HTTPS URL.
-   - Production: `https://auth.bloclabs.com/v1/auth/apple/notifications/`
+   - Production: `https://auth.example.com/v1/auth/apple/notifications/`
    - Local dev: `https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/notifications/`
 3. **Save**
 
@@ -160,9 +160,9 @@ BLOCK_AUTH_SETTINGS = {
 
     # Web flow
     "APPLE_TEAM_ID":         "ABCD123456",
-    "APPLE_SERVICES_ID":     "com.bloclabs.web",
+    "APPLE_SERVICES_ID":     "com.example.web",
     # Production:
-    "APPLE_REDIRECT_URI":    "https://auth.bloclabs.com/v1/auth/apple/callback/",
+    "APPLE_REDIRECT_URI":    "https://auth.example.com/v1/auth/apple/callback/",
     # Local dev (must equal the Return URL registered on the Services ID):
     # "APPLE_REDIRECT_URI":  "https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/callback/",
 
@@ -173,7 +173,7 @@ BLOCK_AUTH_SETTINGS = {
     # "APPLE_PRIVATE_KEY_PATH": "/etc/secrets/AuthKey_EFGH789012.p8",
 
     # Native flow
-    "APPLE_BUNDLE_IDS":      ["com.bloclabs.app"],
+    "APPLE_BUNDLE_IDS":      ["com.example.app"],
 
     # Optional S2S notifications
     "APPLE_NOTIFICATION_TRIGGER": "myapp.triggers.AppleNotificationTrigger",
@@ -184,33 +184,31 @@ For Docker / Kubernetes deployments, mount the `.p8` as a secret file and use `A
 
 ---
 
-## Local development with ngrok (FabricBloc stack)
+## Local development with an HTTPS tunnel
 
-Apple won't accept `localhost` as a domain or as a Return URL on the Services ID, so testing the **web flow** locally requires an HTTPS tunnel pointing at your local backend. ngrok is the path of least resistance.
+Apple won't accept `localhost` as a domain or as a Return URL on the Services ID, so testing the **web flow** locally requires an HTTPS tunnel pointing at the backend that serves `blockauth.urls`. ngrok is the path of least resistance.
 
 ### Where the tunnel terminates
 
 **The tunnel must point at the backend, not the frontend.** Apple's `form_post` callback hits `APPLE_REDIRECT_URI`, which is a server route at `/v1/auth/apple/callback/`. The frontend is irrelevant to that exchange — it only kicks off the flow and receives the final post-login redirect.
 
-In the FabricBloc local stack, the backend entry point is **Kong on `localhost:8000`** (container `apigateway.fabric.test:8000`), which proxies `/v1/auth/*` to fabric-auth on container port `8094` (host `8090`). The frontend (`fabricbloc-shell` on `http://localhost:5173`) is on a separate port and never sees Apple's callback.
+If your backend is behind a reverse proxy or API gateway, point the tunnel at that public local entry point. If you run Django directly, point the tunnel at the Django port.
 
 ```
-Browser  ──→  Apple  ──form_post──→  ngrok (ozone-proton-spinout.ngrok-free.dev)
+Browser  ──→  Apple  ──form_post──→  tunnel (example.ngrok-free.dev)
                                             ↓
-                                     Kong gateway (localhost:8000)
+                                     reverse proxy or Django
                                             ↓
-                                     fabric-auth Django (host 8090 → container 8094)
-                                            ↓
-                                     blockauth.apple views @ /v1/auth/apple/...
+                                     blockauth.apple views
 ```
 
-So the tunnel target is **port 8000 (Kong)**, not 5173 (Vite) and not 8090 (fabric-auth direct). Going through Kong is the realistic stack — Kong adds the `hmac-request-signer` headers that fabric-auth verifies via `X-Kong-*` checks. Bypassing Kong would skip that, which is fine for a quick test but doesn't match production.
+Do not point the tunnel at the frontend. Apple's `form_post` callback is a server-side route, and the cookies used for state / PKCE / nonce are issued by the backend.
 
 ### Stable hostname is mandatory
 
 The whole setup below is built around a **reserved static ngrok domain** so the hostname stays the same across `ngrok` restarts. Without that, every restart hands you a new random subdomain and you'd be re-editing the Services ID and re-setting `APPLE_REDIRECT_URI` each time. ngrok gives every account **one free static domain** (on `*.ngrok-free.dev`) — that's all we need.
 
-> The **native flow** (`POST /v1/auth/apple/native/verify/`) doesn't need a tunnel — it has no redirect URI. As long as `APPLE_TEAM_ID`, `APPLE_KEY_ID`, the `.p8`, and `APPLE_BUNDLE_IDS` are set, an iOS app can post a real id_token straight at the Kong gateway on `localhost:8000`.
+> The **native flow** (`POST /apple/verify/`) doesn't need a tunnel — it has no redirect URI. As long as `APPLE_TEAM_ID`, `APPLE_KEY_ID`, the `.p8`, and `APPLE_BUNDLE_IDS` are set, a native app can post a real id_token straight at a locally reachable backend.
 
 ### 1. Install ngrok on macOS
 
@@ -228,62 +226,54 @@ ngrok config add-authtoken <your-token>
 
 In the ngrok dashboard:
 
-1. Go to **Universal Gateway → Domains → + New Domain**
+1. Go to the domains section and create a new static domain.
 2. The free tier offers one auto-generated subdomain on `ngrok-free.dev` (e.g. `ozone-proton-spinout.ngrok-free.dev`). Click **Create Domain**.
 3. Copy the full hostname — this is your stable URL. Use the same one in every example below.
 
 (Throughout this doc we use `ozone-proton-spinout.ngrok-free.dev` as the placeholder — substitute your reserved domain everywhere.)
 
-### 3. Start the tunnel pointed at Kong
+### 3. Start the tunnel pointed at the backend
 
-Make sure Kong is running locally (in the `fabric-gateway` repo: `docker compose -f docker-compose.local.yml up`). Then:
+Make sure the backend is running locally. Then:
 
 ```bash
 ngrok http --url=https://ozone-proton-spinout.ngrok-free.dev 8000
 ```
 
-Port `8000` is Kong, not Django directly. ngrok prints `Forwarding https://ozone-proton-spinout.ngrok-free.dev -> http://localhost:8000` — that's correct.
+Replace `8000` with the local port that serves the Apple callback route. ngrok prints `Forwarding https://ozone-proton-spinout.ngrok-free.dev -> http://localhost:8000` when it is connected.
 
 The `--url` flag pins the tunnel to your reserved hostname. Without it ngrok rotates the subdomain on every start, which defeats the point. Keep the terminal open — closing it kills the tunnel, but the hostname stays reserved on your account so the next `ngrok http --url=...` reconnects to the same URL.
 
 > `--url` replaces the older `--domain`/`--scheme`/`--remote-addr` flags as of ngrok agent v3.16.0. If you see `Flag --domain has been deprecated, use --url instead`, that's why — and note that `--url` takes the **full URL with scheme** (`https://...`), not just the hostname.
 
-### 4. Add the missing Kong route (one-time)
+### 4. Check reverse-proxy routing (one-time)
 
-Apple isn't currently in `fabric-gateway/kong-config/services/fabric-auth/values.yaml` — the existing `auth-oauth` route only covers Google/Facebook/LinkedIn. Without an explicit route, `/v1/auth/apple/*` would fall into the `auth-protected` catch-all (which requires JWT via `auth-validator`) and 401 Apple's unauthenticated callback. Add one route:
+If your local stack uses an API gateway, make sure the unauthenticated Apple routes are forwarded to Django. These paths are relative to wherever you mount `blockauth.urls`:
 
-```yaml
-# OAuth Apple — separate from auth-oauth because the callback is unauthenticated form_post
-- name: auth-apple
-  paths:
-    - /v1/auth/apple
-  strip_path: false
-  plugins:
-    - name: hmac-request-signer
-      _config: global
-    - name: bot-detection
-      _config: global
-```
+- `GET /apple/`
+- `POST /apple/callback/`
+- `POST /apple/verify/`
+- `POST /apple/notifications/`
 
-Re-apply the Kong config (the `fabric-gateway` repo's Makefile has the command). The route is intentionally **without** `auth-validator` — Apple's `form_post` callback arrives unauthenticated by design.
+The callback and notification endpoints must not require an existing user JWT. Apple reaches them before your app has authenticated the user, and the notification endpoint authenticates the request by verifying Apple's signed payload.
 
 ### 5. Wire the tunnel into the Apple flow
 
 1. **Step 3 (Services ID)** — register the static hostname:
    - **Domains and Subdomains**: `ozone-proton-spinout.ngrok-free.dev`
    - **Return URLs**: `https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/callback/`
-2. **Step 6 (settings)** — set `APPLE_REDIRECT_URI` in fabric-auth's local `.env` to the tunnel URL, byte-for-byte the same Return URL registered above:
+2. **Step 6 (settings)** — set `APPLE_REDIRECT_URI` in local settings to the tunnel URL, byte-for-byte the same Return URL registered above:
 
    ```bash
    APPLE_REDIRECT_URI=https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/callback/
    ```
-3. Add the ngrok host to fabric-auth Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`:
+3. Add the ngrok host to Django's `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`:
 
    ```python
-   ALLOWED_HOSTS = ["localhost", "127.0.0.1", "fabric-auth", "ozone-proton-spinout.ngrok-free.dev"]
+   ALLOWED_HOSTS = ["localhost", "127.0.0.1", "ozone-proton-spinout.ngrok-free.dev"]
    CSRF_TRUSTED_ORIGINS = ["https://ozone-proton-spinout.ngrok-free.dev"]
    ```
-4. Drive the flow from the browser: open `https://ozone-proton-spinout.ngrok-free.dev/v1/auth/apple/authorize/` → `appleid.apple.com` → Apple `form_post`s the callback back through the tunnel → Kong → fabric-auth → blockauth's Apple callback view → final redirect to the frontend on `http://localhost:5173`.
+4. Drive the flow from the browser: open `https://ozone-proton-spinout.ngrok-free.dev/apple/` → `appleid.apple.com` → Apple `form_post`s the callback back through the tunnel → your backend → blockauth's Apple callback view.
 
 The state/PKCE/nonce cookies are issued with `SameSite=None` (Apple's `form_post` is cross-site), which browsers only honor over HTTPS — plain `http://localhost` would silently drop them even if Apple allowed it.
 
@@ -293,7 +283,7 @@ Yes. The Services ID's **Domains and Subdomains** and **Return URLs** are editab
 
 Even so, the recommended pattern is: **reserve one static ngrok domain per developer, register it on the Services ID once, and leave it alone.** Other workable static-hostname options if `ngrok-free.dev` isn't acceptable:
 
-- **Paid ngrok plan**: reserve a custom domain like `apple-dev.bloclabs.com` (Dashboard → Domains → + New Domain → bring-your-own), then `ngrok http --url=https://apple-dev.bloclabs.com 8000`.
+- **Paid ngrok plan**: reserve a custom domain like `apple-dev.example.com` (Dashboard → Domains → + New Domain → bring-your-own), then `ngrok http --url=https://apple-dev.example.com 8000`.
 - **Cloudflare Tunnel (free)**: a named tunnel under a domain you own gives the same stability without ngrok at all.
 
 ---
@@ -302,12 +292,12 @@ Even so, the recommended pattern is: **reserve one static ngrok domain per devel
 
 Before declaring it done:
 
-- [ ] Team ID, Key ID, Services ID, and Bundle ID copied into 1Password
-- [ ] `.p8` file uploaded to 1Password (Apple will not let you re-download)
+- [ ] Team ID, Key ID, Services ID, and Bundle ID copied into your secret manager
+- [ ] `.p8` file uploaded to your secret manager (Apple will not let you re-download)
 - [ ] `APPLE_REDIRECT_URI` matches the **Return URL** registered on the Services ID exactly (trailing slash, scheme, host, port — all of it)
-- [ ] Web flow: `GET /v1/auth/apple/authorize/` redirects to `appleid.apple.com`
+- [ ] Web flow: `GET /v1/auth/apple/` redirects to `appleid.apple.com`
 - [ ] Web flow: callback completes and a `SocialIdentity` row is created with `provider="apple"`
-- [ ] Native flow: `POST /v1/auth/apple/native/verify/` with a real id_token from an iOS app returns 200 with auth tokens
+- [ ] Native flow: `POST /v1/auth/apple/verify/` with a real id_token from an iOS app returns 200 with auth tokens
 - [ ] (If enabled) S2S endpoint `POST /v1/auth/apple/notifications/` accepts an Apple-signed payload and rejects an unsigned one with 401
 
 ---

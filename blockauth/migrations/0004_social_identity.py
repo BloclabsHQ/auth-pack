@@ -1,13 +1,9 @@
 """Add SocialIdentity table to the umbrella `blockauth` app.
 
-Backs the OIDC `(provider, subject)` ↔ User link the Google native verify
-and Apple Sign-In flows depend on (auth-pack v0.16+). Earlier prerelease
-builds of v0.16 placed this model under a separate `blockauth_social` app
-label; that diverged from the `passkey`/`totp` umbrella convention this
-package has used since v0.5 and forced downstream consumers (fabric-auth)
-to add a second `INSTALLED_APPS` entry. This migration brings social back
-into the umbrella so consumers keep one entry and one MIGRATION_MODULES
-override for the whole package.
+Backs the OIDC `(provider, subject)` to User link used by Google native
+verification and Apple Sign-In. The model lives under the umbrella
+`blockauth` app so consumers keep one `INSTALLED_APPS` entry and one
+`MIGRATION_MODULES` override for the whole package.
 """
 
 import django.db.models.deletion
