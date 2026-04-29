@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from importlib import import_module
 from typing import Any, Dict, List
 
 from django.contrib.auth.password_validation import get_default_password_validators
@@ -119,3 +120,17 @@ def get_password_help_text():
     validators = get_default_password_validators()
     help_texts = [validator.get_help_text() for validator in validators]
     return "\n\n".join(help_texts)
+
+
+def import_string_or_none(dotted_path: str | None) -> Any | None:
+    """Import a dotted-path target, returning None for empty/None input.
+
+    Used by the Apple notification trigger hook to lazily resolve an
+    integrator-supplied class name from BLOCK_AUTH_SETTINGS.
+    """
+    if not dotted_path:
+        return None
+    module_name, _, attr = dotted_path.rpartition(".")
+    if not module_name:
+        return None
+    return getattr(import_module(module_name), attr)

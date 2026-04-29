@@ -10,10 +10,9 @@ Security-focused test suite covering:
 - Encryption requirements
 - Secret length requirements
 
-Per SECURITY_STANDARDS.md requirements.
+Per security standards requirements.
 """
 
-import time
 import unittest
 from datetime import datetime, timezone
 
@@ -28,7 +27,6 @@ from ..exceptions import (
     TOTPInvalidBackupCodeError,
     TOTPInvalidCodeError,
     TOTPNotEnabledError,
-    TOTPSetupError,
     TOTPTooManyAttemptsError,
     TOTPVerificationError,
 )

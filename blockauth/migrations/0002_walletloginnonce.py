@@ -2,11 +2,11 @@
 Add ``WalletLoginNonce`` — server-issued nonces for SIWE (EIP-4361) wallet
 login.
 
-Fixes #90 (upstream port of fabric-auth #401). Before this change,
-``POST /login/wallet/`` accepted any client-supplied message with no replay
-protection. A captured payload authenticated indefinitely. This model backs
-the new ``POST /login/wallet/challenge/`` endpoint and the single-use,
-TTL-bounded nonce enforcement added alongside it.
+Fixes #90. Before this change, ``POST /login/wallet/`` accepted any
+client-supplied message with no replay protection. A captured payload
+authenticated indefinitely. This model backs the new
+``POST /login/wallet/challenge/`` endpoint and the single-use, TTL-bounded
+nonce enforcement added alongside it.
 
 See ``blockauth/models/wallet_login_nonce.py`` and
 ``blockauth/services/wallet_login_service.py`` for the runtime contract.

@@ -48,12 +48,16 @@ class DummyNotification(BaseNotification):
         )
 
 
-def send_otp(data, subject):
+def send_otp(data, subject, payload: dict | None = None):
     """
     Enhanced OTP sending with security features:
     1. Invalidates old OTPs before creating new ones
     2. Prevents multiple active OTPs per identifier
     3. Enhanced logging and monitoring
+
+    ``payload`` is stored on the OTP row and returned by ``OTP.validate_otp``
+    so callers can carry data (e.g. hashed password for ghost-free signup)
+    through to confirmation without a separate storage layer.
     """
     identifier = data["identifier"]
     method = data["method"]
@@ -73,7 +77,7 @@ def send_otp(data, subject):
 
         # Step 2: Generate new OTP
         code = OTP.generate_otp(get_config("OTP_LENGTH"))
-        OTP.objects.create(identifier=identifier, code=code, subject=subject)
+        OTP.objects.create(identifier=identifier, code=code, subject=subject, payload=payload)
 
         # Step 3: Prepare context for notification
         context = {**data, "code": code, "otp_subject": subject}

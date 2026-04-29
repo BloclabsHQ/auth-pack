@@ -5,6 +5,12 @@ This package contains all Swagger/OpenAPI documentation for BlockAuth endpoints,
 separated from business logic for better maintainability and organization.
 """
 
+from .apple_docs import (
+    apple_authorize_schema,
+    apple_callback_schema,
+    apple_native_verify_schema,
+    apple_notifications_schema,
+)
 from .auth_docs import (
     basic_login_docs,
     email_change_confirm_docs,
@@ -24,6 +30,7 @@ from .social_auth_docs import (
     facebook_auth_login_schema,
     google_auth_callback_schema,
     google_auth_login_schema,
+    google_native_verify_schema,
     linkedin_auth_callback_schema,
     linkedin_auth_login_schema,
 )
@@ -67,10 +74,16 @@ __all__ = [
     # Social auth docs
     "google_auth_login_schema",
     "google_auth_callback_schema",
+    "google_native_verify_schema",
     "facebook_auth_login_schema",
     "facebook_auth_callback_schema",
     "linkedin_auth_login_schema",
     "linkedin_auth_callback_schema",
+    # Apple Sign-In docs
+    "apple_authorize_schema",
+    "apple_callback_schema",
+    "apple_native_verify_schema",
+    "apple_notifications_schema",
     # Passkey docs (if available)
     "passkey_registration_options_docs",
     "passkey_registration_verify_docs",

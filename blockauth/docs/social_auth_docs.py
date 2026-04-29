@@ -1,6 +1,9 @@
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter
 
 from blockauth.schemas.factory import CustomOpenApiResponse
+from blockauth.views.google_native_serializers import (
+    GoogleNativeIdTokenVerifyRequestSerializer,
+)
 
 """Google OAuth Authentication"""
 
@@ -731,6 +734,175 @@ linkedin_auth_callback_schema = {
         500: CustomOpenApiResponse(
             status=500,
             description="Internal server error during authentication",
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"},
+                    "message": {"type": "string"},
+                    "request_id": {"type": "string"},
+                },
+                "required": ["error", "message"],
+            },
+        ),
+    },
+}
+
+
+"""Google Native id_token Verify (Credential Manager / iOS / Web One Tap)"""
+
+google_native_verify_schema = {
+    "operation_id": "google_native_verify",
+    "request": GoogleNativeIdTokenVerifyRequestSerializer,
+    "summary": "Verify Google id_token from native client",
+    "description": (
+        "Verifies a Google-issued id_token obtained by a native client (Android Credential Manager, "
+        "iOS Google Sign-In SDK, or Web One Tap) and issues blockauth JWTs without a redirect round-trip\n"
+        "\n"
+        "**Process:**\n"
+        "1. Validate request body (`id_token` + `raw_nonce` required)\n"
+        "2. Hash `raw_nonce` (SHA-256 hex) and verify the id_token's `nonce` claim matches\n"
+        "3. Verify id_token signature against Google JWKS (`https://www.googleapis.com/oauth2/v3/certs`), "
+        "plus issuer (`https://accounts.google.com`), audience (allowlisted), and expiry\n"
+        "4. Upsert `SocialIdentity(provider=google, subject=sub)` and link to user\n"
+        "5. Issue blockauth access + refresh tokens\n"
+        "\n"
+        "**Request Body:**\n"
+        "- `id_token` (required): Google-issued id_token JWT\n"
+        "- `raw_nonce` (required): the un-hashed nonce the client passed when requesting the id_token\n"
+        "\n"
+        "**Audience Allowlist:**\n"
+        "Configure `GOOGLE_NATIVE_AUDIENCES` with the Web (server) OAuth client IDs the integrator "
+        "registered. The `azp` claim (platform client ID) is captured but not enforced; integrators "
+        "can validate it via a post-login trigger if they need stricter platform binding.\n"
+        "\n"
+        "**Error Handling:**\n"
+        "- 400 (4020): `GOOGLE_NATIVE_AUDIENCES` is not configured\n"
+        "- 400 (4061): id_token signature, issuer, audience, expiry, or nonce verification failed\n"
+        "- 409: SocialIdentity conflict — Google subject already linked to a different user\n"
+        "\n"
+        "**Security:**\n"
+        "- No authentication required (public endpoint)\n"
+        "- id_token signature verification gates everything; no claim is trusted before verification\n"
+        "- Nonce binding prevents id_token replay across requests\n"
+        "- JWKS responses are cached (`OIDC_JWKS_CACHE_TTL_SECONDS`, default 3600s) to avoid\n"
+        "  rate-limiting Google's certs endpoint\n"
+        "\n"
+        "**Use Cases:**\n"
+        "- Sign in with Google from Android (Credential Manager)\n"
+        "- Sign in with Google from iOS (Google Sign-In SDK)\n"
+        "- Sign in with Google from web via One Tap\n"
+    ),
+    "tags": ["Social Authentication"],
+    "deprecated": False,
+    "external_docs": {
+        "description": "Sign In With Google — verifying the id_token",
+        "url": "https://developers.google.com/identity/sign-in/web/backend-auth",
+    },
+    "examples": [
+        OpenApiExample(
+            "Native Verify Request",
+            value={
+                "id_token": "eyJhbGciOiJSUzI1NiIs...",
+                "raw_nonce": "f3K0...",
+            },
+            request_only=True,
+        ),
+        OpenApiExample(
+            "Successful Authentication",
+            value={
+                "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "user": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "email": "user@example.com",
+                    "is_verified": True,
+                    "wallet_address": None,
+                    "first_name": "Ada",
+                    "last_name": "Lovelace",
+                },
+            },
+            response_only=True,
+            status_codes=["200"],
+        ),
+        OpenApiExample(
+            "Audiences Not Configured",
+            value={"detail": "Google native audiences are not configured", "error_code": 4020},
+            response_only=True,
+            status_codes=["400"],
+        ),
+        OpenApiExample(
+            "id_token Verification Failed",
+            value={"detail": "id_token signature verification failed", "error_code": 4061},
+            response_only=True,
+            status_codes=["400"],
+        ),
+        OpenApiExample(
+            "Identity Conflict",
+            value={
+                "detail": "social identity conflict for provider=google",
+                "code": "SOCIAL_IDENTITY_CONFLICT",
+            },
+            response_only=True,
+            status_codes=["409"],
+        ),
+    ],
+    "responses": {
+        200: CustomOpenApiResponse(
+            status=200,
+            description="Successfully verified Google id_token and authenticated the user",
+            response={
+                "type": "object",
+                "properties": {
+                    "access": {"type": "string", "description": "JWT access token", "format": "jwt"},
+                    "refresh": {"type": "string", "description": "JWT refresh token", "format": "jwt"},
+                    "user": {
+                        "type": "object",
+                        "description": "Authenticated user profile (same shape as /login/basic/)",
+                        "properties": {
+                            "id": {"type": "string", "format": "uuid"},
+                            "email": {"type": "string", "nullable": True},
+                            "is_verified": {"type": "boolean"},
+                            "wallet_address": {"type": "string", "nullable": True},
+                            "first_name": {"type": "string", "nullable": True},
+                            "last_name": {"type": "string", "nullable": True},
+                        },
+                        "required": ["id", "is_verified"],
+                    },
+                },
+                "required": ["access", "refresh", "user"],
+            },
+        ),
+        400: CustomOpenApiResponse(
+            status=400,
+            description="Configuration missing or id_token verification failed",
+            response={
+                "type": "object",
+                "properties": {
+                    "detail": {"type": "string"},
+                    "error_code": {
+                        "type": "integer",
+                        "enum": [4020, 4061],
+                        "description": "4020=audiences not configured; 4061=id_token verification failed",
+                    },
+                },
+                "required": ["detail"],
+            },
+        ),
+        409: CustomOpenApiResponse(
+            status=409,
+            description="Google subject is already linked to a different user account",
+            response={
+                "type": "object",
+                "properties": {
+                    "detail": {"type": "string"},
+                    "code": {"type": "string", "example": "SOCIAL_IDENTITY_CONFLICT"},
+                },
+                "required": ["detail"],
+            },
+        ),
+        500: CustomOpenApiResponse(
+            status=500,
+            description="Internal server error during native id_token verification",
             response={
                 "type": "object",
                 "properties": {

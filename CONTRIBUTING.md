@@ -18,15 +18,16 @@ uv sync
 # Run tests
 uv run pytest
 
-# Format & lint
-make check
+# Format checks
+uv run black --check blockauth
+uv run isort --check-only blockauth
 ```
 
 ## Development Workflow
 
 1. Fork the repo and create a branch from `dev`
 2. Make your changes
-3. Run `make check` (format + lint)
+3. Run `uv run black --check blockauth` and `uv run isort --check-only blockauth`
 4. Run `uv run pytest` to verify tests pass
 5. Open a PR against `dev`
 
@@ -39,7 +40,7 @@ make check
 
 - **Format**: black (120 char line length) + isort
 - **Lint**: flake8
-- **Security**: See [SECURITY_STANDARDS.md](.claude/SECURITY_STANDARDS.md)
+- **Security**: See [Security Standards](docs/security/security-standards.md)
 
 Key rules:
 - No hardcoded secrets or credentials

@@ -23,21 +23,27 @@ class TestPasswordResetView:
 
     def test_reset_existing_user(self, api_client, create_user):
         create_user(email="user@test.com")
-        response = api_client.post(PASSWORD_RESET_URL, {
-            "identifier": "user@test.com",
-            "method": "email",
-            "verification_type": "otp",
-        })
+        response = api_client.post(
+            PASSWORD_RESET_URL,
+            {
+                "identifier": "user@test.com",
+                "method": "email",
+                "verification_type": "otp",
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "message" in response.data
 
     def test_reset_nonexistent_user_same_response(self, api_client):
         """Should return same response for non-existent users (prevent enumeration)."""
-        response = api_client.post(PASSWORD_RESET_URL, {
-            "identifier": "nobody@test.com",
-            "method": "email",
-            "verification_type": "otp",
-        })
+        response = api_client.post(
+            PASSWORD_RESET_URL,
+            {
+                "identifier": "nobody@test.com",
+                "method": "email",
+                "verification_type": "otp",
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_reset_missing_fields(self, api_client):
@@ -52,12 +58,15 @@ class TestPasswordResetConfirmView:
         user = create_user(email="user@test.com", password=STRONG_PASS)
         create_otp(identifier="user@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
 
-        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
-            "identifier": "user@test.com",
-            "code": "ABC123",
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "user@test.com",
+                "code": "ABC123",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
         user.refresh_from_db()
         assert user.check_password(STRONG_PASS_NEW)
@@ -66,36 +75,45 @@ class TestPasswordResetConfirmView:
         create_user(email="user@test.com")
         create_otp(identifier="user@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
 
-        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
-            "identifier": "user@test.com",
-            "code": "WRONG",
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "user@test.com",
+                "code": "WRONG",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_reset_confirm_passwords_dont_match(self, api_client, create_user, create_otp):
         create_user(email="user@test.com")
         create_otp(identifier="user@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
 
-        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
-            "identifier": "user@test.com",
-            "code": "ABC123",
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": "DifferentP@ss!",
-        })
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "user@test.com",
+                "code": "ABC123",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": "DifferentP@ss!",
+            },
+        )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_reset_confirm_weak_new(self, api_client, create_user, create_otp):
         create_user(email="user@test.com")
         create_otp(identifier="user@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
 
-        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
-            "identifier": "user@test.com",
-            "code": "ABC123",
-            "new_password": WEAK_PASS,
-            "confirm_password": WEAK_PASS,
-        })
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "user@test.com",
+                "code": "ABC123",
+                "new_password": WEAK_PASS,
+                "confirm_password": WEAK_PASS,
+            },
+        )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_reset_confirm_auto_signs_in(self, api_client, create_user, create_otp):
@@ -107,12 +125,15 @@ class TestPasswordResetConfirmView:
         user = create_user(email="auto@test.com", password=STRONG_PASS)
         create_otp(identifier="auto@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
 
-        response = api_client.post(PASSWORD_RESET_CONFIRM_URL, {
-            "identifier": "auto@test.com",
-            "code": "ABC123",
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "auto@test.com",
+                "code": "ABC123",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data
@@ -131,39 +152,51 @@ class TestPasswordChangeView:
 
     def test_change_authenticated(self, authenticated_client):
         client, user = authenticated_client(password=STRONG_PASS)
-        response = client.post(PASSWORD_CHANGE_URL, {
-            "old_password": STRONG_PASS,
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
         user.refresh_from_db()
         assert user.check_password(STRONG_PASS_NEW)
 
     def test_change_wrong_old(self, authenticated_client):
         client, user = authenticated_client(password=STRONG_PASS)
-        response = client.post(PASSWORD_CHANGE_URL, {
-            "old_password": "WrongP@ss!",
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": "WrongP@ss!",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_change_unauthenticated(self, api_client):
-        response = api_client.post(PASSWORD_CHANGE_URL, {
-            "old_password": STRONG_PASS,
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = api_client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
 
     def test_change_weak_new(self, authenticated_client):
         client, user = authenticated_client(password=STRONG_PASS)
-        response = client.post(PASSWORD_CHANGE_URL, {
-            "old_password": STRONG_PASS,
-            "new_password": WEAK_PASS,
-            "confirm_password": WEAK_PASS,
-        })
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": WEAK_PASS,
+                "confirm_password": WEAK_PASS,
+            },
+        )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_change_returns_fresh_tokens_and_user(self, authenticated_client):
@@ -173,11 +206,14 @@ class TestPasswordChangeView:
         from blockauth.utils.token import Token
 
         client, user = authenticated_client(password=STRONG_PASS)
-        response = client.post(PASSWORD_CHANGE_URL, {
-            "old_password": STRONG_PASS,
-            "new_password": STRONG_PASS_NEW,
-            "confirm_password": STRONG_PASS_NEW,
-        })
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
         assert response.status_code == status.HTTP_200_OK
         assert "access" in response.data
         assert "refresh" in response.data

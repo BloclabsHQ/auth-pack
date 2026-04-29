@@ -72,6 +72,28 @@ class BlockAuthConfig(AppConfig):
 
     def ready(self):
         validate_wallet_login_settings()
+        _wire_apple_revoke_signal()
+
+
+def _wire_apple_revoke_signal() -> None:
+    """Connect the Apple pre_delete handler from `blockauth.apple.signals`.
+
+    Lives in the umbrella `blockauth` app's `ready()` rather than a sibling
+    `AppConfig` because `blockauth.apple` carries no models and shouldn't
+    require a separate INSTALLED_APPS entry. The connect() is deferred to
+    `ready()` (rather than a top-level `@receiver`) so `AUTH_USER_MODEL`
+    resolves against a populated app registry. `dispatch_uid` keeps
+    re-entrant test setups from double-registering the handler.
+    """
+    from django.db.models.signals import pre_delete
+
+    from blockauth.apple.signals import revoke_apple_identities
+
+    pre_delete.connect(
+        revoke_apple_identities,
+        sender=settings.AUTH_USER_MODEL,
+        dispatch_uid="blockauth.apple.revoke_apple_identities",
+    )
 
 
 def validate_wallet_login_settings() -> None:

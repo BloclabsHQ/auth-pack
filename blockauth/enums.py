@@ -33,6 +33,7 @@ class AuthenticationType(str, Enum):
     GOOGLE = "GOOGLE"
     FACEBOOK = "FACEBOOK"
     LINKEDIN = "LINKEDIN"
+    APPLE = "APPLE"
     PASSWORDLESS = "PASSWORDLESS"
 
     @property
@@ -44,6 +45,7 @@ class AuthenticationType(str, Enum):
             "GOOGLE": "Google",
             "FACEBOOK": "Facebook",
             "LINKEDIN": "LinkedIn",
+            "APPLE": "Apple",
             "PASSWORDLESS": "Passwordless",
         }
         return labels.get(self.value, self.value)

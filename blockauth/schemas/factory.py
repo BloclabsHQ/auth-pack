@@ -17,6 +17,8 @@ class CustomOpenApiResponse(OpenApiResponse):
             }
         elif status_code == 301:
             return {"description": description or "Redirect", "examples": examples}
+        elif status_code == 302:
+            return {"description": description or "Redirect", "examples": examples}
         elif status_code == 400:
             return {
                 "description": description or "Invalid request",
@@ -29,6 +31,19 @@ class CustomOpenApiResponse(OpenApiResponse):
                             "type": "object",
                             "additionalProperties": {"type": "string"},
                         },
+                    },
+                },
+                "examples": examples,
+            }
+        elif status_code == 409:
+            return {
+                "description": description or "Conflict",
+                "response": response
+                or {
+                    "type": "object",
+                    "properties": {
+                        "detail": {"type": "string"},
+                        "code": {"type": "string"},
                     },
                 },
                 "examples": examples,

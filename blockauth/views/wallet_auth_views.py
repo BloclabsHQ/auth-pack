@@ -11,7 +11,7 @@ Includes:
 * :class:`WalletEmailAddView` / :class:`WalletLinkView` — unchanged from
   pre-SIWE behavior.
 
-Background: issue #90 (upstream port of fabric-auth #401 / #402).
+Background: issue #90 tracks SIWE replay protection and challenge binding.
 """
 
 import logging
@@ -247,8 +247,8 @@ class WalletAuthLoginView(APIView):
             user = linked.user
             # issue #131: route the user payload through build_user_payload so
             # wallet-login emits the same {is_active, date_joined, wallets}
-            # shape as basic-login / passwordless-login. The shell's AuthUser
-            # Zod schema rejects responses missing these fields.
+            # shape as basic-login / passwordless-login. Clients can rely on
+            # these fields being present in every post-auth response.
             response_serializer = WalletLoginResponseSerializer(
                 {
                     "access": linked.access_token,

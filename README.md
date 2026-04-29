@@ -341,7 +341,7 @@ BLOCK_AUTH_SETTINGS = {
     # "JWT_PRIVATE_KEY": "<PEM-encoded signing key>",   # For RS256/ES256: PEM key (signing)
     # "JWT_PUBLIC_KEY": "<PEM-encoded verification key>", # For RS256/ES256: PEM key (verification)
     # NOTE: For RS256/ES256, never expose signing keys in logs, version control, or client-side code.
-    # Use environment variables or a secrets manager (1Password, AWS Secrets Manager) in production.
+    # Use environment variables or a secrets manager in production.
 
     "OTP_VALIDITY": timedelta(minutes=3),
     "OTP_LENGTH": 6,
@@ -1533,4 +1533,3 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 - [Pramod Kodag](https://github.com/PramodTKodag)
 - [Cris R](https://github.com/Madgeniusblink)
-

@@ -112,6 +112,7 @@ class PasskeyService:
         user_id: Any,
         username: str,
         display_name: Optional[str] = None,
+        rp_id: Optional[str] = None,
     ) -> Dict:
         """
         Generate WebAuthn registration options.
@@ -120,6 +121,9 @@ class PasskeyService:
             user_id: User's ID
             username: User's username (typically email)
             display_name: User's display name (defaults to username)
+            rp_id: Optional RP_ID override for this request. When None, falls
+                back to the configured RP_ID. Use this to serve multiple origins
+                from a single backend (see ``PasskeyConfiguration.resolve_rp_id``).
 
         Returns:
             Registration options dict to send to frontend
@@ -127,6 +131,7 @@ class PasskeyService:
         Raises:
             MaxCredentialsReachedError: If user has max credentials
         """
+        effective_rp_id = rp_id or self._config.rp_id
         # Check credential limit
         existing_count = self._credential_store.count_by_user(user_id)
         if existing_count >= self._config.max_credentials_per_user:
@@ -163,7 +168,7 @@ class PasskeyService:
 
         # Generate options using py-webauthn
         options = generate_registration_options(
-            rp_id=self._config.rp_id,
+            rp_id=effective_rp_id,
             rp_name=self._config.rp_name,
             user_id=user_handle,
             user_name=username,
@@ -191,6 +196,7 @@ class PasskeyService:
         credential_data: Dict,
         user_id: Any,
         credential_name: Optional[str] = None,
+        expected_rp_id: Optional[str] = None,
     ) -> CredentialData:
         """
         Verify WebAuthn registration response.
@@ -199,6 +205,9 @@ class PasskeyService:
             credential_data: Registration response from frontend
             user_id: User's ID
             credential_name: Optional name for the credential
+            expected_rp_id: Optional RP_ID override. MUST match the ``rp_id``
+                used when the options were generated for this challenge. When
+                None, falls back to the configured RP_ID.
 
         Returns:
             Saved credential data
@@ -207,6 +216,7 @@ class PasskeyService:
             InvalidCredentialDataError: If credential data is invalid
             SignatureVerificationError: If verification fails
         """
+        effective_rp_id = expected_rp_id or self._config.rp_id
         try:
             # Extract required fields
             credential_id = credential_data.get("id") or credential_data.get("rawId")
@@ -278,7 +288,7 @@ class PasskeyService:
             verification = verify_registration_response(
                 credential=webauthn_credential,
                 expected_challenge=base64url_to_bytes(challenge),
-                expected_rp_id=self._config.rp_id,
+                expected_rp_id=effective_rp_id,
                 expected_origin=self._config.allowed_origins,
                 require_user_verification=self._config.user_verification == "required",
             )
@@ -318,7 +328,7 @@ class PasskeyService:
             # https://w3c.github.io/webauthn/#sctn-credential-backup
             # =========================================================================
             # BE (Backup Eligible) = credential_device_type:
-            #   - MULTI_DEVICE: Can be synced (iCloud Keychain, Google Password Manager, 1Password)
+            #   - MULTI_DEVICE: Can be synced by a platform credential manager
             #   - SINGLE_DEVICE: Device-bound, cannot be synced (hardware security keys)
             #
             # BS (Backup State) = credential_backed_up:
@@ -374,6 +384,7 @@ class PasskeyService:
         self,
         user_id: Optional[Any] = None,
         username: Optional[str] = None,
+        rp_id: Optional[str] = None,
     ) -> Dict:
         """
         Generate WebAuthn authentication options.
@@ -381,10 +392,13 @@ class PasskeyService:
         Args:
             user_id: Optional user ID (for non-discoverable credentials)
             username: Optional username to look up user
+            rp_id: Optional RP_ID override for this request. When None, falls
+                back to the configured RP_ID.
 
         Returns:
             Authentication options dict to send to frontend
         """
+        effective_rp_id = rp_id or self._config.rp_id
         allow_credentials = []
 
         # If user specified, get their credentials
@@ -407,7 +421,7 @@ class PasskeyService:
 
         # Generate options using py-webauthn
         options = generate_authentication_options(
-            rp_id=self._config.rp_id,
+            rp_id=effective_rp_id,
             challenge=base64url_to_bytes(challenge),
             timeout=self._config.authentication_timeout,
             allow_credentials=allow_credentials if allow_credentials else None,
@@ -425,12 +439,16 @@ class PasskeyService:
     def verify_authentication(
         self,
         credential_data: Dict,
+        expected_rp_id: Optional[str] = None,
     ) -> AuthenticationResult:
         """
         Verify WebAuthn authentication response.
 
         Args:
             credential_data: Authentication response from frontend
+            expected_rp_id: Optional RP_ID override. MUST match the ``rp_id``
+                used when the options were generated for this challenge. When
+                None, falls back to the configured RP_ID.
 
         Returns:
             Authentication result with user info
@@ -441,6 +459,7 @@ class PasskeyService:
             CounterRegressionError: If counter regression detected
             SignatureVerificationError: If verification fails
         """
+        effective_rp_id = expected_rp_id or self._config.rp_id
         try:
             # Extract required fields
             credential_id = credential_data.get("id") or credential_data.get("rawId")
@@ -513,7 +532,7 @@ class PasskeyService:
             verification = verify_authentication_response(
                 credential=webauthn_credential,
                 expected_challenge=base64url_to_bytes(challenge),
-                expected_rp_id=self._config.rp_id,
+                expected_rp_id=effective_rp_id,
                 expected_origin=self._config.allowed_origins,
                 credential_public_key=base64url_to_bytes(stored_credential.public_key),
                 credential_current_sign_count=stored_credential.sign_count,

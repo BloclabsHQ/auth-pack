@@ -56,11 +56,12 @@ def create_otp(db):
     """Factory fixture to create OTP records."""
     from blockauth.models.otp import OTP
 
-    def _create(identifier, subject, code="ABC123"):
+    def _create(identifier, subject, code="ABC123", payload=None):
         return OTP.objects.create(
             identifier=identifier,
             code=code,
             subject=subject,
+            payload=payload,
         )
 
     return _create
