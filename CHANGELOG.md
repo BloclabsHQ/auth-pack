@@ -17,6 +17,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.2] - 2026-05-01
+
+### Added
+
+- Added package-level per-IP throttles for Apple web callback, native verify, and server-to-server notification endpoints with overridable `BLOCK_AUTH_SETTINGS` rate tuples.
+
+### Changed
+
+- Apple server-to-server notifications now reject stale or future `event_time` values and suppress replayed notifications before mutating `SocialIdentity` rows or running `APPLE_NOTIFICATION_TRIGGER`.
+- Apple server-to-server notifications now use Apple's documented `account-deleted` event type.
+
+### Fixed
+
+- Apple server-to-server notification triggers now call the package's public `BaseTrigger.trigger(context)` method, with the previous `run(context)` shape kept as a fallback for compatibility.
+
+---
+
 ## [0.16.1] - 2026-04-29
 
 ### Changed
@@ -41,7 +58,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
   - `POST /apple/callback/` form_post callback (state + PKCE verify, id_token verify with conditional nonce, SocialIdentity link, blockauth JWT).
   - `POST /apple/verify/` native id_token verify for iOS/macOS clients (optional `authorization_code` redemption for refresh-token-at-rest).
   - `pre_delete` signal that revokes Apple refresh tokens at `/auth/revoke` when an integrator deletes a user (App Store Review Guideline 5.1.1(v)).
-  - `POST /apple/notifications/` server-to-server webhook (Korean SIWA mandate effective 2026-01-01) handling `consent-revoked`, `account-delete`, `email-disabled`, `email-enabled` events. Trigger hook receives `{event_type, sub, event_time}` only — full JWT claims are NOT exposed (PII safety).
+  - `POST /apple/notifications/` server-to-server webhook (Korean SIWA mandate effective 2026-01-01) handling `consent-revoked`, `account-deleted`, `email-disabled`, `email-enabled` events. Trigger hook receives `{event_type, sub, event_time}` only — full JWT claims are NOT exposed (PII safety).
 - **Google native id_token verify** — `POST /google/native/verify/` for Android Credential Manager, iOS Google Sign-In SDK, and Web One Tap. Audience set is `BLOCK_AUTH_SETTINGS["GOOGLE_NATIVE_AUDIENCES"]` (the integrator's web/server client IDs).
 - **Generic `OIDCTokenVerifier`** (`blockauth.utils.jwt`) reused by every OIDC provider:
   - JWKSCache with TTL + rotation-on-kid-miss refetch + transient-failure preservation (a 5xx from the IdP no longer wipes a working cache).

@@ -41,6 +41,25 @@ All settings are configured in `BLOCK_AUTH_SETTINGS` in your Django settings mod
 |---------|---------|-------------|
 | `WALLET_MESSAGE_TTL` | `300` | Signed wallet message expiry in seconds (5 minutes) |
 
+## Apple Sign-In
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `APPLE_TEAM_ID` | `None` | Apple Developer Team ID used to build the client secret |
+| `APPLE_KEY_ID` | `None` | Sign in with Apple key ID used to build the client secret |
+| `APPLE_PRIVATE_KEY_PEM` | `None` | PEM contents for the Sign in with Apple private key |
+| `APPLE_PRIVATE_KEY_PATH` | `None` | Path to the Sign in with Apple `.p8` private key |
+| `APPLE_SERVICES_ID` | `None` | Services ID used as web OAuth client ID and S2S notification audience |
+| `APPLE_BUNDLE_IDS` | `()` | Native app bundle IDs accepted as id_token audiences |
+| `APPLE_REDIRECT_URI` | `None` | Web callback URL registered on the Services ID |
+| `APPLE_NOTIFICATION_TRIGGER` | `None` | Dotted path to a trigger class for verified S2S events |
+| `APPLE_CALLBACK_COOKIE_SAMESITE` | `"None"` | SameSite value for Apple form_post state/PKCE/nonce cookies |
+| `APPLE_NOTIFICATION_MAX_AGE_SECONDS` | `300` | Maximum accepted age of S2S `event_time` values |
+| `APPLE_NOTIFICATION_FUTURE_LEEWAY_SECONDS` | `60` | Allowed future clock skew for S2S `event_time` values |
+| `APPLE_WEB_CALLBACK_RATE_LIMIT` | `(30, 60)` | Per-IP `(max_requests, window_seconds)` for `/apple/callback/` |
+| `APPLE_NATIVE_VERIFY_RATE_LIMIT` | `(30, 60)` | Per-IP `(max_requests, window_seconds)` for `/apple/verify/` |
+| `APPLE_NOTIFICATION_RATE_LIMIT` | `(60, 60)` | Per-IP `(max_requests, window_seconds)` for `/apple/notifications/` |
+
 ## Feature Flags
 
 | Setting | Default | Description |

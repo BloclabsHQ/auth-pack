@@ -53,6 +53,11 @@ from blockauth.apple.serializers import (
     AppleNativeVerifyRequestSerializer,
     AppleServerToServerNotificationRequestSerializer,
 )
+from blockauth.apple.throttles import (
+    AppleNativeVerifyThrottle,
+    AppleNotificationThrottle,
+    AppleWebCallbackThrottle,
+)
 from blockauth.docs.apple_docs import (
     apple_authorize_schema,
     apple_callback_schema,
@@ -154,6 +159,7 @@ class AppleWebAuthorizeView(APIView):
 class AppleWebCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
+    throttle_classes = [AppleWebCallbackThrottle]
 
     def handle_exception(self, exc):
         # Any error path must clear the state/PKCE/nonce cookies; otherwise
@@ -289,6 +295,7 @@ class AppleNativeVerifyView(APIView):
 
     permission_classes = (AllowAny,)
     authentication_classes = ()
+    throttle_classes = [AppleNativeVerifyThrottle]
 
     @extend_schema(**apple_native_verify_schema)
     def post(self, request):
@@ -392,14 +399,16 @@ class AppleServerToServerNotificationView(APIView):
     """POST /apple/notifications/ — Apple's server-to-server webhook.
 
     Apple sends {"payload": "<JWT>"} for events like consent-revoked,
-    account-delete, email-disabled, email-enabled. We verify the JWT
+    account-deleted, email-disabled, email-enabled. We verify the JWT
     inside AppleNotificationService.dispatch and let it apply state
-    changes; on any verification or parse failure, we return 400 with
-    code 4056 so Apple's retry logic gets a meaningful signal.
+    changes; duplicate fresh notifications are idempotently suppressed. On any
+    verification or parse failure, we return 400 with code 4056 so Apple's retry
+    logic gets a meaningful signal.
     """
 
     permission_classes = (AllowAny,)
     authentication_classes = ()
+    throttle_classes = [AppleNotificationThrottle]
 
     @extend_schema(**apple_notifications_schema)
     def post(self, request):

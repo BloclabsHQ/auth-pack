@@ -447,7 +447,7 @@ apple_notifications_schema = {
         "\n"
         "**Supported Event Types:**\n"
         "- `consent-revoked`: user revoked Sign in with Apple for the integrator's app\n"
-        "- `account-delete`: user deleted their Apple ID — wipe linked SocialIdentity\n"
+        "- `account-deleted`: user deleted their Apple ID — wipe linked SocialIdentity\n"
         "- `email-disabled`: private-relay email forwarding stopped for this user\n"
         "- `email-enabled`: private-relay email forwarding resumed\n"
         "\n"
