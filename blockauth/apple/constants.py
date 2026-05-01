@@ -25,6 +25,8 @@ class AppleClaimKeys:
 
 class AppleNotificationEvents:
     CONSENT_REVOKED = "consent-revoked"
-    ACCOUNT_DELETE = "account-delete"
+    ACCOUNT_DELETED = "account-deleted"
+    # Deprecated compatibility alias; use ACCOUNT_DELETED.
+    ACCOUNT_DELETE = ACCOUNT_DELETED
     EMAIL_DISABLED = "email-disabled"
     EMAIL_ENABLED = "email-enabled"

@@ -78,6 +78,11 @@ DEFAULTS = {
     "APPLE_REDIRECT_URI": None,
     "APPLE_NOTIFICATION_TRIGGER": None,  # optional integrator hook for S2S notifications
     "APPLE_CALLBACK_COOKIE_SAMESITE": "None",  # form_post requires SameSite=None+Secure on deployed TLS
+    "APPLE_NOTIFICATION_MAX_AGE_SECONDS": 300,  # reject stale S2S event_time values
+    "APPLE_NOTIFICATION_FUTURE_LEEWAY_SECONDS": 60,  # tolerate small Apple/server clock skew
+    "APPLE_WEB_CALLBACK_RATE_LIMIT": (30, 60),  # per-IP (requests, seconds)
+    "APPLE_NATIVE_VERIFY_RATE_LIMIT": (30, 60),  # per-IP (requests, seconds)
+    "APPLE_NOTIFICATION_RATE_LIMIT": (60, 60),  # per-IP (requests, seconds)
     # Google native id_token verify
     "GOOGLE_NATIVE_AUDIENCES": (),  # tuple of web client IDs accepted in id_token.aud
     # Generic OIDC verifier

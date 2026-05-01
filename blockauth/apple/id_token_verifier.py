@@ -8,7 +8,7 @@ Wraps the generic OIDCTokenVerifier with Apple-specific claim handling:
     absent, we skip nonce verification (older devices).
   - `verify_raw` is a thin convenience for the S2S notification path, which
     has a different audience expectation, no nonce, AND no email claim
-    requirement (Apple's `consent-revoked` / `account-delete` events do not
+    requirement (Apple's `consent-revoked` / `account-deleted` events do not
     carry an `email` field).
 
 Verifier instances are cached per (audiences, require_email_claim) tuple at
@@ -79,7 +79,7 @@ def _build_verifier(audiences: tuple[str, ...], *, require_email_claim: bool = T
 
     `require_email_claim` defaults True for the standard sign-in flow (Apple
     always returns an email — relay or real). Set False for the S2S
-    notification path: events like `consent-revoked` and `account-delete`
+    notification path: events like `consent-revoked` and `account-deleted`
     do NOT carry an email claim.
     """
     cache_key = (audiences, require_email_claim)
@@ -153,7 +153,7 @@ class AppleIdTokenVerifier:
 
     def verify_raw(self, id_token: str, audiences: tuple[str, ...]) -> dict[str, Any]:
         # require_email_claim=False because Apple S2S notification events
-        # (consent-revoked, account-delete) do NOT carry an `email` field.
+        # (consent-revoked, account-deleted) do NOT carry an `email` field.
         verifier = _build_verifier(audiences, require_email_claim=False)
         try:
             return verifier.verify(id_token, expected_nonce=None)

@@ -111,7 +111,7 @@ def test_verify_raw_rejects_token_with_wrong_audience(configured_settings, build
 
 
 def test_verify_raw_accepts_s2s_token_without_email(configured_settings, build_id_token, jwks_response):
-    """Apple S2S notifications (consent-revoked, account-delete) do NOT carry
+    """Apple S2S notifications (consent-revoked, account-deleted) do NOT carry
     an `email` claim. verify_raw must succeed even when email is absent.
     The bug this guards: OIDCVerifierConfig defaults require_email_claim=True,
     so without an explicit override RequiredClaimMissing would silently fail
@@ -121,7 +121,7 @@ def test_verify_raw_accepts_s2s_token_without_email(configured_settings, build_i
         "aud": "com.example.services",
         "sub": "001234.abcdef.1234",
         # NOTE: no `email`, no `email_verified` — this is what Apple sends
-        # for consent-revoked / account-delete events.
+        # for consent-revoked / account-deleted events.
         "events": "consent-revoked-payload",
     }
     token = build_id_token(claims)

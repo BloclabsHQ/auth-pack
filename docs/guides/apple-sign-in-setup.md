@@ -16,6 +16,11 @@ The Apple sub-package reads these keys from `BLOCK_AUTH_SETTINGS`:
 | `APPLE_BUNDLE_IDS` | native only | List of bundle IDs accepted as `aud` on id_tokens; native authorization-code redemption uses this audience as Apple `client_id` |
 | `APPLE_NOTIFICATION_TRIGGER` | S2S notifications | Dotted path to a `BaseTrigger` subclass invoked on Apple webhook events |
 | `APPLE_CALLBACK_COOKIE_SAMESITE` | optional | Override SameSite on state/PKCE/nonce cookies (default `None` for cross-site form_post) |
+| `APPLE_NOTIFICATION_MAX_AGE_SECONDS` | S2S notifications | Maximum accepted age of Apple `event_time` values (default 300 seconds) |
+| `APPLE_NOTIFICATION_FUTURE_LEEWAY_SECONDS` | S2S notifications | Allowed future clock skew for Apple `event_time` values (default 60 seconds) |
+| `APPLE_WEB_CALLBACK_RATE_LIMIT` | web callback | Per-IP `(max_requests, window_seconds)` rate limit for `/apple/callback/` |
+| `APPLE_NATIVE_VERIFY_RATE_LIMIT` | native verify | Per-IP `(max_requests, window_seconds)` rate limit for `/apple/verify/` |
+| `APPLE_NOTIFICATION_RATE_LIMIT` | S2S notifications | Per-IP `(max_requests, window_seconds)` rate limit for `/apple/notifications/` |
 
 OIDC verification also reads `OIDC_JWKS_CACHE_TTL_SECONDS` and `OIDC_VERIFIER_LEEWAY_SECONDS` (shared with Google native).
 
@@ -95,7 +100,7 @@ The `.p8` contents (the entire PEM block including `-----BEGIN PRIVATE KEY-----`
 
 Apple sends webhooks when a user:
 - Disables Sign in with Apple in iCloud settings (`consent-revoked`)
-- Permanently deletes their Apple ID (`account-delete`)
+- Permanently deletes their Apple ID (`account-deleted`)
 - Changes the email address backing their Apple ID (`email-disabled`, `email-enabled`)
 
 Without S2S notifications, you'll keep stale `SocialIdentity` rows for users who revoked access. With them, the configured trigger fires and you can clean up downstream state.
@@ -128,11 +133,12 @@ Implement the trigger:
 from blockauth.triggers import BaseTrigger
 
 class AppleNotificationTrigger(BaseTrigger):
-    def fire(self, context: dict) -> None:
-        # context contains: event_type, sub (Apple user id), email (if any),
-        # event_time, plus identity_id if we matched a SocialIdentity row.
+    def trigger(self, context: dict) -> None:
+        # context contains: event_type, sub (Apple user id), event_time
+        # (normalized Unix seconds),
+        # and user_id if BlockAuth matched a SocialIdentity row.
         event = context["event_type"]
-        if event in ("account-delete", "consent-revoked"):
+        if event in ("account-deleted", "consent-revoked"):
             # delete or disable the linked account
             ...
         elif event in ("email-disabled", "email-enabled"):
@@ -140,7 +146,9 @@ class AppleNotificationTrigger(BaseTrigger):
             ...
 ```
 
-The endpoint is **safe to expose without further auth** — the request body is a JWT signed by Apple and validated against Apple's published JWKS before the trigger fires. Requests with bad signatures return 401 and the trigger never runs.
+The endpoint is **safe to expose without further auth** — the request body is a JWT signed by Apple and validated against Apple's published JWKS before the trigger fires. BlockAuth also rejects stale or future `event_time` values, suppresses replayed notifications before mutation or trigger dispatch, and applies a per-IP throttle to malformed or excessive traffic.
+
+Use a shared Django cache backend such as Redis or Memcached in production. Django's local-memory cache is process-local, so it is not sufficient for cluster-wide Apple notification replay suppression or per-IP throttling across multiple workers.
 
 ---
 
@@ -177,6 +185,11 @@ BLOCK_AUTH_SETTINGS = {
 
     # Optional S2S notifications
     "APPLE_NOTIFICATION_TRIGGER": "myapp.triggers.AppleNotificationTrigger",
+    "APPLE_NOTIFICATION_MAX_AGE_SECONDS": 300,
+    "APPLE_NOTIFICATION_FUTURE_LEEWAY_SECONDS": 60,
+    "APPLE_NOTIFICATION_RATE_LIMIT": (60, 60),
+    "APPLE_NATIVE_VERIFY_RATE_LIMIT": (30, 60),
+    "APPLE_WEB_CALLBACK_RATE_LIMIT": (30, 60),
 }
 ```
 

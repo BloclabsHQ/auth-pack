@@ -312,7 +312,7 @@ wheels = [
 
 [[package]]
 name = "blockauth"
-version = "0.16.1"
+version = "0.16.2"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
