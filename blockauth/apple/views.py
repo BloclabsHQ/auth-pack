@@ -87,6 +87,7 @@ from blockauth.utils.oauth_state import (
     set_state_cookie,
     verify_state_values,
 )
+from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
 from blockauth.utils.social import social_login_data
 
@@ -207,7 +208,7 @@ class AppleWebCallbackView(APIView):
                     "grant_type": "authorization_code",
                     "redirect_uri": apple_setting("APPLE_REDIRECT_URI"),
                 },
-                timeout=10,
+                timeout=get_social_outbound_timeout(),
             )
         except requests.exceptions.RequestException as exc:
             blockauth_logger.warning(
@@ -341,7 +342,7 @@ class AppleNativeVerifyView(APIView):
                         "code": authorization_code,
                         "grant_type": "authorization_code",
                     },
-                    timeout=10,
+                    timeout=get_social_outbound_timeout(),
                 )
             except requests.exceptions.RequestException as exc:
                 # Code redemption is a best-effort enrichment, not a

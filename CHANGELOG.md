@@ -17,6 +17,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.3] - 2026-05-10
+
+### Fixed
+
+- Bounded outbound Google, Facebook, LinkedIn, and Apple social-provider HTTP calls with a shared `(connect, read)` timeout tuple configurable through `BLOCK_AUTH_SETTINGS["SOCIAL_OUTBOUND_TIMEOUT"]`.
+
+---
+
 ## [0.16.2] - 2026-05-01
 
 ### Added

@@ -118,6 +118,7 @@ def test_native_verify_redeems_authorization_code(apple_settings, client, build_
     assert mock_post.call_args.kwargs["data"]["code"] == "auth-code"
     assert mock_post.call_args.kwargs["data"]["client_id"] == "com.example.app"
     assert mock_post.call_args.kwargs["data"]["grant_type"] == "authorization_code"
+    assert mock_post.call_args.kwargs["timeout"] == (3.05, 10)
     assert "redirect_uri" not in mock_post.call_args.kwargs["data"]
     client_secret_claims = pyjwt.decode(
         mock_post.call_args.kwargs["data"]["client_secret"],

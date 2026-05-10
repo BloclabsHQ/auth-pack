@@ -141,6 +141,7 @@ def test_callback_full_flow(apple_settings, client, build_id_token, jwks_payload
     assert mock_post.call_args.kwargs["data"]["code"] == "real-auth-code"
     assert mock_post.call_args.kwargs["data"]["code_verifier"] == pkce_verifier
     assert mock_post.call_args.kwargs["data"]["grant_type"] == "authorization_code"
+    assert mock_post.call_args.kwargs["timeout"] == (3.05, 10)
 
 
 @pytest.mark.django_db

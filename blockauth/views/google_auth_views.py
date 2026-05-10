@@ -55,6 +55,7 @@ from blockauth.utils.oauth_state import (
     set_state_cookie,
     verify_state,
 )
+from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
 from blockauth.utils.social import social_login_data
 
@@ -291,7 +292,7 @@ class GoogleAuthCallbackView(APIView):
                     "grant_type": "authorization_code",
                     "code_verifier": pkce_verifier,
                 },
-                timeout=10,
+                timeout=get_social_outbound_timeout(),
             )
         except requests.exceptions.RequestException as exc:
             blockauth_logger.warning(

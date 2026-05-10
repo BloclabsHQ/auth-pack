@@ -15,6 +15,7 @@ from blockauth.apple._settings import apple_setting
 from blockauth.apple.client_secret import apple_client_secret_builder
 from blockauth.apple.constants import AppleEndpoints
 from blockauth.apple.exceptions import AppleClientSecretConfigError
+from blockauth.utils.outbound_http import get_social_outbound_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ class AppleRevocationClient:
                     "token": refresh_token,
                     "token_type_hint": "refresh_token",
                 },
-                timeout=10,
+                timeout=get_social_outbound_timeout(),
             )
         except requests.RequestException as exc:
             logger.error(
