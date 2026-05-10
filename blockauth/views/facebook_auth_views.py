@@ -41,6 +41,7 @@ from blockauth.utils.oauth_state import (
     set_state_cookie,
     verify_state,
 )
+from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
 from blockauth.utils.social import social_login_data
 
@@ -150,7 +151,7 @@ class FacebookAuthCallbackView(APIView):
                     "redirect_uri": redirect_uri,
                     "code_verifier": pkce_verifier,
                 },
-                timeout=10,
+                timeout=get_social_outbound_timeout(),
             )
         except requests.exceptions.RequestException as exc:
             blockauth_logger.warning(
@@ -168,7 +169,7 @@ class FacebookAuthCallbackView(APIView):
             userinfo_response = requests.get(
                 FACEBOOK_USERINFO_URL,
                 params={"fields": "id,name,email", "access_token": access_token},
-                timeout=10,
+                timeout=get_social_outbound_timeout(),
             )
         except requests.exceptions.RequestException as exc:
             blockauth_logger.warning(

@@ -61,6 +61,7 @@ def test_revoke_posts_to_apple(configured):
     assert call.kwargs["data"]["token"] == "apple-refresh-token"
     assert call.kwargs["data"]["token_type_hint"] == "refresh_token"
     assert call.kwargs["data"]["client_id"] == "com.example.services"
+    assert call.kwargs["timeout"] == (3.05, 10)
 
 
 def test_revoke_swallows_non_200(configured):

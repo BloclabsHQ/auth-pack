@@ -185,6 +185,7 @@ def test_google_callback_verifies_id_token_and_links_identity(
     body = callback.json()
     assert "access" in body and "refresh" in body and "user" in body
     assert mock_post.call_args.kwargs["data"]["code_verifier"] == pkce_verifier
+    assert mock_post.call_args.kwargs["timeout"] == (3.05, 10)
     # The userinfo HTTP call has been REMOVED from the refactor — claims now
     # come from the verified id_token. Only the JWKSCache fetch should hit
     # `requests.get`; the legacy `https://www.googleapis.com/oauth2/v2/userinfo`
@@ -237,6 +238,23 @@ class TestGoogleAuthCallbackView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_post.assert_not_called()
 
+    @patch("blockauth.views.google_auth_views.requests.post")
+    def test_callback_token_timeout_returns_documented_error(self, mock_post, api_client):
+        import requests as real_requests
+
+        state = _prime_state(api_client)
+        api_client.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME] = "test-pkce-verifier"
+        api_client.cookies["blockauth_google_nonce"] = "test-raw-nonce"
+        mock_post.side_effect = real_requests.exceptions.Timeout("provider hung")
+
+        response = api_client.get(
+            reverse("google-login-callback"),
+            {"code": "auth-code", "state": state},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()["detail"] == "Google token endpoint unreachable"
+
 
 @pytest.fixture
 def facebook_settings():
@@ -288,12 +306,14 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     me_response = MagicMock(status_code=200)
     me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
 
-    with patch("blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]):
+    with patch("blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]) as mock_get:
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content
     body = callback.json()
     assert "access" in body and "user" in body
+    timeouts = [call.kwargs["timeout"] for call in mock_get.call_args_list]
+    assert timeouts == [(3.05, 10), (3.05, 10)]
 
     from blockauth.social.models import SocialIdentity
 
@@ -444,6 +464,7 @@ def test_linkedin_callback_verifies_id_token(linkedin_settings, client, build_id
     body = callback.json()
     assert "access" in body and "user" in body
     assert mock_post.call_args.kwargs["data"]["code_verifier"] == pkce_verifier
+    assert mock_post.call_args.kwargs["timeout"] == (3.05, 10)
     # Verifier fetched JWKS but no userinfo endpoint was hit.
     assert all("userinfo" not in url.lower() for url in seen_get_urls)
 

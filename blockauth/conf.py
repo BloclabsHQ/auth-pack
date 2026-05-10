@@ -83,6 +83,8 @@ DEFAULTS = {
     "APPLE_WEB_CALLBACK_RATE_LIMIT": (30, 60),  # per-IP (requests, seconds)
     "APPLE_NATIVE_VERIFY_RATE_LIMIT": (30, 60),  # per-IP (requests, seconds)
     "APPLE_NOTIFICATION_RATE_LIMIT": (60, 60),  # per-IP (requests, seconds)
+    # Outbound OAuth/SocialIdentity provider calls
+    "SOCIAL_OUTBOUND_TIMEOUT": (3.05, 10),  # requests timeout tuple: (connect_seconds, read_seconds)
     # Google native id_token verify
     "GOOGLE_NATIVE_AUDIENCES": (),  # tuple of web client IDs accepted in id_token.aud
     # Generic OIDC verifier

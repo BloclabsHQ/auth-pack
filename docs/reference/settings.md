@@ -60,6 +60,12 @@ All settings are configured in `BLOCK_AUTH_SETTINGS` in your Django settings mod
 | `APPLE_NATIVE_VERIFY_RATE_LIMIT` | `(30, 60)` | Per-IP `(max_requests, window_seconds)` for `/apple/verify/` |
 | `APPLE_NOTIFICATION_RATE_LIMIT` | `(60, 60)` | Per-IP `(max_requests, window_seconds)` for `/apple/notifications/` |
 
+## Social Provider HTTP
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SOCIAL_OUTBOUND_TIMEOUT` | `(3.05, 10)` | `requests` timeout tuple `(connect_seconds, read_seconds)` for Google, Facebook, LinkedIn, and Apple provider calls |
+
 ## Feature Flags
 
 | Setting | Default | Description |
