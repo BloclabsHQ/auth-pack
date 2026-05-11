@@ -225,6 +225,69 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
 
 
 # ---------------------------------------------------------------------------
+# clear_apple_callback_cookies helper
+# ---------------------------------------------------------------------------
+#
+# Re-usable error-path cleanup so BFF integrators that swap the response
+# shape (and therefore bypass AppleWebCallbackView.handle_exception) don't
+# have to re-implement the security-critical state/PKCE/nonce clear in
+# every consumer. Owning "what cookies need clearing on Apple's error
+# path" in blockauth keeps the contract in one place: if Apple's auth
+# flow ever grows another cookie, this helper picks it up and every
+# integrator that calls it stays correct.
+
+
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_clears_all_three_cookies():
+    """The helper must clear state, PKCE-verifier, and nonce cookies on
+    a response — these are the same three set by AppleWebAuthorizeView."""
+    from django.http import HttpResponse
+
+    from blockauth.apple.views import clear_apple_callback_cookies
+
+    response = HttpResponse()
+    clear_apple_callback_cookies(response)
+
+    assert OAUTH_STATE_COOKIE_NAME in response.cookies
+    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
+    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in response.cookies
+    assert response.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
+    assert APPLE_NONCE_COOKIE_NAME in response.cookies
+    assert response.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
+
+
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_uses_callback_samesite_default():
+    """When the caller does not pass `samesite`, the helper must read it
+    from APPLE_CALLBACK_COOKIE_SAMESITE so cross-site form_post cookies
+    keep their SameSite=None contract on the clear response too."""
+    from django.http import HttpResponse
+
+    from blockauth.apple.views import clear_apple_callback_cookies
+
+    response = HttpResponse()
+    clear_apple_callback_cookies(response)
+
+    # apple_settings sets APPLE_CALLBACK_COOKIE_SAMESITE="None".
+    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == "none"
+
+
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_honours_explicit_samesite():
+    """The samesite kwarg lets integrators that diverge from the default
+    (or are clearing cookies in a code path that runs outside the
+    cross-site form_post POST) override without monkey-patching."""
+    from django.http import HttpResponse
+
+    from blockauth.apple.views import clear_apple_callback_cookies
+
+    response = HttpResponse()
+    clear_apple_callback_cookies(response, samesite="Lax")
+
+    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == "lax"
+
+
+# ---------------------------------------------------------------------------
 # build_success_response override hook
 # ---------------------------------------------------------------------------
 #
