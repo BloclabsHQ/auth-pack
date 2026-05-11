@@ -237,7 +237,8 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
 # integrator that calls it stays correct.
 
 
-def test_clear_apple_callback_cookies_clears_all_three_cookies(apple_settings):
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_clears_all_three_cookies():
     """The helper must clear state, PKCE-verifier, and nonce cookies on
     a response — these are the same three set by AppleWebAuthorizeView."""
     from django.http import HttpResponse
@@ -255,7 +256,8 @@ def test_clear_apple_callback_cookies_clears_all_three_cookies(apple_settings):
     assert response.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
 
 
-def test_clear_apple_callback_cookies_uses_callback_samesite_default(apple_settings):
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_uses_callback_samesite_default():
     """When the caller does not pass `samesite`, the helper must read it
     from APPLE_CALLBACK_COOKIE_SAMESITE so cross-site form_post cookies
     keep their SameSite=None contract on the clear response too."""
@@ -270,7 +272,8 @@ def test_clear_apple_callback_cookies_uses_callback_samesite_default(apple_setti
     assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == "none"
 
 
-def test_clear_apple_callback_cookies_honours_explicit_samesite(apple_settings):
+@pytest.mark.usefixtures("apple_settings")
+def test_clear_apple_callback_cookies_honours_explicit_samesite():
     """The samesite kwarg lets integrators that diverge from the default
     (or are clearing cookies in a code path that runs outside the
     cross-site form_post POST) override without monkey-patching."""
