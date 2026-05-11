@@ -97,7 +97,12 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
 
     # Add authentication type based on provider
     provider = provider_data.get("provider", "").upper()
-    if provider in [AuthenticationType.GOOGLE, AuthenticationType.FACEBOOK, AuthenticationType.LINKEDIN]:
+    if provider in [
+        AuthenticationType.GOOGLE,
+        AuthenticationType.FACEBOOK,
+        AuthenticationType.LINKEDIN,
+        AuthenticationType.APPLE,
+    ]:
         user.add_authentication_type(provider)
 
     # Google returns OIDC-verified email claims. If the
