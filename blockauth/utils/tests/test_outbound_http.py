@@ -9,7 +9,5 @@ def test_social_outbound_timeout_defaults_to_connect_read_tuple():
 
 
 def test_social_outbound_timeout_reads_runtime_setting():
-    with override_settings(
-        BLOCK_AUTH_SETTINGS={"SOCIAL_OUTBOUND_TIMEOUT": [1.5, 4]}
-    ):
+    with override_settings(BLOCK_AUTH_SETTINGS={"SOCIAL_OUTBOUND_TIMEOUT": [1.5, 4]}):
         assert get_social_outbound_timeout() == (1.5, 4)

@@ -285,6 +285,7 @@ def test_web_callback_post_routes_through_build_success_response(
     """
     from rest_framework import status as drf_status
     from rest_framework.response import Response
+
     from blockauth.apple.views import AppleWebCallbackView
 
     init_response = client.get("/apple/")
