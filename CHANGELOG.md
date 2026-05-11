@@ -17,6 +17,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.5] - 2026-05-11
+
+### Added
+
+- `clear_apple_callback_cookies(response, samesite=None)` helper in `blockauth.apple.views`. BFF integrators that swap the Apple callback response shape (e.g. JSON 409 -> 302 redirect on conflict) no longer have to re-implement the state/PKCE/nonce clear themselves. The clear list is now owned by blockauth so a future fourth cookie picks itself up everywhere the helper is called.
+
+### Changed
+
+- `AppleWebCallbackView.handle_exception` and the success-path cookie clear now call `clear_apple_callback_cookies`. Single source of truth for "what cookies need clearing on Apple's error path."
+
+---
+
 ## [0.16.4] - 2026-05-11
 
 ### Added
