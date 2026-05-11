@@ -174,6 +174,18 @@ class AppleWebCallbackView(APIView):
         clear_nonce_cookie(response, samesite=samesite)
         return response
 
+    def build_success_response(self, request, result) -> Response:
+        """Build the response returned to the browser after a successful
+        Apple web callback.
+
+        Default returns the standard `AuthStateResponseSerializer` JSON
+        body. Subclasses can override to swap the body shape (for example,
+        a BFF cookie redirect) without re-implementing the auth flow.
+        Mirrors the hook Google, Facebook, LinkedIn, and Google-native
+        already expose.
+        """
+        return _build_auth_state_response(result)
+
     @extend_schema(**apple_callback_schema)
     def post(self, request):
         code = request.data.get("code")
@@ -271,7 +283,7 @@ class AppleWebCallbackView(APIView):
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
 
-        response = _build_auth_state_response(result)
+        response = self.build_success_response(request, result)
         samesite = _samesite_for_callback()
         clear_state_cookie(response, samesite=samesite)
         clear_pkce_verifier_cookie(response, samesite=samesite)
@@ -297,6 +309,17 @@ class AppleNativeVerifyView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
     throttle_classes = [AppleNativeVerifyThrottle]
+
+    def build_success_response(self, request, result) -> Response:
+        """Build the response returned to the client after a successful
+        Apple native-verify call.
+
+        Default returns the standard `AuthStateResponseSerializer` JSON
+        body. Subclasses can override to swap the body shape (for example,
+        a BFF cookie envelope for browser-based native flows) without
+        re-implementing the verifier.
+        """
+        return _build_auth_state_response(result)
 
     @extend_schema(**apple_native_verify_schema)
     def post(self, request):
@@ -393,7 +416,7 @@ class AppleNativeVerifyView(APIView):
             name=" ".join(filter(None, [validated.get("first_name") or "", validated.get("last_name") or ""])).strip(),
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
-        return _build_auth_state_response(result)
+        return self.build_success_response(request, result)
 
 
 class AppleServerToServerNotificationView(APIView):

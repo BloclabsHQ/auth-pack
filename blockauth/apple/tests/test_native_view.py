@@ -317,3 +317,70 @@ def test_native_verify_email_collision_with_existing_user_returns_4090(
 
     # SocialIdentityConflictError extends APIException with status_code=409.
     assert response.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# build_success_response override hook
+# ---------------------------------------------------------------------------
+#
+# Mirrors the hook on AppleWebCallbackView so integrators that issue tokens
+# differently for the native-verify flow (BFF cookies, custom envelope) can
+# subclass instead of re-implementing the verifier.
+
+
+class _StubBlockUser:
+    """Minimal stand-in for the BlockUser-shaped object that
+    `build_user_payload` reads. Keeps the hook unit tests off the DB.
+    """
+
+    def __init__(self, user_id: str, email: str):
+        self.id = user_id
+        self.email = email
+        self.is_verified = True
+        self.is_active = True
+        self.wallet_address = None
+        self.date_joined = None
+
+
+def test_native_verify_view_default_build_success_response_returns_auth_state_json():
+    """Default hook impl returns the AuthStateResponseSerializer JSON shape."""
+    from blockauth.apple.views import AppleNativeVerifyView
+    from blockauth.utils.social import SocialLoginResult
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("native-user-1", "apple-native@example.com"),
+        access_token="access-jwt",
+        refresh_token="refresh-jwt",
+        created=False,
+    )
+
+    response = AppleNativeVerifyView().build_success_response(request=None, result=result)
+
+    assert response.status_code == 200
+    assert response.data["access"] == "access-jwt"
+    assert response.data["refresh"] == "refresh-jwt"
+    assert response.data["user"]["id"] == "native-user-1"
+    assert response.data["user"]["email"] == "apple-native@example.com"
+
+
+def test_native_verify_view_subclass_can_override_build_success_response():
+    """A subclass override is reached at the final response builder call site."""
+    from rest_framework.response import Response
+    from blockauth.apple.views import AppleNativeVerifyView
+    from blockauth.utils.social import SocialLoginResult
+
+    class _SwapResponse(AppleNativeVerifyView):
+        def build_success_response(self, request, result):
+            return Response(data={"native_swapped": True}, status=201)
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("native-user-2", "apple-native-2@example.com"),
+        access_token="a",
+        refresh_token="r",
+        created=True,
+    )
+
+    response = _SwapResponse().build_success_response(request=None, result=result)
+
+    assert response.status_code == 201
+    assert response.data == {"native_swapped": True}

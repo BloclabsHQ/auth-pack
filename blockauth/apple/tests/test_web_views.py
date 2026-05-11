@@ -222,3 +222,72 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
     assert callback.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
     assert callback.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
     assert callback.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
+
+
+# ---------------------------------------------------------------------------
+# build_success_response override hook
+# ---------------------------------------------------------------------------
+#
+# Google, Facebook, LinkedIn, and Google-native already expose
+# build_success_response(request, result) so integrators can swap the success
+# response shape (e.g. BFF cookie redirect) without re-implementing the auth
+# flow. These tests pin the contract for Apple's web callback so fabric-auth
+# can plug in alongside the other providers.
+
+
+class _StubBlockUser:
+    """Minimal stand-in for the BlockUser-shaped object that
+    `build_user_payload` reads. Keeps the hook unit tests off the DB.
+    """
+
+    def __init__(self, user_id: str, email: str):
+        self.id = user_id
+        self.email = email
+        self.is_verified = True
+        self.is_active = True
+        self.wallet_address = None
+        self.date_joined = None
+
+
+def test_web_callback_view_default_build_success_response_returns_auth_state_json():
+    """Default hook impl returns the existing AuthStateResponseSerializer JSON shape."""
+    from blockauth.apple.views import AppleWebCallbackView
+    from blockauth.utils.social import SocialLoginResult
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("user-1", "apple-user@example.com"),
+        access_token="access-token-jwt",
+        refresh_token="refresh-token-jwt",
+        created=False,
+    )
+
+    response = AppleWebCallbackView().build_success_response(request=None, result=result)
+
+    assert response.status_code == 200
+    assert response.data["access"] == "access-token-jwt"
+    assert response.data["refresh"] == "refresh-token-jwt"
+    assert response.data["user"]["id"] == "user-1"
+    assert response.data["user"]["email"] == "apple-user@example.com"
+
+
+def test_web_callback_view_subclass_can_override_build_success_response():
+    """A subclass override is reached at the final response builder call site."""
+    from rest_framework.response import Response
+    from blockauth.apple.views import AppleWebCallbackView
+    from blockauth.utils.social import SocialLoginResult
+
+    class _SwapResponse(AppleWebCallbackView):
+        def build_success_response(self, request, result):
+            return Response(data={"swapped": True}, status=201)
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("user-2", "apple-user-2@example.com"),
+        access_token="a",
+        refresh_token="r",
+        created=True,
+    )
+
+    response = _SwapResponse().build_success_response(request=None, result=result)
+
+    assert response.status_code == 201
+    assert response.data == {"swapped": True}
