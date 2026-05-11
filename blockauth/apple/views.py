@@ -104,6 +104,31 @@ def _samesite_for_callback() -> str:
     return str(apple_setting("APPLE_CALLBACK_COOKIE_SAMESITE") or "None")
 
 
+def clear_apple_callback_cookies(response, samesite: str | None = None) -> None:
+    """Clear every cookie the Apple web auth flow sets.
+
+    `AppleWebAuthorizeView` sets three HttpOnly cookies before the
+    redirect to appleid.apple.com — the OAuth state token, the PKCE
+    verifier, and the raw nonce. The callback consumes and clears them
+    on success. On any error response a retry must not be able to
+    replay stale values, so the same three cookies must be cleared
+    there too.
+
+    Owning that list here means BFF integrators that swap the response
+    shape (and therefore bypass `AppleWebCallbackView.handle_exception`)
+    can call this helper instead of re-implementing the clear in every
+    consumer. If Apple's flow ever grows a fourth cookie, this helper
+    is the single place that needs updating.
+
+    The default `samesite` follows `APPLE_CALLBACK_COOKIE_SAMESITE` so
+    cross-site form_post cookies keep their `SameSite=None` contract.
+    """
+    samesite = samesite or _samesite_for_callback()
+    clear_state_cookie(response, samesite=samesite)
+    clear_pkce_verifier_cookie(response, samesite=samesite)
+    clear_nonce_cookie(response, samesite=samesite)
+
+
 def _build_auth_state_response(result) -> Response:
     """Build the standard success response shape for any Apple flow."""
     serializer = AuthStateResponseSerializer(
@@ -166,12 +191,11 @@ class AppleWebCallbackView(APIView):
         # Any error path must clear the state/PKCE/nonce cookies; otherwise
         # a retry could replay stale credentials. DRF builds the error
         # response in `super().handle_exception(...)`, so we mutate it
-        # before returning.
+        # before returning. The clear list is owned by
+        # `clear_apple_callback_cookies` so BFF integrators that swap the
+        # response shape can re-use the same single source of truth.
         response = super().handle_exception(exc)
-        samesite = _samesite_for_callback()
-        clear_state_cookie(response, samesite=samesite)
-        clear_pkce_verifier_cookie(response, samesite=samesite)
-        clear_nonce_cookie(response, samesite=samesite)
+        clear_apple_callback_cookies(response)
         return response
 
     def build_success_response(self, request, result) -> Response:
@@ -284,10 +308,7 @@ class AppleWebCallbackView(APIView):
         )
 
         response = self.build_success_response(request, result)
-        samesite = _samesite_for_callback()
-        clear_state_cookie(response, samesite=samesite)
-        clear_pkce_verifier_cookie(response, samesite=samesite)
-        clear_nonce_cookie(response, samesite=samesite)
+        clear_apple_callback_cookies(response)
         return response
 
 
