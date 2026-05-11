@@ -306,7 +306,9 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     me_response = MagicMock(status_code=200)
     me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
 
-    with patch("blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]) as mock_get:
+    with patch(
+        "blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]
+    ) as mock_get:
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content

@@ -222,3 +222,111 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
     assert callback.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
     assert callback.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
     assert callback.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
+
+
+# ---------------------------------------------------------------------------
+# build_success_response override hook
+# ---------------------------------------------------------------------------
+#
+# Google, Facebook, LinkedIn, and Google-native already expose
+# build_success_response(request, result) so integrators can swap the success
+# response shape (e.g. BFF cookie redirect) without re-implementing the auth
+# flow. These tests pin the contract for Apple's web callback so fabric-auth
+# can plug in alongside the other providers.
+
+
+class _StubBlockUser:
+    """Minimal stand-in for the BlockUser-shaped object that
+    `build_user_payload` reads. Keeps the hook unit tests off the DB.
+    """
+
+    def __init__(self, user_id: str, email: str):
+        self.id = user_id
+        self.email = email
+        self.is_verified = True
+        self.is_active = True
+        self.wallet_address = None
+        self.date_joined = None
+
+
+def test_web_callback_view_default_build_success_response_returns_auth_state_json():
+    """Default hook impl returns the existing AuthStateResponseSerializer JSON shape."""
+    from blockauth.apple.views import AppleWebCallbackView
+    from blockauth.utils.social import SocialLoginResult
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("user-1", "apple-user@example.com"),
+        access_token="access-token-jwt",
+        refresh_token="refresh-token-jwt",
+        created=False,
+    )
+
+    response = AppleWebCallbackView().build_success_response(request=None, result=result)
+
+    assert response.status_code == 200
+    assert response.data["access"] == "access-token-jwt"
+    assert response.data["refresh"] == "refresh-token-jwt"
+    assert response.data["user"]["id"] == "user-1"
+    assert response.data["user"]["email"] == "apple-user@example.com"
+
+
+@pytest.mark.django_db
+def test_web_callback_post_routes_through_build_success_response(
+    apple_settings, client, build_id_token, jwks_payload_bytes
+):
+    """post() must call self.build_success_response(...) so subclasses that
+    override the hook actually win the response shape.
+
+    Patches the hook on AppleWebCallbackView, runs the full callback flow,
+    and asserts both that the patched response is returned to the client
+    and that the hook was reached. Without this, a future refactor that
+    drops the self.build_success_response(...) call site would silently
+    break every BFF integrator.
+    """
+    from rest_framework import status as drf_status
+    from rest_framework.response import Response
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    init_response = client.get("/apple/")
+    state_value = init_response.cookies[OAUTH_STATE_COOKIE_NAME].value
+    raw_nonce = init_response.cookies[APPLE_NONCE_COOKIE_NAME].value
+    expected_nonce_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
+
+    apple_id_token = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "001234.hook.subject",
+            "email": "hook-user@privaterelay.appleid.com",
+            "email_verified": "true",
+            "is_private_email": "true",
+            "nonce": expected_nonce_hash,
+            "nonce_supported": True,
+        }
+    )
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {
+        "access_token": "apple-access",
+        "refresh_token": "apple-refresh",
+        "id_token": apple_id_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+    }
+    jwks_response = MagicMock(status_code=200, content=jwks_payload_bytes)
+    jwks_response.json.return_value = json.loads(jwks_payload_bytes.decode())
+
+    swap_response = Response(data={"swapped": True}, status=drf_status.HTTP_201_CREATED)
+    with (
+        patch("blockauth.apple.views.requests.post", return_value=token_response),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch.object(AppleWebCallbackView, "build_success_response", return_value=swap_response) as mock_hook,
+    ):
+        callback = client.post(
+            "/apple/callback/",
+            data={"code": "real-auth-code", "state": state_value},
+        )
+
+    assert mock_hook.call_count == 1
+    assert callback.status_code == drf_status.HTTP_201_CREATED
+    assert callback.json() == {"swapped": True}

@@ -616,7 +616,9 @@ def test_replayed_notification_is_suppressed_before_second_trigger(apple_setting
 
 @pytest.mark.django_db
 def test_replay_key_normalizes_event_time_without_jti(apple_settings, build_id_token, jwks_response):
-    user = User.objects.create_user(username="normalized_replay_user", email="normalized-replay@example.com", password="pw")
+    user = User.objects.create_user(
+        username="normalized_replay_user", email="normalized-replay@example.com", password="pw"
+    )
     SocialIdentity.objects.create(
         provider="apple",
         subject="001234.normalized-replay",

@@ -17,6 +17,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.4] - 2026-05-11
+
+### Added
+
+- `AppleWebCallbackView.build_success_response(request, result)` hook so integrators can override the success response body without re-implementing the auth flow. Default returns the existing `AuthStateResponseSerializer` JSON shape. Matches the override hook Google, Facebook, LinkedIn, and Google-native already expose.
+- `AppleNativeVerifyView.build_success_response(request, result)` hook for symmetry with the web callback.
+
+### Fixed
+
+- `social_login_data` now tags new Apple Creators with `AuthenticationType.APPLE`. The provider check previously listed only Google, Facebook, and LinkedIn, leaving Apple sign-ups with an empty `authentication_types` list. Downstream readers (admin UI, account-issuance, S2S consent-revoked handler) all assume the provider is recorded.
+
+---
+
 ## [0.16.3] - 2026-05-10
 
 ### Fixed

@@ -317,3 +317,97 @@ def test_native_verify_email_collision_with_existing_user_returns_4090(
 
     # SocialIdentityConflictError extends APIException with status_code=409.
     assert response.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# build_success_response override hook
+# ---------------------------------------------------------------------------
+#
+# Mirrors the hook on AppleWebCallbackView so integrators that issue tokens
+# differently for the native-verify flow (BFF cookies, custom envelope) can
+# subclass instead of re-implementing the verifier.
+
+
+class _StubBlockUser:
+    """Minimal stand-in for the BlockUser-shaped object that
+    `build_user_payload` reads. Keeps the hook unit tests off the DB.
+    """
+
+    def __init__(self, user_id: str, email: str):
+        self.id = user_id
+        self.email = email
+        self.is_verified = True
+        self.is_active = True
+        self.wallet_address = None
+        self.date_joined = None
+
+
+def test_native_verify_view_default_build_success_response_returns_auth_state_json():
+    """Default hook impl returns the AuthStateResponseSerializer JSON shape."""
+    from blockauth.apple.views import AppleNativeVerifyView
+    from blockauth.utils.social import SocialLoginResult
+
+    result = SocialLoginResult(
+        user=_StubBlockUser("native-user-1", "apple-native@example.com"),
+        access_token="access-jwt",
+        refresh_token="refresh-jwt",
+        created=False,
+    )
+
+    response = AppleNativeVerifyView().build_success_response(request=None, result=result)
+
+    assert response.status_code == 200
+    assert response.data["access"] == "access-jwt"
+    assert response.data["refresh"] == "refresh-jwt"
+    assert response.data["user"]["id"] == "native-user-1"
+    assert response.data["user"]["email"] == "apple-native@example.com"
+
+
+@pytest.mark.django_db
+def test_native_verify_post_routes_through_build_success_response(
+    apple_settings, client, build_id_token, jwks_payload_bytes
+):
+    """post() must call self.build_success_response(...) so subclasses that
+    override the hook actually win the response shape.
+
+    Patches the hook on AppleNativeVerifyView, runs the full verify flow,
+    and asserts the patched response reaches the client. Without this,
+    a future refactor that drops the self.build_success_response(...)
+    call would silently break every BFF integrator.
+    """
+    from rest_framework import status as drf_status
+    from rest_framework.response import Response
+
+    from blockauth.apple.views import AppleNativeVerifyView
+
+    raw_nonce = "hook-raw-nonce"
+    expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
+    id_token = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.app",
+            "sub": "001234.native.hook",
+            "email": "hook-native@privaterelay.appleid.com",
+            "email_verified": "true",
+            "is_private_email": "true",
+            "nonce": expected_hash,
+            "nonce_supported": True,
+        }
+    )
+    jwks_response = MagicMock(status_code=200, content=jwks_payload_bytes)
+    jwks_response.json.return_value = json.loads(jwks_payload_bytes.decode())
+
+    swap_response = Response(data={"native_swapped": True}, status=drf_status.HTTP_201_CREATED)
+    with (
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch.object(AppleNativeVerifyView, "build_success_response", return_value=swap_response) as mock_hook,
+    ):
+        response = client.post(
+            "/apple/verify/",
+            data={"id_token": id_token, "raw_nonce": raw_nonce},
+            content_type="application/json",
+        )
+
+    assert mock_hook.call_count == 1
+    assert response.status_code == drf_status.HTTP_201_CREATED
+    assert response.json() == {"native_swapped": True}
