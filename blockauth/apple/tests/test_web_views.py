@@ -270,24 +270,62 @@ def test_web_callback_view_default_build_success_response_returns_auth_state_jso
     assert response.data["user"]["email"] == "apple-user@example.com"
 
 
-def test_web_callback_view_subclass_can_override_build_success_response():
-    """A subclass override is reached at the final response builder call site."""
+@pytest.mark.django_db
+def test_web_callback_post_routes_through_build_success_response(
+    apple_settings, client, build_id_token, jwks_payload_bytes
+):
+    """post() must call self.build_success_response(...) so subclasses that
+    override the hook actually win the response shape.
+
+    Patches the hook on AppleWebCallbackView, runs the full callback flow,
+    and asserts both that the patched response is returned to the client
+    and that the hook was reached. Without this, a future refactor that
+    drops the self.build_success_response(...) call site would silently
+    break every BFF integrator.
+    """
+    from rest_framework import status as drf_status
     from rest_framework.response import Response
     from blockauth.apple.views import AppleWebCallbackView
-    from blockauth.utils.social import SocialLoginResult
 
-    class _SwapResponse(AppleWebCallbackView):
-        def build_success_response(self, request, result):
-            return Response(data={"swapped": True}, status=201)
+    init_response = client.get("/apple/")
+    state_value = init_response.cookies[OAUTH_STATE_COOKIE_NAME].value
+    raw_nonce = init_response.cookies[APPLE_NONCE_COOKIE_NAME].value
+    expected_nonce_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
-    result = SocialLoginResult(
-        user=_StubBlockUser("user-2", "apple-user-2@example.com"),
-        access_token="a",
-        refresh_token="r",
-        created=True,
+    apple_id_token = build_id_token(
+        {
+            "iss": "https://appleid.apple.com",
+            "aud": "com.example.services",
+            "sub": "001234.hook.subject",
+            "email": "hook-user@privaterelay.appleid.com",
+            "email_verified": "true",
+            "is_private_email": "true",
+            "nonce": expected_nonce_hash,
+            "nonce_supported": True,
+        }
     )
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {
+        "access_token": "apple-access",
+        "refresh_token": "apple-refresh",
+        "id_token": apple_id_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+    }
+    jwks_response = MagicMock(status_code=200, content=jwks_payload_bytes)
+    jwks_response.json.return_value = json.loads(jwks_payload_bytes.decode())
 
-    response = _SwapResponse().build_success_response(request=None, result=result)
+    swap_response = Response(data={"swapped": True}, status=drf_status.HTTP_201_CREATED)
+    with (
+        patch("blockauth.apple.views.requests.post", return_value=token_response),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+        patch.object(AppleWebCallbackView, "build_success_response", return_value=swap_response) as mock_hook,
+    ):
+        callback = client.post(
+            "/apple/callback/",
+            data={"code": "real-auth-code", "state": state_value},
+        )
 
-    assert response.status_code == 201
-    assert response.data == {"swapped": True}
+    assert mock_hook.call_count == 1
+    assert callback.status_code == drf_status.HTTP_201_CREATED
+    assert callback.json() == {"swapped": True}
