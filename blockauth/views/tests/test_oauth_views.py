@@ -761,8 +761,9 @@ def _stub_upsert_returning(user):
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures("google_web_settings")
 def test_google_callback_forwards_given_and_family_name_to_service(
-    google_web_settings, client, build_id_token, jwks_response
+    client, build_id_token, jwks_response
 ):
     """Google's OIDC id_token ships `given_name` / `family_name`; the
     callback view must forward them so the user's name is populated on
@@ -805,7 +806,8 @@ def test_google_callback_forwards_given_and_family_name_to_service(
 
 
 @pytest.mark.django_db
-def test_facebook_callback_forwards_first_and_last_name_to_service(facebook_settings, client):
+@pytest.mark.usefixtures("facebook_settings")
+def test_facebook_callback_forwards_first_and_last_name_to_service(client):
     """Facebook's Graph API ships `first_name` / `last_name` under the
     `public_profile` permission; the view must request those fields and
     forward them."""
@@ -847,8 +849,9 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(facebook_sett
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures("linkedin_settings")
 def test_linkedin_callback_forwards_given_and_family_name_to_service(
-    linkedin_settings, client, build_id_token, linkedin_jwks_response
+    client, build_id_token, linkedin_jwks_response
 ):
     """LinkedIn's OIDC id_token ships `given_name` / `family_name` under
     the `profile` scope (Sign In with LinkedIn v2 includes it by
