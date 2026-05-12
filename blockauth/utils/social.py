@@ -6,9 +6,9 @@ callers can decide the wire shape (JSON body, redirect + cookie, etc).
 
 `social_login()` wraps that data into the legacy JSON response so existing
 callers that expect a DRF ``Response`` back continue to work unchanged.
-Integrators who want to BFF-ify the OAuth callback (set HttpOnly cookies
-and return a redirect) subclass the view and use `social_login_data()`
-directly.
+Integrators that want to swap the response shape (e.g. set HttpOnly
+cookies and return a 302 redirect — the cookie-session pattern) subclass
+the view and use `social_login_data()` directly.
 """
 
 from dataclasses import dataclass
@@ -34,7 +34,7 @@ class SocialLoginResult:
     Carries the raw user model + freshly-issued token pair so callers
     can build whatever response shape their integration needs:
     - legacy JSON body (via ``social_login()``)
-    - BFF cookie + redirect
+    - cookie-session 302 redirect (HttpOnly cookies + Location header)
     - popup + postMessage
     """
 

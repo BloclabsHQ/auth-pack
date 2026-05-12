@@ -94,18 +94,37 @@ class FacebookAuthLoginView(APIView):
         return response
 
 
+def clear_facebook_callback_cookies(response, samesite: str | None = None) -> None:
+    """Clear every cookie the Facebook web auth flow sets.
+
+    `FacebookAuthLoginView` sets two cookies before the redirect — the
+    OAuth state token and the PKCE verifier. Facebook is not OIDC and
+    does not set a nonce cookie. The callback consumes and clears them
+    on success; on any error response a retry must not replay stale
+    values.
+
+    Subclasses that override `handle_exception` to swap the response
+    shape (e.g. HttpOnly cookies + 302 redirect instead of DRF's default
+    JSON body) can call this helper instead of re-implementing the
+    state/PKCE clear. Mirrors `clear_apple_callback_cookies` (v0.16.5)
+    and the sibling Google / LinkedIn helpers.
+    """
+    clear_state_cookie(response, samesite=samesite)
+    clear_pkce_verifier_cookie(response, samesite=samesite)
+
+
 class FacebookAuthCallbackView(APIView):
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
     def handle_exception(self, exc):
-        # Mirror the Apple callback's defensive cookie cleanup: any error
-        # path must clear the state and PKCE verifier cookies so a retry
-        # doesn't replay stale credentials. (No nonce cookie — Facebook is
-        # not OIDC and doesn't carry a nonce.)
+        # Any error path must clear the state/PKCE cookies so a retry
+        # can't replay stale credentials. The clear list is owned by
+        # `clear_facebook_callback_cookies` so subclasses that swap
+        # the response shape can re-use the same single source of
+        # truth.
         response = super().handle_exception(exc)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
+        clear_facebook_callback_cookies(response)
         return response
 
     def build_success_response(self, request, result) -> Response:
@@ -205,6 +224,5 @@ class FacebookAuthCallbackView(APIView):
             provider_data={"provider": "facebook", "user_info": user_info, "preexisting_user": user},
         )
         response = self.build_success_response(request, result)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
+        clear_facebook_callback_cookies(response)
         return response

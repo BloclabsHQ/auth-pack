@@ -215,27 +215,45 @@ class GoogleAuthLoginView(APIView):
         return response
 
 
+def clear_google_callback_cookies(response, samesite: str | None = None) -> None:
+    """Clear every cookie the Google web auth flow sets.
+
+    `GoogleAuthLoginView` sets three cookies before the redirect to
+    accounts.google.com — the OAuth state token, the PKCE verifier, and
+    the Google nonce. The callback consumes and clears them on success;
+    on any error response a retry must not replay stale values.
+
+    Subclasses that override `handle_exception` to swap the response
+    shape (e.g. HttpOnly cookies + 302 redirect instead of DRF's default
+    JSON body) can call this helper instead of re-implementing the
+    state/PKCE/nonce clear. Mirrors `clear_apple_callback_cookies` in
+    `blockauth.apple.views` (v0.16.5) and the sibling Facebook /
+    LinkedIn helpers introduced alongside.
+    """
+    clear_state_cookie(response, samesite=samesite)
+    clear_pkce_verifier_cookie(response, samesite=samesite)
+    response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite=samesite or "Lax")
+
+
 class GoogleAuthCallbackView(APIView):
     """Handle Google OAuth callback — verify state + PKCE + nonce + id_token.
 
     Subclass and override :meth:`build_success_response` to ship tokens via
     HttpOnly cookies + a 302 to the application origin instead of the
-    default JSON body (BFF pattern).
+    default JSON body (cookie-session pattern).
     """
 
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
     def handle_exception(self, exc):
-        # Mirror the Apple callback's defensive cookie cleanup: any error
-        # path must clear the state, PKCE verifier, and Google nonce cookies
-        # so a retry doesn't replay stale credentials. The cookies are
-        # HttpOnly + Secure + 10-min TTL so the leak window is small, but
-        # consistency across providers is worth the few extra lines.
+        # Any error path must clear the state/PKCE/nonce cookies so a
+        # retry can't replay stale credentials. The clear list is owned
+        # by `clear_google_callback_cookies` so subclasses that swap
+        # the response shape can re-use the same single source of
+        # truth.
         response = super().handle_exception(exc)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
-        response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite="Lax")
+        clear_google_callback_cookies(response)
         return response
 
     def build_success_response(self, request, result) -> Response:
@@ -344,7 +362,5 @@ class GoogleAuthCallbackView(APIView):
             },
         )
         response = self.build_success_response(request, result)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
-        response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite="Lax")
+        clear_google_callback_cookies(response)
         return response

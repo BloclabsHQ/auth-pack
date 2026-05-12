@@ -102,9 +102,9 @@ def clear_apple_callback_cookies(response, samesite: str | None = None) -> None:
     replay stale values, so the same three cookies must be cleared
     there too.
 
-    Owning that list here means BFF integrators that swap the response
-    shape (and therefore bypass `AppleWebCallbackView.handle_exception`)
-    can call this helper instead of re-implementing the clear in every
+    Owning that list here means subclasses that swap the response shape
+    (and therefore bypass `AppleWebCallbackView.handle_exception`) can
+    call this helper instead of re-implementing the clear in every
     consumer. If Apple's flow ever grows a fourth cookie, this helper
     is the single place that needs updating.
 
@@ -180,7 +180,7 @@ class AppleWebCallbackView(APIView):
         # a retry could replay stale credentials. DRF builds the error
         # response in `super().handle_exception(...)`, so we mutate it
         # before returning. The clear list is owned by
-        # `clear_apple_callback_cookies` so BFF integrators that swap the
+        # `clear_apple_callback_cookies` so subclasses that swap the
         # response shape can re-use the same single source of truth.
         response = super().handle_exception(exc)
         clear_apple_callback_cookies(response)
@@ -192,9 +192,9 @@ class AppleWebCallbackView(APIView):
 
         Default returns the standard `AuthStateResponseSerializer` JSON
         body. Subclasses can override to swap the body shape (for example,
-        a BFF cookie redirect) without re-implementing the auth flow.
-        Mirrors the hook Google, Facebook, LinkedIn, and Google-native
-        already expose.
+        a cookie-session 302 redirect) without re-implementing the auth
+        flow. Mirrors the hook Google, Facebook, LinkedIn, and
+        Google-native already expose.
         """
         return _build_auth_state_response(result)
 
@@ -325,7 +325,7 @@ class AppleNativeVerifyView(APIView):
 
         Default returns the standard `AuthStateResponseSerializer` JSON
         body. Subclasses can override to swap the body shape (for example,
-        a BFF cookie envelope for browser-based native flows) without
+        a cookie-session envelope for browser-based native flows) without
         re-implementing the verifier.
         """
         return _build_auth_state_response(result)

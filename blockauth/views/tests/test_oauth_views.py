@@ -507,7 +507,7 @@ class TestLinkedInAuthCallbackView:
 
 @pytest.mark.django_db
 class TestCallbackSuccessResponseHook:
-    """BFF-cookie integrations subclass these callback views and override
+    """Cookie-session integrations subclass these callback views and override
     ``build_success_response`` to ship tokens via HttpOnly cookies + a 302
     to the application origin, instead of the default JSON body. These tests
     pin the hook surface so the override point doesn't silently disappear in
