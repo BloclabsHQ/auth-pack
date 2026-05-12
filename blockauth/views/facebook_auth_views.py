@@ -52,11 +52,6 @@ FACEBOOK_TOKEN_URL = "https://graph.facebook.com/v18.0/oauth/access_token"
 FACEBOOK_USERINFO_URL = "https://graph.facebook.com/me"
 
 
-def _block_setting(key, default=None):
-    block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
-    return block_settings.get(key, default)
-
-
 def _provider_setting(key, default=None):
     block_settings = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
     providers = block_settings.get("AUTH_PROVIDERS", {}) or {}
