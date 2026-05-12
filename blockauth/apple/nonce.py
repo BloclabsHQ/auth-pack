@@ -13,9 +13,7 @@ import secrets
 
 from django.http import HttpRequest, HttpResponse
 
-from blockauth.utils.oauth_state import (  # noqa: F401  re-exported for callers
-    OAUTH_STATE_COOKIE_MAX_AGE,
-)
+from blockauth.utils.oauth_state import OAUTH_STATE_COOKIE_MAX_AGE
 
 APPLE_NONCE_COOKIE_NAME = "blockauth_apple_nonce"
 NONCE_BYTES = 32
