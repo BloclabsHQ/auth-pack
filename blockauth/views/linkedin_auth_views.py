@@ -194,25 +194,43 @@ class LinkedInAuthLoginView(APIView):
         return response
 
 
+def clear_linkedin_callback_cookies(response, samesite: str | None = None) -> None:
+    """Clear every cookie the LinkedIn web auth flow sets.
+
+    `LinkedInAuthLoginView` sets three cookies before the redirect — the
+    OAuth state token, the PKCE verifier, and the LinkedIn nonce. The
+    callback consumes and clears them on success; on any error response
+    a retry must not replay stale values.
+
+    Subclasses that override `handle_exception` to swap the response
+    shape (e.g. HttpOnly cookies + 302 redirect instead of DRF's default
+    JSON body) can call this helper instead of re-implementing the
+    state/PKCE/nonce clear. Mirrors the sibling Google / Facebook /
+    Apple helpers.
+    """
+    clear_state_cookie(response, samesite=samesite)
+    clear_pkce_verifier_cookie(response, samesite=samesite)
+    response.delete_cookie(LINKEDIN_NONCE_COOKIE_NAME, samesite=samesite or "Lax")
+
+
 class LinkedInAuthCallbackView(APIView):
     """Handle LinkedIn OAuth callback — verify state + PKCE + nonce + id_token.
 
     Subclass and override :meth:`build_success_response` to ship tokens via
     HttpOnly cookies + a 302 to the application origin instead of the
-    default JSON body (BFF pattern).
+    default JSON body (cookie-session pattern).
     """
 
     permission_classes = (AllowAny,)
     authentication_classes = ()
 
     def handle_exception(self, exc):
-        # Mirror the Apple callback's defensive cookie cleanup: any error
-        # path must clear the state, PKCE verifier, and LinkedIn nonce
-        # cookies so a retry doesn't replay stale credentials.
+        # Any error path must clear the state/PKCE/nonce cookies so a
+        # retry can't replay stale credentials. The clear list is owned
+        # by `clear_linkedin_callback_cookies` so subclasses that swap
+        # the response shape can re-use the same single source of truth.
         response = super().handle_exception(exc)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
-        response.delete_cookie(LINKEDIN_NONCE_COOKIE_NAME, samesite="Lax")
+        clear_linkedin_callback_cookies(response)
         return response
 
     def build_success_response(self, request, result) -> Response:
