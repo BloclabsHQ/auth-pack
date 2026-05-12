@@ -464,9 +464,7 @@ def test_apple_web_callback_handles_non_dict_user_payload():
     from blockauth.apple.views import AppleWebCallbackView
 
     for non_dict_payload in (json.dumps("just a string"), json.dumps(["x", "y"]), json.dumps(42), json.dumps(None)):
-        first, last = AppleWebCallbackView._parse_first_sign_in_user(
-            MagicMock(data={"user": non_dict_payload})
-        )
+        first, last = AppleWebCallbackView._parse_first_sign_in_user(MagicMock(data={"user": non_dict_payload}))
         assert (first, last) == ("", ""), f"non-dict payload {non_dict_payload!r} produced ({first!r}, {last!r})"
 
 
@@ -480,8 +478,6 @@ def test_apple_web_callback_handles_non_dict_name_object():
     from blockauth.apple.views import AppleWebCallbackView
 
     payload = json.dumps({"name": "Tim Cook", "email": "tim@example.com"})
-    first, last = AppleWebCallbackView._parse_first_sign_in_user(
-        MagicMock(data={"user": payload})
-    )
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(MagicMock(data={"user": payload}))
     assert first == ""
     assert last == ""
