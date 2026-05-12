@@ -362,7 +362,5 @@ class GoogleAuthCallbackView(APIView):
             },
         )
         response = self.build_success_response(request, result)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
-        response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite="Lax")
+        clear_google_callback_cookies(response)
         return response

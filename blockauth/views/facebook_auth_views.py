@@ -224,6 +224,5 @@ class FacebookAuthCallbackView(APIView):
             provider_data={"provider": "facebook", "user_info": user_info, "preexisting_user": user},
         )
         response = self.build_success_response(request, result)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
+        clear_facebook_callback_cookies(response)
         return response

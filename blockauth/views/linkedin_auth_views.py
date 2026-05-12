@@ -336,7 +336,5 @@ class LinkedInAuthCallbackView(APIView):
             },
         )
         response = self.build_success_response(request, result)
-        clear_state_cookie(response)
-        clear_pkce_verifier_cookie(response)
-        response.delete_cookie(LINKEDIN_NONCE_COOKIE_NAME, samesite="Lax")
+        clear_linkedin_callback_cookies(response)
         return response

@@ -86,8 +86,11 @@ def test_clear_linkedin_callback_cookies_marks_state_pkce_and_nonce_for_deletion
 )
 def test_explicit_samesite_kwarg_overrides_default(helper_path, samesite_value):
     """The samesite kwarg lets integrators that diverge from the default
-    override without monkey-patching. Mirrors the same kwarg on
-    clear_apple_callback_cookies."""
+    override without monkey-patching. Assert the kwarg propagates to
+    every cookie the helper touches (state, PKCE, and the provider's
+    nonce cookie where applicable) — not just state — so a future helper
+    that forgets to pass `samesite` through to one of its calls fails
+    this test instead of silently leaking the wrong attribute."""
     import importlib
 
     module_path, _, attr = helper_path.rpartition(".")
@@ -97,4 +100,12 @@ def test_explicit_samesite_kwarg_overrides_default(helper_path, samesite_value):
     response = HttpResponse()
     helper(response, samesite=samesite_value)
 
-    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == samesite_value.lower()
+    # Every cookie the helper actually sets must carry the requested
+    # samesite. Iterate over response.cookies rather than a fixed list
+    # so this test stays correct if a future helper grows another
+    # cookie (Apple-style fourth-cookie case).
+    assert response.cookies, "helper did not clear any cookies"
+    for cookie_name, morsel in response.cookies.items():
+        assert morsel["samesite"].lower() == samesite_value.lower(), (
+            f"{cookie_name} samesite={morsel['samesite']!r} did not match override={samesite_value!r}"
+        )
