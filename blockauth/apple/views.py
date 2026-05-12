@@ -218,7 +218,15 @@ class AppleWebCallbackView(APIView):
             return "", ""
         try:
             payload = json.loads(raw_user) if isinstance(raw_user, str) else raw_user
-            name_obj = (payload or {}).get("name") or {}
+            # Valid JSON like `"1"`, `["x"]`, or `null` parses successfully
+            # but isn't a dict. Apple's documented contract says `user` is
+            # always an object on the first sign-in — anything else is
+            # treated the same as a missing field.
+            if not isinstance(payload, dict):
+                return "", ""
+            name_obj = payload.get("name") or {}
+            if not isinstance(name_obj, dict):
+                return "", ""
             return (
                 str(name_obj.get("firstName") or ""),
                 str(name_obj.get("lastName") or ""),

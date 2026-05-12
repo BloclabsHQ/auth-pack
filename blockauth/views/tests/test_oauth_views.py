@@ -757,7 +757,7 @@ class TestSocialLoginResponseShape:
 
 def _stub_upsert_returning(user):
     """Tuple shape that matches `SocialIdentityService.upsert_and_link`."""
-    return user, MagicMock(), {}
+    return user, MagicMock(), False
 
 
 @pytest.mark.django_db

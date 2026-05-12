@@ -450,3 +450,38 @@ def test_apple_web_callback_handles_malformed_user_payload():
     first, last = AppleWebCallbackView._parse_first_sign_in_user(MagicMock(data={"user": "{not valid json"}))
     assert first == ""
     assert last == ""
+
+
+def test_apple_web_callback_handles_non_dict_user_payload():
+    """Valid JSON that isn't an object — e.g. `"1"`, `null`, `["x"]` —
+    must return empty strings rather than crashing the callback with
+    AttributeError. Apple's contract says `user` is always an object on
+    first sign-in, but defensive parsing keeps the view 200-or-302
+    no matter what arrives."""
+    import json
+    from unittest.mock import MagicMock
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    for non_dict_payload in (json.dumps("just a string"), json.dumps(["x", "y"]), json.dumps(42), json.dumps(None)):
+        first, last = AppleWebCallbackView._parse_first_sign_in_user(
+            MagicMock(data={"user": non_dict_payload})
+        )
+        assert (first, last) == ("", ""), f"non-dict payload {non_dict_payload!r} produced ({first!r}, {last!r})"
+
+
+def test_apple_web_callback_handles_non_dict_name_object():
+    """The `name` field inside the `user` payload must itself be an
+    object. A string / list / number there would have triggered
+    AttributeError on the inner `.get(...)` calls."""
+    import json
+    from unittest.mock import MagicMock
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    payload = json.dumps({"name": "Tim Cook", "email": "tim@example.com"})
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(
+        MagicMock(data={"user": payload})
+    )
+    assert first == ""
+    assert last == ""
