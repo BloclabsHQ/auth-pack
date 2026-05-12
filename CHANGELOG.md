@@ -17,6 +17,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.6] - 2026-05-12
+
+### Added
+
+- `clear_google_callback_cookies(response, samesite=None)` helper in `blockauth.views.google_auth_views`. Clears OAuth state, PKCE verifier, and the Google nonce cookie. Mirrors `clear_apple_callback_cookies` from v0.16.5.
+- `clear_facebook_callback_cookies(response, samesite=None)` helper in `blockauth.views.facebook_auth_views`. Clears OAuth state + PKCE verifier (Facebook is not OIDC; no nonce cookie).
+- `clear_linkedin_callback_cookies(response, samesite=None)` helper in `blockauth.views.linkedin_auth_views`. Clears OAuth state, PKCE verifier, and the LinkedIn nonce cookie.
+
+### Changed
+
+- `GoogleAuthCallbackView.handle_exception`, `FacebookAuthCallbackView.handle_exception`, and `LinkedInAuthCallbackView.handle_exception` now delegate the cookie clear to the corresponding helper above. No behaviour change — each provider's clear list still matches what was previously inlined.
+- Helper docstrings + handler comments drop the "BFF integrators" framing in favour of "subclasses" / "cookie-session pattern". The cookie-session pattern these helpers support is generic across any client; "Backend For Frontend" reads as frontend-specific even though it isn't.
+
+---
+
 ## [0.16.5] - 2026-05-11
 
 ### Added
