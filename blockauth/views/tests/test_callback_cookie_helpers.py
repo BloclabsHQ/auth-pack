@@ -2,10 +2,10 @@
 
 `clear_google_callback_cookies`, `clear_facebook_callback_cookies`, and
 `clear_linkedin_callback_cookies` mirror `clear_apple_callback_cookies`
-(introduced in v0.16.5). They exist so BFF integrators that swap the
-response shape (HttpOnly cookies + 302 redirect instead of JSON body) can
-call a single helper per provider instead of re-implementing the
-state/PKCE/nonce clear in every consumer.
+(introduced in v0.16.5). They exist so subclasses that swap the
+response shape (e.g. HttpOnly cookies + 302 redirect instead of DRF's
+default JSON body) can call a single helper per provider instead of
+re-implementing the state/PKCE/nonce clear in every consumer.
 
 These tests pin the contract: each helper marks every cookie set by its
 provider's authorize view for deletion (max-age=0).
@@ -106,6 +106,6 @@ def test_explicit_samesite_kwarg_overrides_default(helper_path, samesite_value):
     # cookie (Apple-style fourth-cookie case).
     assert response.cookies, "helper did not clear any cookies"
     for cookie_name, morsel in response.cookies.items():
-        assert morsel["samesite"].lower() == samesite_value.lower(), (
-            f"{cookie_name} samesite={morsel['samesite']!r} did not match override={samesite_value!r}"
-        )
+        assert (
+            morsel["samesite"].lower() == samesite_value.lower()
+        ), f"{cookie_name} samesite={morsel['samesite']!r} did not match override={samesite_value!r}"

@@ -324,7 +324,7 @@ def test_native_verify_email_collision_with_existing_user_returns_4090(
 # ---------------------------------------------------------------------------
 #
 # Mirrors the hook on AppleWebCallbackView so integrators that issue tokens
-# differently for the native-verify flow (BFF cookies, custom envelope) can
+# differently for the native-verify flow (cookie session, custom envelope) can
 # subclass instead of re-implementing the verifier.
 
 
@@ -373,7 +373,7 @@ def test_native_verify_post_routes_through_build_success_response(
     Patches the hook on AppleNativeVerifyView, runs the full verify flow,
     and asserts the patched response reaches the client. Without this,
     a future refactor that drops the self.build_success_response(...)
-    call would silently break every BFF integrator.
+    call would silently break every subclass relying on the override hook.
     """
     from rest_framework import status as drf_status
     from rest_framework.response import Response

@@ -228,7 +228,7 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
 # clear_apple_callback_cookies helper
 # ---------------------------------------------------------------------------
 #
-# Re-usable error-path cleanup so BFF integrators that swap the response
+# Re-usable error-path cleanup so subclasses that swap the response
 # shape (and therefore bypass AppleWebCallbackView.handle_exception) don't
 # have to re-implement the security-critical state/PKCE/nonce clear in
 # every consumer. Owning "what cookies need clearing on Apple's error
@@ -293,9 +293,9 @@ def test_clear_apple_callback_cookies_honours_explicit_samesite():
 #
 # Google, Facebook, LinkedIn, and Google-native already expose
 # build_success_response(request, result) so integrators can swap the success
-# response shape (e.g. BFF cookie redirect) without re-implementing the auth
-# flow. These tests pin the contract for Apple's web callback so fabric-auth
-# can plug in alongside the other providers.
+# response shape (e.g. cookie-session 302 redirect) without re-implementing
+# the auth flow. These tests pin the contract for Apple's web callback so
+# integrators can plug in alongside the other providers.
 
 
 class _StubBlockUser:
@@ -344,7 +344,7 @@ def test_web_callback_post_routes_through_build_success_response(
     and asserts both that the patched response is returned to the client
     and that the hook was reached. Without this, a future refactor that
     drops the self.build_success_response(...) call site would silently
-    break every BFF integrator.
+    break every subclass relying on the override hook.
     """
     from rest_framework import status as drf_status
     from rest_framework.response import Response
