@@ -120,8 +120,8 @@ class FacebookAuthCallbackView(APIView):
     def handle_exception(self, exc):
         # Any error path must clear the state/PKCE cookies so a retry
         # can't replay stale credentials. The clear list is owned by
-        # `clear_facebook_callback_cookies` so BFF integrators that
-        # swap the response shape can re-use the same single source of
+        # `clear_facebook_callback_cookies` so subclasses that swap
+        # the response shape can re-use the same single source of
         # truth.
         response = super().handle_exception(exc)
         clear_facebook_callback_cookies(response)

@@ -223,11 +223,12 @@ def clear_google_callback_cookies(response, samesite: str | None = None) -> None
     the Google nonce. The callback consumes and clears them on success;
     on any error response a retry must not replay stale values.
 
-    BFF integrators that swap the response shape (and therefore bypass
-    `GoogleAuthCallbackView.handle_exception`) can call this helper
-    instead of re-implementing the clear in every consumer. Mirrors
-    `clear_apple_callback_cookies` in `blockauth.apple.views` (v0.16.5)
-    and the sibling Facebook / LinkedIn helpers introduced alongside.
+    Subclasses that override `handle_exception` to swap the response
+    shape (e.g. HttpOnly cookies + 302 redirect instead of DRF's default
+    JSON body) can call this helper instead of re-implementing the
+    state/PKCE/nonce clear. Mirrors `clear_apple_callback_cookies` in
+    `blockauth.apple.views` (v0.16.5) and the sibling Facebook /
+    LinkedIn helpers introduced alongside.
     """
     clear_state_cookie(response, samesite=samesite)
     clear_pkce_verifier_cookie(response, samesite=samesite)
@@ -239,7 +240,7 @@ class GoogleAuthCallbackView(APIView):
 
     Subclass and override :meth:`build_success_response` to ship tokens via
     HttpOnly cookies + a 302 to the application origin instead of the
-    default JSON body (BFF pattern).
+    default JSON body (cookie-session pattern).
     """
 
     permission_classes = (AllowAny,)
@@ -248,8 +249,8 @@ class GoogleAuthCallbackView(APIView):
     def handle_exception(self, exc):
         # Any error path must clear the state/PKCE/nonce cookies so a
         # retry can't replay stale credentials. The clear list is owned
-        # by `clear_google_callback_cookies` so BFF integrators that
-        # swap the response shape can re-use the same single source of
+        # by `clear_google_callback_cookies` so subclasses that swap
+        # the response shape can re-use the same single source of
         # truth.
         response = super().handle_exception(exc)
         clear_google_callback_cookies(response)
