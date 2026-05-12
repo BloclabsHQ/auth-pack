@@ -182,7 +182,16 @@ class FacebookAuthCallbackView(APIView):
         try:
             userinfo_response = requests.get(
                 FACEBOOK_USERINFO_URL,
-                params={"fields": "id,name,email", "access_token": access_token},
+                params={
+                    # `first_name` / `last_name` ride alongside `name` so we can
+                    # populate the user model's name fields directly on signup
+                    # (the full `name` is kept as a fallback for callers that
+                    # still display the full string). All three are part of the
+                    # `public_profile` permission so no additional scope is
+                    # required.
+                    "fields": "id,name,first_name,last_name,email",
+                    "access_token": access_token,
+                },
                 timeout=get_social_outbound_timeout(),
             )
         except requests.exceptions.RequestException as exc:
@@ -210,12 +219,24 @@ class FacebookAuthCallbackView(APIView):
 
         # SocialIdentityConflictError extends APIException with status_code=409;
         # let it propagate (Phase 9 cross-flow consistency).
+        #
+        # `extra_user_fields` seeds the user model on first-OAuth signup so
+        # the Creator (or any custom AUTH_USER_MODEL with name fields) lands
+        # with the user's name from Facebook rather than NULL. Facebook's
+        # Graph API ships `first_name` / `last_name` under the
+        # `public_profile` permission (no additional scope needed); absent
+        # values fall back to empty strings. SocialIdentityService filters
+        # these against the user model's schema.
         user, _, _ = SocialIdentityService().upsert_and_link(
             provider="facebook",
             subject=str(fb_user_id),
             email=email,
             email_verified=email_verified,
             extra_claims={},
+            extra_user_fields={
+                "first_name": user_info.get("first_name") or "",
+                "last_name": user_info.get("last_name") or "",
+            },
         )
 
         result = social_login_data(

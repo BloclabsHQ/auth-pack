@@ -344,12 +344,25 @@ class GoogleAuthCallbackView(APIView):
         # let it propagate to the HTTP-semantic Conflict response rather than
         # demoting it to 400 by an extra ValidationError wrap. Phase 9
         # cross-flow consistency.
+        #
+        # `extra_user_fields` seeds the user model on first-OAuth signup so
+        # the Creator (or any custom AUTH_USER_MODEL with name fields) lands
+        # with the user's name from Google rather than NULL. Google reliably
+        # ships `given_name` / `family_name` for personal accounts and
+        # Workspace accounts; absent values fall back to empty strings.
+        # SocialIdentityService filters these against the user model's
+        # schema — integrators whose model lacks first_name / last_name
+        # simply ignore the values.
         user, _, _ = SocialIdentityService().upsert_and_link(
             provider="google",
             subject=str(claims["sub"]),
             email=claims.get("email"),
             email_verified=bool(claims.get("email_verified")),
             extra_claims={"hd": claims.get("hd")},
+            extra_user_fields={
+                "first_name": claims.get("given_name") or "",
+                "last_name": claims.get("family_name") or "",
+            },
         )
 
         result = social_login_data(

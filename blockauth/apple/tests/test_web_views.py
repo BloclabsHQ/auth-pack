@@ -393,3 +393,64 @@ def test_web_callback_post_routes_through_build_success_response(
     assert mock_hook.call_count == 1
     assert callback.status_code == drf_status.HTTP_201_CREATED
     assert callback.json() == {"swapped": True}
+
+
+# ---------------------------------------------------------------------------
+# _parse_first_sign_in_user helper — first-sign-in `user` form_post payload
+# ---------------------------------------------------------------------------
+#
+# Apple POSTs a `user` field alongside `code` + `state` on the FIRST
+# sign-in only — shaped {"name": {"firstName": ..., "lastName": ...},
+# "email": ...}. The id_token never carries the name (privacy by
+# design), so this is the only place to get it. Subsequent sign-ins
+# omit the field entirely.
+
+
+def test_apple_web_callback_parses_first_sign_in_user_payload():
+    """First sign-in: parse `user` JSON, return (firstName, lastName)."""
+    import json
+    from unittest.mock import MagicMock
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(
+        MagicMock(
+            data={
+                "user": json.dumps(
+                    {
+                        "name": {"firstName": "Tim", "lastName": "Cook"},
+                        "email": "tim@example.com",
+                    }
+                ),
+            }
+        )
+    )
+    assert first == "Tim"
+    assert last == "Cook"
+
+
+def test_apple_web_callback_handles_missing_user_payload():
+    """Returning sign-ins omit `user` — return empty strings, never raise."""
+    from unittest.mock import MagicMock
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(
+        MagicMock(data={})
+    )
+    assert first == ""
+    assert last == ""
+
+
+def test_apple_web_callback_handles_malformed_user_payload():
+    """Malformed JSON must not crash the callback — log a warning,
+    return empty strings, let SocialIdentityService dedupe on (provider, sub)."""
+    from unittest.mock import MagicMock
+
+    from blockauth.apple.views import AppleWebCallbackView
+
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(
+        MagicMock(data={"user": "{not valid json"})
+    )
+    assert first == ""
+    assert last == ""
