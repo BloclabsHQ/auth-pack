@@ -14,7 +14,6 @@ class AppleEndpoints:
 
 
 class AppleClaimKeys:
-    SUB = "sub"
     EMAIL = "email"
     EMAIL_VERIFIED = "email_verified"
     IS_PRIVATE_EMAIL = "is_private_email"
