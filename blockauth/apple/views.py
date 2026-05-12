@@ -18,7 +18,6 @@ deploy to a TLS-fronted environment to test the callback path.
 """
 
 import json
-import logging
 from urllib.parse import urlencode
 
 import requests
@@ -65,15 +64,6 @@ from blockauth.docs.apple_docs import (
     apple_notifications_schema,
 )
 from blockauth.serializers.user_account_serializers import AuthStateResponseSerializer
-
-# SocialIdentityConflictError extends APIException with status_code=409 and
-# is allowed to propagate naturally from the views below — see callsite
-# comments. The import is kept so the symbol resolves for type-checking
-# and so a future change that catches it explicitly doesn't have to re-add
-# the import.
-from blockauth.social.exceptions import (  # noqa: F401
-    SocialIdentityConflictError,
-)
 from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.logger import blockauth_logger
@@ -90,8 +80,6 @@ from blockauth.utils.oauth_state import (
 from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
 from blockauth.utils.social import social_login_data
-
-logger = logging.getLogger(__name__)
 
 
 def _client_id_from_audience(audience) -> str:

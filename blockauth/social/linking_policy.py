@@ -7,11 +7,11 @@ each provider isolated so future additions (Microsoft, GitHub) get their own
 explicit case rather than inheriting a default.
 """
 
-from typing import Any, Literal
+from typing import Any
 
-# Provider literals supported by this policy. Adding a new provider also
-# requires adding an explicit branch in `can_link_to_existing_user`.
-SupportedProvider = Literal["google", "linkedin", "facebook", "apple"]
+# Adding a new provider requires an explicit branch in
+# `can_link_to_existing_user` — the default-deny posture means an unknown
+# provider falls through and is rejected.
 
 GOOGLE_AUTHORITATIVE_DOMAINS = ("@gmail.com", "@googlemail.com")
 
