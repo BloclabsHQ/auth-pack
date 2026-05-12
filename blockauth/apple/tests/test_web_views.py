@@ -435,9 +435,7 @@ def test_apple_web_callback_handles_missing_user_payload():
 
     from blockauth.apple.views import AppleWebCallbackView
 
-    first, last = AppleWebCallbackView._parse_first_sign_in_user(
-        MagicMock(data={})
-    )
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(MagicMock(data={}))
     assert first == ""
     assert last == ""
 
@@ -449,8 +447,6 @@ def test_apple_web_callback_handles_malformed_user_payload():
 
     from blockauth.apple.views import AppleWebCallbackView
 
-    first, last = AppleWebCallbackView._parse_first_sign_in_user(
-        MagicMock(data={"user": "{not valid json"})
-    )
+    first, last = AppleWebCallbackView._parse_first_sign_in_user(MagicMock(data={"user": "{not valid json"}))
     assert first == ""
     assert last == ""

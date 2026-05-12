@@ -788,11 +788,11 @@ def test_google_callback_forwards_given_and_family_name_to_service(
     token_response = MagicMock(status_code=200)
     token_response.json.return_value = {"id_token": google_id_token}
 
-    with patch(
-        "blockauth.views.google_auth_views.SocialIdentityService"
-    ) as service_cls, patch(
-        "blockauth.views.google_auth_views.requests.post", return_value=token_response
-    ), patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response):
+    with (
+        patch("blockauth.views.google_auth_views.SocialIdentityService") as service_cls,
+        patch("blockauth.views.google_auth_views.requests.post", return_value=token_response),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+    ):
         service = service_cls.return_value
         service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
         client.get(f"/google/callback/?code=auth-code&state={state}")
@@ -805,9 +805,7 @@ def test_google_callback_forwards_given_and_family_name_to_service(
 
 
 @pytest.mark.django_db
-def test_facebook_callback_forwards_first_and_last_name_to_service(
-    facebook_settings, client
-):
+def test_facebook_callback_forwards_first_and_last_name_to_service(facebook_settings, client):
     """Facebook's Graph API ships `first_name` / `last_name` under the
     `public_profile` permission; the view must request those fields and
     forward them."""
@@ -825,12 +823,13 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(
         "email": "grace@example.com",
     }
 
-    with patch(
-        "blockauth.views.facebook_auth_views.SocialIdentityService"
-    ) as service_cls, patch(
-        "blockauth.views.facebook_auth_views.requests.get",
-        side_effect=[token_response, me_response],
-    ) as mock_get:
+    with (
+        patch("blockauth.views.facebook_auth_views.SocialIdentityService") as service_cls,
+        patch(
+            "blockauth.views.facebook_auth_views.requests.get",
+            side_effect=[token_response, me_response],
+        ) as mock_get,
+    ):
         service = service_cls.return_value
         service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
         client.get(f"/facebook/callback/?code=auth-code&state={state}")
@@ -875,14 +874,16 @@ def test_linkedin_callback_forwards_given_and_family_name_to_service(
     token_response = MagicMock(status_code=200)
     token_response.json.return_value = {"id_token": linkedin_id_token}
 
-    with patch(
-        "blockauth.views.linkedin_auth_views.SocialIdentityService"
-    ) as service_cls, patch(
-        "blockauth.views.linkedin_auth_views.requests.post",
-        return_value=token_response,
-    ), patch(
-        "blockauth.utils.jwt.jwks_cache.requests.get",
-        return_value=linkedin_jwks_response,
+    with (
+        patch("blockauth.views.linkedin_auth_views.SocialIdentityService") as service_cls,
+        patch(
+            "blockauth.views.linkedin_auth_views.requests.post",
+            return_value=token_response,
+        ),
+        patch(
+            "blockauth.utils.jwt.jwks_cache.requests.get",
+            return_value=linkedin_jwks_response,
+        ),
     ):
         service = service_cls.return_value
         service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
