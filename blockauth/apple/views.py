@@ -198,6 +198,46 @@ class AppleWebCallbackView(APIView):
         """
         return _build_auth_state_response(result)
 
+    @staticmethod
+    def _parse_first_sign_in_user(request) -> tuple[str, str]:
+        """Extract `firstName` / `lastName` from Apple's first-sign-in form_post.
+
+        Apple POSTs a `user` field on the *first* sign-in only, shaped:
+
+            {"name": {"firstName": "...", "lastName": "..."}, "email": "..."}
+
+        Subsequent sign-ins omit this field entirely (Apple's privacy model:
+        the modified name lives on the user's device, not on Apple's
+        servers, so they can't replay it). Returns empty strings when the
+        field is absent or malformed — the SocialIdentityService dedupes
+        on (provider, sub) anyway, so missing names are fine on returning
+        sign-ins.
+        """
+        raw_user = request.data.get("user")
+        if not raw_user:
+            return "", ""
+        try:
+            payload = json.loads(raw_user) if isinstance(raw_user, str) else raw_user
+            # Valid JSON like `"1"`, `["x"]`, or `null` parses successfully
+            # but isn't a dict. Apple's documented contract says `user` is
+            # always an object on the first sign-in — anything else is
+            # treated the same as a missing field.
+            if not isinstance(payload, dict):
+                return "", ""
+            name_obj = payload.get("name") or {}
+            if not isinstance(name_obj, dict):
+                return "", ""
+            return (
+                str(name_obj.get("firstName") or ""),
+                str(name_obj.get("lastName") or ""),
+            )
+        except (TypeError, ValueError, json.JSONDecodeError):
+            blockauth_logger.warning(
+                "apple.web.first_sign_in_user_payload_malformed",
+                {"raw_type": type(raw_user).__name__},
+            )
+            return "", ""
+
     @extend_schema(**apple_callback_schema)
     def post(self, request):
         code = request.data.get("code")
@@ -275,11 +315,26 @@ class AppleWebCallbackView(APIView):
             )
             raise ValidationError({"detail": "Apple id_token verification failed"}, 4054) from exc
 
+        # Apple POSTs a `user` JSON field alongside `code` + `state` on
+        # the very first sign-in only — it carries the user's name (and
+        # email, which we already have from the id_token). Subsequent
+        # sign-ins omit it entirely; on those, names default to empty
+        # strings and SocialIdentityService dedupes on (provider, sub).
+        first_name, last_name = self._parse_first_sign_in_user(request)
+
         # SocialIdentityConflictError extends APIException with
         # status_code=409 + default_code="SOCIAL_IDENTITY_CONFLICT"; let it
         # propagate so the HTTP-semantic Conflict (409) reaches the client
         # rather than being demoted to 400 by an extra ValidationError wrap.
         # Apple identities never auto-link by email per AccountLinkingPolicy.
+        #
+        # `extra_user_fields` seeds the user model on first-OAuth signup
+        # so the Creator (or any custom AUTH_USER_MODEL with name fields)
+        # lands with the user's name from Apple rather than NULL. Apple's
+        # id_token never carries the name (privacy by design); first/last
+        # come from the form_post `user` field above and are only present
+        # on the very first sign-in. SocialIdentityService filters these
+        # against the user model's schema.
         user, _, _ = SocialIdentityService().upsert_and_link(
             provider="apple",
             subject=claims.sub,
@@ -287,11 +342,15 @@ class AppleWebCallbackView(APIView):
             email_verified=claims.email_verified,
             extra_claims={"is_private_email": claims.is_private_email},
             refresh_token=refresh_token,
+            extra_user_fields={
+                "first_name": first_name,
+                "last_name": last_name,
+            },
         )
 
         result = social_login_data(
             email=claims.email or "",
-            name="",
+            name=" ".join(filter(None, [first_name, last_name])).strip(),
             provider_data={"provider": "apple", "user_info": claims.raw, "preexisting_user": user},
         )
 

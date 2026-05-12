@@ -740,3 +740,160 @@ class TestSocialLoginResponseShape:
         user = User.objects.get(email="named@test.com")
         if hasattr(user, "first_name"):
             assert user.first_name == "Ada Lovelace"
+
+
+# ---------------------------------------------------------------------------
+# Name population on first OAuth signup
+# ---------------------------------------------------------------------------
+#
+# Each web callback view must forward the provider's first/last name as
+# `extra_user_fields` to `SocialIdentityService.upsert_and_link`, so the
+# user model's `first_name` / `last_name` are populated on signup rather
+# than NULL. The test user model here (`tests.TestBlockUser`) extends
+# `AbstractBaseUser` and does not declare those fields, so we mock the
+# service to assert the kwarg payload — the integration the view is
+# responsible for.
+
+
+def _stub_upsert_returning(user):
+    """Tuple shape that matches `SocialIdentityService.upsert_and_link`."""
+    return user, MagicMock(), False
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("google_web_settings")
+def test_google_callback_forwards_given_and_family_name_to_service(
+    client, build_id_token, jwks_response
+):
+    """Google's OIDC id_token ships `given_name` / `family_name`; the
+    callback view must forward them so the user's name is populated on
+    signup."""
+    init = client.get("/google/")
+    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    raw_nonce = init.cookies["blockauth_google_nonce"].value
+    expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
+
+    google_id_token = build_id_token(
+        {
+            "iss": "https://accounts.google.com",
+            "aud": "123-web.apps.googleusercontent.com",
+            "sub": "google-name-sub",
+            "email": "ada@example.com",
+            "email_verified": True,
+            "name": "Ada Lovelace",
+            "given_name": "Ada",
+            "family_name": "Lovelace",
+            "nonce": expected_hash,
+        }
+    )
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {"id_token": google_id_token}
+
+    with (
+        patch("blockauth.views.google_auth_views.SocialIdentityService") as service_cls,
+        patch("blockauth.views.google_auth_views.requests.post", return_value=token_response),
+        patch("blockauth.utils.jwt.jwks_cache.requests.get", return_value=jwks_response),
+    ):
+        service = service_cls.return_value
+        service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
+        client.get(f"/google/callback/?code=auth-code&state={state}")
+
+    kwargs = service.upsert_and_link.call_args.kwargs
+    assert kwargs["extra_user_fields"] == {
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("facebook_settings")
+def test_facebook_callback_forwards_first_and_last_name_to_service(client):
+    """Facebook's Graph API ships `first_name` / `last_name` under the
+    `public_profile` permission; the view must request those fields and
+    forward them."""
+    init = client.get("/facebook/")
+    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {"access_token": "fb-access"}
+    me_response = MagicMock(status_code=200)
+    me_response.json.return_value = {
+        "id": "fb_name_user",
+        "name": "Grace Hopper",
+        "first_name": "Grace",
+        "last_name": "Hopper",
+        "email": "grace@example.com",
+    }
+
+    with (
+        patch("blockauth.views.facebook_auth_views.SocialIdentityService") as service_cls,
+        patch(
+            "blockauth.views.facebook_auth_views.requests.get",
+            side_effect=[token_response, me_response],
+        ) as mock_get,
+    ):
+        service = service_cls.return_value
+        service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
+        client.get(f"/facebook/callback/?code=auth-code&state={state}")
+
+    # The Graph request must explicitly include first_name / last_name.
+    me_call_params = mock_get.call_args_list[1].kwargs["params"]
+    assert "first_name" in me_call_params["fields"]
+    assert "last_name" in me_call_params["fields"]
+
+    kwargs = service.upsert_and_link.call_args.kwargs
+    assert kwargs["extra_user_fields"] == {
+        "first_name": "Grace",
+        "last_name": "Hopper",
+    }
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("linkedin_settings")
+def test_linkedin_callback_forwards_given_and_family_name_to_service(
+    client, build_id_token, linkedin_jwks_response
+):
+    """LinkedIn's OIDC id_token ships `given_name` / `family_name` under
+    the `profile` scope (Sign In with LinkedIn v2 includes it by
+    default)."""
+    init = client.get("/linkedin/")
+    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    raw_nonce = init.cookies["blockauth_linkedin_nonce"].value
+    expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
+
+    linkedin_id_token = build_id_token(
+        {
+            "iss": "https://www.linkedin.com",
+            "aud": "linkedin-client-id",
+            "sub": "linkedin-name-sub",
+            "email": "alan@example.com",
+            "email_verified": True,
+            "name": "Alan Turing",
+            "given_name": "Alan",
+            "family_name": "Turing",
+            "nonce": expected_hash,
+        }
+    )
+    token_response = MagicMock(status_code=200)
+    token_response.json.return_value = {"id_token": linkedin_id_token}
+
+    with (
+        patch("blockauth.views.linkedin_auth_views.SocialIdentityService") as service_cls,
+        patch(
+            "blockauth.views.linkedin_auth_views.requests.post",
+            return_value=token_response,
+        ),
+        patch(
+            "blockauth.utils.jwt.jwks_cache.requests.get",
+            return_value=linkedin_jwks_response,
+        ),
+    ):
+        service = service_cls.return_value
+        service.upsert_and_link.return_value = _stub_upsert_returning(MagicMock())
+        client.get(f"/linkedin/callback/?code=auth-code&state={state}")
+
+    kwargs = service.upsert_and_link.call_args.kwargs
+    assert kwargs["extra_user_fields"] == {
+        "first_name": "Alan",
+        "last_name": "Turing",
+    }

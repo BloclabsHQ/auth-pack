@@ -17,6 +17,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.7] - 2026-05-12
+
+### Fixed
+
+- OAuth web flows (Google, Facebook, LinkedIn, Apple) now populate `first_name` / `last_name` on the user model for first-OAuth signup. Previously every provider except Apple's native-verify endpoint dropped these fields silently, even though all providers return them. Each web view now forwards `extra_user_fields={"first_name": ..., "last_name": ...}` to `SocialIdentityService.upsert_and_link`. Apple's web callback additionally parses the first-sign-in `user` form_post payload (Apple's id_token never carries the name).
+
+### Changed
+
+- `FacebookAuthCallbackView` Graph API request broadened from `fields=id,name,email` to `fields=id,name,first_name,last_name,email`. All four fields are granted by the `public_profile` permission — no additional scope required.
+
+---
+
 ## [0.16.6] - 2026-05-12
 
 ### Added

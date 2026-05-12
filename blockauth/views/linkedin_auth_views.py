@@ -318,12 +318,25 @@ class LinkedInAuthCallbackView(APIView):
         # let it propagate to the HTTP-semantic Conflict response rather than
         # demoting it to 400 by an extra ValidationError wrap. Phase 9
         # cross-flow consistency.
+        #
+        # `extra_user_fields` seeds the user model on first-OAuth signup so
+        # the Creator (or any custom AUTH_USER_MODEL with name fields) lands
+        # with the user's name from LinkedIn rather than NULL. LinkedIn's
+        # OIDC id_token ships `given_name` / `family_name` under the
+        # `profile` scope (which Sign In with LinkedIn v2 includes by
+        # default); absent values fall back to empty strings.
+        # SocialIdentityService filters these against the user model's
+        # schema.
         user, _, _ = SocialIdentityService().upsert_and_link(
             provider="linkedin",
             subject=str(claims["sub"]),
             email=claims.get("email"),
             email_verified=bool(claims.get("email_verified")),
             extra_claims={},
+            extra_user_fields={
+                "first_name": claims.get("given_name") or "",
+                "last_name": claims.get("family_name") or "",
+            },
         )
 
         result = social_login_data(
