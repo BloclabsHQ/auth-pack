@@ -17,6 +17,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.8] - 2026-05-14
+
+### Changed
+
+- **Breaking:** OAuth `state` and `pkce_verifier` cookies are now namespaced per provider. Cookie names become `blockauth_oauth_state_<provider>` and `blockauth_oauth_pkce_<provider>`. The helpers in `blockauth.utils.oauth_state` (`set_state_cookie`, `clear_state_cookie`, `set_pkce_verifier_cookie`, `read_pkce_verifier_cookie`, `clear_pkce_verifier_cookie`, `verify_state`) now require a `provider` keyword argument. The module-level constants `OAUTH_STATE_COOKIE_NAME` and `OAUTH_PKCE_VERIFIER_COOKIE_NAME` are removed; use the new `oauth_state_cookie_name(provider)` and `oauth_pkce_verifier_cookie_name(provider)` helpers. Two concurrent OAuth flows in the same browser can no longer stomp each other's state or PKCE verifier, and Apple's `SameSite=None` no longer leaks onto Google/Facebook/LinkedIn cookies. Integrators that import the removed constants directly must migrate to the new helpers.
+- `FacebookAuthCallbackView` token exchange now uses POST per RFC 6749 §4.1.3; the previous GET form leaked `client_secret`, `code`, and `code_verifier` into URLs and any upstream access log. The POST body includes an explicit `grant_type=authorization_code` field.
+- Facebook Graph API constants bumped from `v18.0` to `v25.0`. v18.0 reached end-of-life on 2026-01-26. `FACEBOOK_USERINFO_URL` stays version-less.
+
+---
+
 ## [0.16.7] - 2026-05-12
 
 ### Fixed
