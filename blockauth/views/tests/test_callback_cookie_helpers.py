@@ -15,8 +15,8 @@ import pytest
 from django.http import HttpResponse
 
 from blockauth.utils.oauth_state import (
-    OAUTH_PKCE_VERIFIER_COOKIE_NAME,
-    OAUTH_STATE_COOKIE_NAME,
+    oauth_pkce_verifier_cookie_name,
+    oauth_state_cookie_name,
 )
 
 
@@ -32,8 +32,8 @@ def test_clear_google_callback_cookies_marks_state_pkce_and_nonce_for_deletion()
     clear_google_callback_cookies(response)
 
     for cookie_name in (
-        OAUTH_STATE_COOKIE_NAME,
-        OAUTH_PKCE_VERIFIER_COOKIE_NAME,
+        oauth_state_cookie_name("google"),
+        oauth_pkce_verifier_cookie_name("google"),
         GOOGLE_NONCE_COOKIE_NAME,
     ):
         assert cookie_name in response.cookies, f"{cookie_name} not cleared"
@@ -49,8 +49,8 @@ def test_clear_facebook_callback_cookies_marks_state_and_pkce_for_deletion():
     clear_facebook_callback_cookies(response)
 
     for cookie_name in (
-        OAUTH_STATE_COOKIE_NAME,
-        OAUTH_PKCE_VERIFIER_COOKIE_NAME,
+        oauth_state_cookie_name("facebook"),
+        oauth_pkce_verifier_cookie_name("facebook"),
     ):
         assert cookie_name in response.cookies, f"{cookie_name} not cleared"
         assert response.cookies[cookie_name]["max-age"] == 0, f"{cookie_name} not marked for deletion (max-age != 0)"
@@ -68,8 +68,8 @@ def test_clear_linkedin_callback_cookies_marks_state_pkce_and_nonce_for_deletion
     clear_linkedin_callback_cookies(response)
 
     for cookie_name in (
-        OAUTH_STATE_COOKIE_NAME,
-        OAUTH_PKCE_VERIFIER_COOKIE_NAME,
+        oauth_state_cookie_name("linkedin"),
+        oauth_pkce_verifier_cookie_name("linkedin"),
         LINKEDIN_NONCE_COOKIE_NAME,
     ):
         assert cookie_name in response.cookies, f"{cookie_name} not cleared"

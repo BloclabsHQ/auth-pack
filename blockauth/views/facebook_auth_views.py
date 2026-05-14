@@ -89,8 +89,8 @@ class FacebookAuthLoginView(APIView):
         blockauth_logger.info("facebook.web.authorize_started", {"client_id_suffix": client_id[-6:]})
 
         response = redirect(url)
-        set_state_cookie(response, state)
-        set_pkce_verifier_cookie(response, pair.verifier)
+        set_state_cookie(response, state, provider="facebook")
+        set_pkce_verifier_cookie(response, pair.verifier, provider="facebook")
         return response
 
 
@@ -109,8 +109,8 @@ def clear_facebook_callback_cookies(response, samesite: str | None = None) -> No
     state/PKCE clear. Mirrors `clear_apple_callback_cookies` (v0.16.5)
     and the sibling Google / LinkedIn helpers.
     """
-    clear_state_cookie(response, samesite=samesite)
-    clear_pkce_verifier_cookie(response, samesite=samesite)
+    clear_state_cookie(response, provider="facebook", samesite=samesite)
+    clear_pkce_verifier_cookie(response, provider="facebook", samesite=samesite)
 
 
 class FacebookAuthCallbackView(APIView):
@@ -149,9 +149,9 @@ class FacebookAuthCallbackView(APIView):
         if not all([client_id, client_secret, redirect_uri]):
             raise ValidationError(social_invalid_auth_config.value, 4020)
 
-        verify_state(request)
+        verify_state(request, provider="facebook")
 
-        pkce_verifier = read_pkce_verifier_cookie(request)
+        pkce_verifier = read_pkce_verifier_cookie(request, provider="facebook")
         if not pkce_verifier:
             raise ValidationError({"detail": "PKCE verifier missing"}, 4051)
 

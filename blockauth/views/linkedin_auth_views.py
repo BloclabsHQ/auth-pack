@@ -178,8 +178,8 @@ class LinkedInAuthLoginView(APIView):
         )
 
         response = redirect(url)
-        set_state_cookie(response, state)
-        set_pkce_verifier_cookie(response, pair.verifier)
+        set_state_cookie(response, state, provider="linkedin")
+        set_pkce_verifier_cookie(response, pair.verifier, provider="linkedin")
         # Raw nonce — kept HttpOnly so JS can't read it. Hashed value goes
         # to LinkedIn in the `nonce` query param; we re-hash on callback and
         # compare against the id_token's `nonce` claim.
@@ -208,8 +208,8 @@ def clear_linkedin_callback_cookies(response, samesite: str | None = None) -> No
     state/PKCE/nonce clear. Mirrors the sibling Google / Facebook /
     Apple helpers.
     """
-    clear_state_cookie(response, samesite=samesite)
-    clear_pkce_verifier_cookie(response, samesite=samesite)
+    clear_state_cookie(response, provider="linkedin", samesite=samesite)
+    clear_pkce_verifier_cookie(response, provider="linkedin", samesite=samesite)
     response.delete_cookie(LINKEDIN_NONCE_COOKIE_NAME, samesite=samesite or "Lax")
 
 
@@ -262,9 +262,9 @@ class LinkedInAuthCallbackView(APIView):
 
         # CSRF — must run BEFORE the token exchange so a probe cannot
         # consume a real authorization code.
-        verify_state(request)
+        verify_state(request, provider="linkedin")
 
-        pkce_verifier = read_pkce_verifier_cookie(request)
+        pkce_verifier = read_pkce_verifier_cookie(request, provider="linkedin")
         if not pkce_verifier:
             raise ValidationError({"detail": "PKCE verifier missing"}, 4051)
 
