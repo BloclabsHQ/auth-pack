@@ -199,8 +199,8 @@ class GoogleAuthLoginView(APIView):
         )
 
         response = redirect(url)
-        set_state_cookie(response, state)
-        set_pkce_verifier_cookie(response, pair.verifier)
+        set_state_cookie(response, state, provider="google")
+        set_pkce_verifier_cookie(response, pair.verifier, provider="google")
         # Raw nonce — kept HttpOnly so JS can't read it. Hashed value goes
         # to Google in the `nonce` query param; we re-hash on callback and
         # compare against the id_token's `nonce` claim.
@@ -230,8 +230,8 @@ def clear_google_callback_cookies(response, samesite: str | None = None) -> None
     `blockauth.apple.views` (v0.16.5) and the sibling Facebook /
     LinkedIn helpers introduced alongside.
     """
-    clear_state_cookie(response, samesite=samesite)
-    clear_pkce_verifier_cookie(response, samesite=samesite)
+    clear_state_cookie(response, provider="google", samesite=samesite)
+    clear_pkce_verifier_cookie(response, provider="google", samesite=samesite)
     response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite=samesite or "Lax")
 
 
@@ -288,9 +288,9 @@ class GoogleAuthCallbackView(APIView):
 
         # CSRF — must run BEFORE the token exchange so a probe cannot
         # consume a real authorization code.
-        verify_state(request)
+        verify_state(request, provider="google")
 
-        pkce_verifier = read_pkce_verifier_cookie(request)
+        pkce_verifier = read_pkce_verifier_cookie(request, provider="google")
         if not pkce_verifier:
             raise ValidationError({"detail": "PKCE verifier missing"}, 4051)
 

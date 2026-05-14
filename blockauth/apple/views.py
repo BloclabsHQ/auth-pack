@@ -68,10 +68,10 @@ from blockauth.social.service import SocialIdentityService
 from blockauth.utils.auth_state import build_user_payload
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.oauth_state import (
-    OAUTH_STATE_COOKIE_NAME,
     clear_pkce_verifier_cookie,
     clear_state_cookie,
     generate_state,
+    oauth_state_cookie_name,
     read_pkce_verifier_cookie,
     set_pkce_verifier_cookie,
     set_state_cookie,
@@ -112,8 +112,8 @@ def clear_apple_callback_cookies(response, samesite: str | None = None) -> None:
     cross-site form_post cookies keep their `SameSite=None` contract.
     """
     samesite = samesite or _samesite_for_callback()
-    clear_state_cookie(response, samesite=samesite)
-    clear_pkce_verifier_cookie(response, samesite=samesite)
+    clear_state_cookie(response, provider="apple", samesite=samesite)
+    clear_pkce_verifier_cookie(response, provider="apple", samesite=samesite)
     clear_nonce_cookie(response, samesite=samesite)
 
 
@@ -164,8 +164,8 @@ class AppleWebAuthorizeView(APIView):
 
         response = redirect(url)
         samesite = _samesite_for_callback()
-        set_state_cookie(response, state, samesite=samesite)
-        set_pkce_verifier_cookie(response, pair.verifier, samesite=samesite)
+        set_state_cookie(response, state, provider="apple", samesite=samesite)
+        set_pkce_verifier_cookie(response, pair.verifier, provider="apple", samesite=samesite)
         set_nonce_cookie(response, raw_nonce, samesite=samesite)
         return response
 
@@ -245,10 +245,10 @@ class AppleWebCallbackView(APIView):
         if not code:
             raise ValidationError({"detail": "Missing authorization code"}, 4054)
 
-        cookie_state = request.COOKIES.get(OAUTH_STATE_COOKIE_NAME)
+        cookie_state = request.COOKIES.get(oauth_state_cookie_name("apple"))
         verify_state_values(cookie_state, form_state)
 
-        pkce_verifier = read_pkce_verifier_cookie(request)
+        pkce_verifier = read_pkce_verifier_cookie(request, provider="apple")
         if not pkce_verifier:
             raise ValidationError({"detail": "PKCE verifier missing"}, 4051)
 

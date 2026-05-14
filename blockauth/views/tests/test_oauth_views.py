@@ -21,6 +21,7 @@ cover those.
 
 import hashlib
 import json
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,15 +29,18 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
-from blockauth.utils.oauth_state import OAUTH_PKCE_VERIFIER_COOKIE_NAME, OAUTH_STATE_COOKIE_NAME
+from blockauth.utils.oauth_state import (
+    oauth_pkce_verifier_cookie_name,
+    oauth_state_cookie_name,
+)
 from blockauth.utils.social import social_login
 
 
-def _prime_state(api_client, value="valid-state-token"):
+def _prime_state(api_client, provider, value="valid-state-token"):
     """Seed the state cookie so a callback request looks like it came from a
     browser that actually started the flow. Returns the state value so tests
     can pass it as the query param."""
-    api_client.cookies[OAUTH_STATE_COOKIE_NAME] = value
+    api_client.cookies[oauth_state_cookie_name(provider)] = value
     return value
 
 
@@ -99,8 +103,8 @@ class TestGoogleAuthLoginView:
         redirect URL + the two values must match."""
         response = api_client.get(reverse("google-login"))
 
-        assert OAUTH_STATE_COOKIE_NAME in response.cookies
-        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        assert oauth_state_cookie_name("google") in response.cookies
+        cookie = response.cookies[oauth_state_cookie_name("google")]
         assert cookie.value, "state cookie must carry a token"
         assert cookie["httponly"]
         assert cookie["secure"]
@@ -131,8 +135,8 @@ def test_google_authorize_includes_pkce_and_nonce(google_web_settings, client):
     assert "nonce" in qs
 
     cookies = response.cookies
-    assert OAUTH_STATE_COOKIE_NAME in cookies
-    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in cookies
+    assert oauth_state_cookie_name("google") in cookies
+    assert oauth_pkce_verifier_cookie_name("google") in cookies
     assert "blockauth_google_nonce" in cookies
 
 
@@ -144,8 +148,8 @@ def test_google_callback_verifies_id_token_and_links_identity(
     (PKCE), id_token claims power user resolution, and the legacy userinfo
     HTTP call is gone."""
     init = client.get("/google/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
-    pkce_verifier = init.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("google")].value
+    pkce_verifier = init.cookies[oauth_pkce_verifier_cookie_name("google")].value
     raw_nonce = init.cookies["blockauth_google_nonce"].value
     expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
@@ -221,7 +225,7 @@ class TestGoogleAuthCallbackView:
     def test_callback_missing_state_query_rejects(self, mock_post, api_client):
         """Cookie present but no `state=` in the URL → provider didn't echo
         our token. Reject before burning a real code."""
-        _prime_state(api_client)
+        _prime_state(api_client, "google")
         response = api_client.get(reverse("google-login-callback"), {"code": "auth-code"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_post.assert_not_called()
@@ -230,7 +234,7 @@ class TestGoogleAuthCallbackView:
     def test_callback_mismatched_state_rejects(self, mock_post, api_client):
         """Classic CSRF shape: attacker controls `state=` in the URL but
         can't forge the victim's cookie. Must 400."""
-        _prime_state(api_client, value="victim-state")
+        _prime_state(api_client, "google", value="victim-state")
         response = api_client.get(
             reverse("google-login-callback"),
             {"code": "auth-code", "state": "attacker-state"},
@@ -242,8 +246,8 @@ class TestGoogleAuthCallbackView:
     def test_callback_token_timeout_returns_documented_error(self, mock_post, api_client):
         import requests as real_requests
 
-        state = _prime_state(api_client)
-        api_client.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME] = "test-pkce-verifier"
+        state = _prime_state(api_client, "google")
+        api_client.cookies[oauth_pkce_verifier_cookie_name("google")] = "test-pkce-verifier"
         api_client.cookies["blockauth_google_nonce"] = "test-raw-nonce"
         mock_post.side_effect = real_requests.exceptions.Timeout("provider hung")
 
@@ -292,14 +296,14 @@ def test_facebook_authorize_includes_pkce(facebook_settings, client):
     assert "code_challenge" in qs
     assert qs["code_challenge_method"] == ["S256"]
 
-    assert OAUTH_STATE_COOKIE_NAME in response.cookies
-    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in response.cookies
+    assert oauth_state_cookie_name("facebook") in response.cookies
+    assert oauth_pkce_verifier_cookie_name("facebook") in response.cookies
 
 
 @pytest.mark.django_db
 def test_facebook_callback_links_by_subject(facebook_settings, client):
     init = client.get("/facebook/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("facebook")].value
 
     token_response = MagicMock(status_code=200)
     token_response.json.return_value = {"access_token": "fb-access"}
@@ -307,14 +311,19 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
 
     with patch(
-        "blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]
+        "blockauth.views.facebook_auth_views.requests.post", return_value=token_response,
+    ) as mock_post, patch(
+        "blockauth.views.facebook_auth_views.requests.get", return_value=me_response,
     ) as mock_get:
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content
     body = callback.json()
     assert "access" in body and "user" in body
-    timeouts = [call.kwargs["timeout"] for call in mock_get.call_args_list]
+    timeouts = [
+        call.kwargs["timeout"]
+        for call in (*mock_post.call_args_list, *mock_get.call_args_list)
+    ]
     assert timeouts == [(3.05, 10), (3.05, 10)]
 
     from blockauth.social.models import SocialIdentity
@@ -332,24 +341,26 @@ class TestFacebookAuthLoginView:
 
     def test_init_sets_state_cookie_and_query_param(self, api_client):
         response = api_client.get(reverse("facebook-login"))
-        assert OAUTH_STATE_COOKIE_NAME in response.cookies
+        assert oauth_state_cookie_name("facebook") in response.cookies
         from urllib.parse import parse_qs, urlparse
 
         query_state = parse_qs(urlparse(response.url).query)["state"][0]
-        assert query_state == response.cookies[OAUTH_STATE_COOKIE_NAME].value
+        assert query_state == response.cookies[oauth_state_cookie_name("facebook")].value
 
 
 @pytest.mark.django_db
 class TestFacebookAuthCallbackView:
 
     @patch("blockauth.views.facebook_auth_views.requests.get")
-    def test_callback_mismatched_state_rejects(self, mock_get, api_client):
-        _prime_state(api_client, value="victim-state")
+    @patch("blockauth.views.facebook_auth_views.requests.post")
+    def test_callback_mismatched_state_rejects(self, mock_post, mock_get, api_client):
+        _prime_state(api_client, "facebook", value="victim-state")
         response = api_client.get(
             reverse("facebook-login-callback"),
             {"code": "auth-code", "state": "attacker-state"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
         mock_get.assert_not_called()
 
     def test_callback_missing_code(self, api_client):
@@ -418,8 +429,8 @@ def test_linkedin_authorize_includes_pkce_and_nonce(linkedin_settings, client):
     assert "nonce" in qs
 
     cookies = response.cookies
-    assert OAUTH_STATE_COOKIE_NAME in cookies
-    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in cookies
+    assert oauth_state_cookie_name("linkedin") in cookies
+    assert oauth_pkce_verifier_cookie_name("linkedin") in cookies
     assert "blockauth_linkedin_nonce" in cookies
 
 
@@ -429,8 +440,8 @@ def test_linkedin_callback_verifies_id_token(linkedin_settings, client, build_id
     (PKCE), id_token claims power user resolution, and the legacy userinfo
     HTTP call is gone."""
     init = client.get("/linkedin/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
-    pkce_verifier = init.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("linkedin")].value
+    pkce_verifier = init.cookies[oauth_pkce_verifier_cookie_name("linkedin")].value
     raw_nonce = init.cookies["blockauth_linkedin_nonce"].value
     expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
@@ -481,11 +492,11 @@ class TestLinkedInAuthLoginView:
 
     def test_init_sets_state_cookie_and_query_param(self, api_client):
         response = api_client.get(reverse("linkedin-login"))
-        assert OAUTH_STATE_COOKIE_NAME in response.cookies
+        assert oauth_state_cookie_name("linkedin") in response.cookies
         from urllib.parse import parse_qs, urlparse
 
         query_state = parse_qs(urlparse(response.url).query)["state"][0]
-        assert query_state == response.cookies[OAUTH_STATE_COOKIE_NAME].value
+        assert query_state == response.cookies[oauth_state_cookie_name("linkedin")].value
 
 
 @pytest.mark.django_db
@@ -496,7 +507,7 @@ class TestLinkedInAuthCallbackView:
 
     @patch("blockauth.views.linkedin_auth_views.requests.post")
     def test_callback_mismatched_state_rejects(self, mock_post, api_client):
-        _prime_state(api_client, value="victim-state")
+        _prime_state(api_client, "linkedin", value="victim-state")
         response = api_client.get(
             reverse("linkedin-login-callback"),
             {"code": "auth-code", "state": "attacker-state"},
@@ -573,12 +584,12 @@ class TestCallbackSuccessResponseHook:
 
         GoogleAuthCallbackView.build_success_response = override
         try:
-            state = _prime_state(api_client)
+            state = _prime_state(api_client, "google")
             # The refactor requires PKCE verifier + raw nonce cookies on the
             # callback. Seed both so the override-hook test exercises the
             # successful build_success_response path rather than tripping
             # 4051/4061 short-circuits.
-            api_client.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME] = "test-pkce-verifier"
+            api_client.cookies[oauth_pkce_verifier_cookie_name("google")] = "test-pkce-verifier"
             api_client.cookies["blockauth_google_nonce"] = "test-raw-nonce"
             response = api_client.get(
                 reverse("google-login-callback"),
@@ -594,7 +605,7 @@ class TestCallbackSuccessResponseHook:
         # The override is a good place to attach cookies — confirm the
         # state cookie still gets cleared by the view wrapper after the
         # override returns (belt-and-braces).
-        cleared = response.cookies.get(OAUTH_STATE_COOKIE_NAME)
+        cleared = response.cookies.get(oauth_state_cookie_name("google"))
         assert cleared is not None
         assert cleared["max-age"] == 0
 
@@ -609,7 +620,7 @@ class TestStateCookiePolicyConfigurable:
 
     def test_default_secure_and_samesite(self, api_client):
         response = api_client.get(reverse("google-login"))
-        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        cookie = response.cookies[oauth_state_cookie_name("google")]
         assert cookie["secure"]
         assert cookie["samesite"].lower() == "lax"
 
@@ -623,7 +634,7 @@ class TestStateCookiePolicyConfigurable:
             "OAUTH_STATE_COOKIE_SECURE": False,
         }
         response = api_client.get(reverse("google-login"))
-        cookie = response.cookies[OAUTH_STATE_COOKIE_NAME]
+        cookie = response.cookies[oauth_state_cookie_name("google")]
         assert not cookie["secure"]
 
 
@@ -769,7 +780,7 @@ def test_google_callback_forwards_given_and_family_name_to_service(
     callback view must forward them so the user's name is populated on
     signup."""
     init = client.get("/google/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("google")].value
     raw_nonce = init.cookies["blockauth_google_nonce"].value
     expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
@@ -812,7 +823,7 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
     `public_profile` permission; the view must request those fields and
     forward them."""
     init = client.get("/facebook/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("facebook")].value
 
     token_response = MagicMock(status_code=200)
     token_response.json.return_value = {"access_token": "fb-access"}
@@ -828,8 +839,12 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
     with (
         patch("blockauth.views.facebook_auth_views.SocialIdentityService") as service_cls,
         patch(
+            "blockauth.views.facebook_auth_views.requests.post",
+            return_value=token_response,
+        ),
+        patch(
             "blockauth.views.facebook_auth_views.requests.get",
-            side_effect=[token_response, me_response],
+            return_value=me_response,
         ) as mock_get,
     ):
         service = service_cls.return_value
@@ -837,7 +852,7 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
         client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     # The Graph request must explicitly include first_name / last_name.
-    me_call_params = mock_get.call_args_list[1].kwargs["params"]
+    me_call_params = mock_get.call_args_list[0].kwargs["params"]
     assert "first_name" in me_call_params["fields"]
     assert "last_name" in me_call_params["fields"]
 
@@ -849,6 +864,48 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
 
 
 @pytest.mark.django_db
+@pytest.mark.usefixtures("facebook_settings")
+def test_facebook_callback_uses_post_for_token_exchange(client):
+    """RFC 6749 §4.1.3 — client MUST use POST for the access token request.
+
+    Keeps client_secret and the authorization code out of URLs and any
+    upstream access log on the path.
+    """
+    init = client.get("/facebook/")
+    state = init.cookies[oauth_state_cookie_name("facebook")].value
+
+    token_response = mock.Mock(status_code=200, json=lambda: {"access_token": "fb-token"})
+    me_response = mock.Mock(
+        status_code=200,
+        json=lambda: {
+            "id": "fb_user_post",
+            "name": "FB User",
+            "first_name": "FB",
+            "last_name": "User",
+            "email": "fb-post@example.com",
+        },
+    )
+
+    with mock.patch(
+        "blockauth.views.facebook_auth_views.requests.post",
+        return_value=token_response,
+    ) as post_mock, mock.patch(
+        "blockauth.views.facebook_auth_views.requests.get",
+        return_value=me_response,
+    ):
+        callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
+
+    assert callback.status_code == 200, callback.content
+    assert post_mock.call_count == 1
+    called_args, called_kwargs = post_mock.call_args
+    assert called_args[0].endswith("/oauth/access_token")
+    body = called_kwargs.get("data") or {}
+    assert body["code"] == "auth-code"
+    assert body["client_secret"]
+    assert body["grant_type"] == "authorization_code"
+
+
+@pytest.mark.django_db
 @pytest.mark.usefixtures("linkedin_settings")
 def test_linkedin_callback_forwards_given_and_family_name_to_service(
     client, build_id_token, linkedin_jwks_response
@@ -857,7 +914,7 @@ def test_linkedin_callback_forwards_given_and_family_name_to_service(
     the `profile` scope (Sign In with LinkedIn v2 includes it by
     default)."""
     init = client.get("/linkedin/")
-    state = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state = init.cookies[oauth_state_cookie_name("linkedin")].value
     raw_nonce = init.cookies["blockauth_linkedin_nonce"].value
     expected_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 

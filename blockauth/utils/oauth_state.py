@@ -14,26 +14,11 @@ touching the provider's token endpoint — so a CSRF probe never causes a real
 authorization code to be exchanged. The cookie is cleared on the successful
 response so it cannot be replayed.
 
-Why a cookie (rather than a server-side session store):
-  - Many API deployments are stateless behind a reverse proxy; adding a
-    session store just for OAuth state is heavier than a scoped, short-lived
-    cookie.
-  - Short TTL (10 min) + HttpOnly + SameSite=Lax + compare_digest is the
-    pattern documented by OWASP for browser-initiated OAuth flows.
-
-Why Secure and SameSite are configurable:
-  - Local dev over plain `http://localhost` cannot set Secure cookies in
-    production-equivalent mode — Chrome treats localhost as secure, but
-    Firefox doesn't. A hardcoded `secure=True` locks out Firefox-based
-    local dev entirely.
-  - Internal development hosts often run http until an operator provisions a
-    local TLS cert.
-  - Deployed envs run TLS end-to-end and want `Secure=True` + the
-    strictest SameSite policy the callback hop permits.
-
-Read overrides from `BLOCK_AUTH_SETTINGS["OAUTH_STATE_COOKIE_SECURE"]` and
-`["OAUTH_STATE_COOKIE_SAMESITE"]` so integrators can set one value per
-environment via env vars without patching this file.
+Cookies are namespaced per provider (e.g. `blockauth_oauth_state_google`,
+`blockauth_oauth_pkce_apple`) so two concurrent OAuth flows in the same
+browser cannot stomp each other's state or PKCE verifier, and so each
+provider can carry its own SameSite policy (Apple needs None for its
+cross-site form_post POST; the others run on Lax).
 """
 
 import hmac
@@ -41,10 +26,20 @@ import secrets
 
 from rest_framework.exceptions import ValidationError
 
-OAUTH_STATE_COOKIE_NAME = "blockauth_oauth_state"
-OAUTH_PKCE_VERIFIER_COOKIE_NAME = "blockauth_oauth_pkce"
+OAUTH_STATE_COOKIE_PREFIX = "blockauth_oauth_state"
+OAUTH_PKCE_VERIFIER_COOKIE_PREFIX = "blockauth_oauth_pkce"
 OAUTH_STATE_COOKIE_MAX_AGE = 600  # 10 minutes — covers human consent screens
 OAUTH_STATE_TOKEN_BYTES = 32
+
+
+def oauth_state_cookie_name(provider: str) -> str:
+    """Cookie name for the OAuth `state` token, namespaced by provider."""
+    return f"{OAUTH_STATE_COOKIE_PREFIX}_{provider}"
+
+
+def oauth_pkce_verifier_cookie_name(provider: str) -> str:
+    """Cookie name for the PKCE `code_verifier`, namespaced by provider."""
+    return f"{OAUTH_PKCE_VERIFIER_COOKIE_PREFIX}_{provider}"
 
 
 def _get_setting(key: str, default):
@@ -64,40 +59,44 @@ def _get_setting(key: str, default):
 
 
 def _cookie_secure() -> bool:
-    """True unless explicitly disabled for local http dev."""
+    """True unless explicitly disabled for local http dev.
+
+    Local dev over plain `http://localhost` cannot set Secure cookies in
+    production-equivalent mode in every browser. Deployed envs run TLS
+    end-to-end and want Secure=True. Read the override from
+    `BLOCK_AUTH_SETTINGS["OAUTH_STATE_COOKIE_SECURE"]` so integrators
+    can set one value per environment via env vars.
+    """
     return bool(_get_setting("OAUTH_STATE_COOKIE_SECURE", True))
 
 
 def _cookie_samesite() -> str:
-    """`Lax` by default — Lax permits the Google→callback top-level GET
-    while still blocking CSRF via cross-site subresource requests.
+    """`Lax` by default — permits the IdP→callback top-level GET while
+    still blocking CSRF via cross-site subresource requests.
+
     `Strict` would actually break the callback (cross-site navigation
     doesn't send Strict cookies). Keep Lax unless an integrator knows
-    their topology permits Strict (e.g. same-origin callback).
+    their topology permits Strict (e.g. same-origin callback). Apple's
+    cross-site `form_post` POST needs `None` and passes it explicitly
+    via the per-call `samesite` argument.
     """
     return str(_get_setting("OAUTH_STATE_COOKIE_SAMESITE", "Lax"))
 
 
 def generate_state() -> str:
-    """Cryptographically random, URL-safe state token."""
+    """Cryptographically random, URL-safe state token (32 bytes of entropy)."""
     return secrets.token_urlsafe(OAUTH_STATE_TOKEN_BYTES)
 
 
-def set_state_cookie(response, state: str, samesite: str | None = None) -> None:
-    """Bind the state token to the browser session via a short-lived cookie.
+def set_state_cookie(response, state: str, *, provider: str, samesite: str | None = None) -> None:
+    """Bind the state token to the browser session via a short-lived HttpOnly cookie.
 
-    Secure / SameSite are read from `BLOCK_AUTH_SETTINGS` so deployments
-    can downgrade to `secure=False` for http-only local dev without
-    patching the library. HttpOnly stays on always — there is no JS
-    reason to read state; the check is entirely server-side.
-
-    `samesite` may be passed explicitly to override the env-driven default
-    on a per-call basis — Apple's `form_post` callback requires
-    `SameSite=None` because the POST is cross-site, even when the rest of
-    the integration runs on `Lax`.
+    `samesite` may override the env-driven default on a per-call basis — Apple's
+    `form_post` callback needs `None` because the POST is cross-site, while the
+    other providers run on `Lax`.
     """
     response.set_cookie(
-        OAUTH_STATE_COOKIE_NAME,
+        oauth_state_cookie_name(provider),
         state,
         max_age=OAUTH_STATE_COOKIE_MAX_AGE,
         httponly=True,
@@ -117,31 +116,32 @@ def verify_state_values(cookie_state: str | None, provided_state: str | None) ->
         raise ValidationError({"detail": "OAuth state mismatch"}, 4030)
 
 
-def verify_state(request) -> None:
+def verify_state(request, *, provider: str) -> None:
     """Backwards-compatible wrapper that reads `state` from the request's
-    query parameters."""
+    query parameters and compares against the per-provider state cookie."""
     verify_state_values(
-        request.COOKIES.get(OAUTH_STATE_COOKIE_NAME),
+        request.COOKIES.get(oauth_state_cookie_name(provider)),
         request.query_params.get("state"),
     )
 
 
-def clear_state_cookie(response, samesite: str | None = None) -> None:
-    """Clear the state cookie on the outbound response.
+def clear_state_cookie(response, *, provider: str, samesite: str | None = None) -> None:
+    """Clear the per-provider state cookie. `samesite` must match the set-time
+    value so browsers treat the delete as applying to the same cookie."""
+    response.delete_cookie(
+        oauth_state_cookie_name(provider),
+        samesite=samesite or _cookie_samesite(),
+    )
 
-    Must match the `samesite` attribute used at set time so browsers
-    treat the delete as applying to the same cookie (Set-Cookie with
-    Max-Age=0).
+
+def set_pkce_verifier_cookie(response, verifier: str, *, provider: str, samesite: str | None = None) -> None:
+    """Persist the PKCE `code_verifier` across the authorize → callback hop.
+
+    Lifecycle (TTL, HttpOnly, Secure, SameSite) mirrors the state cookie since
+    they share the same trust boundary.
     """
-    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, samesite=samesite or _cookie_samesite())
-
-
-def set_pkce_verifier_cookie(response, verifier: str, samesite: str | None = None) -> None:
-    """Persist the PKCE `code_verifier` across the authorize → callback
-    hop. Lifecycle (TTL, HttpOnly, Secure, SameSite) mirrors the state
-    cookie since they share the same trust boundary."""
     response.set_cookie(
-        OAUTH_PKCE_VERIFIER_COOKIE_NAME,
+        oauth_pkce_verifier_cookie_name(provider),
         verifier,
         max_age=OAUTH_STATE_COOKIE_MAX_AGE,
         httponly=True,
@@ -150,9 +150,15 @@ def set_pkce_verifier_cookie(response, verifier: str, samesite: str | None = Non
     )
 
 
-def read_pkce_verifier_cookie(request) -> str | None:
-    return request.COOKIES.get(OAUTH_PKCE_VERIFIER_COOKIE_NAME)
+def read_pkce_verifier_cookie(request, *, provider: str) -> str | None:
+    """Return the PKCE `code_verifier` cookie value for `provider`, or None."""
+    return request.COOKIES.get(oauth_pkce_verifier_cookie_name(provider))
 
 
-def clear_pkce_verifier_cookie(response, samesite: str | None = None) -> None:
-    response.delete_cookie(OAUTH_PKCE_VERIFIER_COOKIE_NAME, samesite=samesite or _cookie_samesite())
+def clear_pkce_verifier_cookie(response, *, provider: str, samesite: str | None = None) -> None:
+    """Clear the per-provider PKCE verifier cookie. `samesite` must match the
+    set-time value."""
+    response.delete_cookie(
+        oauth_pkce_verifier_cookie_name(provider),
+        samesite=samesite or _cookie_samesite(),
+    )

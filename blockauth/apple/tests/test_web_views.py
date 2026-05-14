@@ -16,7 +16,10 @@ from django.test import override_settings
 
 from blockauth.apple.id_token_verifier import _reset_verifier_cache
 from blockauth.apple.nonce import APPLE_NONCE_COOKIE_NAME
-from blockauth.utils.oauth_state import OAUTH_PKCE_VERIFIER_COOKIE_NAME, OAUTH_STATE_COOKIE_NAME
+from blockauth.utils.oauth_state import (
+    oauth_pkce_verifier_cookie_name,
+    oauth_state_cookie_name,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -86,8 +89,8 @@ def test_authorize_view_redirects_with_required_params(apple_settings, client):
     assert "state" in qs and "nonce" in qs and "code_challenge" in qs
 
     cookies = response.cookies
-    assert OAUTH_STATE_COOKIE_NAME in cookies
-    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in cookies
+    assert oauth_state_cookie_name("apple") in cookies
+    assert oauth_pkce_verifier_cookie_name("apple") in cookies
     assert APPLE_NONCE_COOKIE_NAME in cookies
 
     raw_nonce = cookies[APPLE_NONCE_COOKIE_NAME].value
@@ -98,9 +101,9 @@ def test_authorize_view_redirects_with_required_params(apple_settings, client):
 @pytest.mark.django_db
 def test_callback_full_flow(apple_settings, client, build_id_token, jwks_payload_bytes):
     init_response = client.get("/apple/")
-    state_value = init_response.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state_value = init_response.cookies[oauth_state_cookie_name("apple")].value
     raw_nonce = init_response.cookies[APPLE_NONCE_COOKIE_NAME].value
-    pkce_verifier = init_response.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME].value
+    pkce_verifier = init_response.cookies[oauth_pkce_verifier_cookie_name("apple")].value
     expected_nonce_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
     apple_id_token = build_id_token(
@@ -159,9 +162,9 @@ def test_callback_state_mismatch_raises(apple_settings, client):
 def test_callback_pkce_cookie_missing_raises(apple_settings, client):
     """PKCE verifier cookie is required; absence is a 400 (code 4051)."""
     init = client.get("/apple/")
-    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state_value = init.cookies[oauth_state_cookie_name("apple")].value
     # Simulate a callback request that drops the PKCE cookie (e.g. cookie loss).
-    client.cookies.pop(OAUTH_PKCE_VERIFIER_COOKIE_NAME, None)
+    client.cookies.pop(oauth_pkce_verifier_cookie_name("apple"), None)
     callback = client.post(
         "/apple/callback/",
         data={"code": "real-auth-code", "state": state_value},
@@ -174,7 +177,7 @@ def test_callback_token_exchange_4xx_returns_4053(apple_settings, client):
     """Apple /auth/token returning 4xx must map to ValidationError (HTTP 400),
     not escape as HTTP 500."""
     init = client.get("/apple/")
-    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state_value = init.cookies[oauth_state_cookie_name("apple")].value
 
     failing_response = MagicMock(status_code=400, text="bad code")
     failing_response.json.return_value = {"error": "invalid_grant"}
@@ -193,7 +196,7 @@ def test_callback_token_endpoint_unreachable_returns_4053(apple_settings, client
     import requests as _requests
 
     init = client.get("/apple/")
-    state_value = init.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state_value = init.cookies[oauth_state_cookie_name("apple")].value
 
     with patch(
         "blockauth.apple.views.requests.post",
@@ -219,8 +222,8 @@ def test_callback_clears_cookies_on_error(apple_settings, client):
 
     # All 3 cookies must be cleared on the error response.
     assert callback.status_code == 400
-    assert callback.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
-    assert callback.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
+    assert callback.cookies[oauth_state_cookie_name("apple")]["max-age"] == 0
+    assert callback.cookies[oauth_pkce_verifier_cookie_name("apple")]["max-age"] == 0
     assert callback.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
 
 
@@ -248,10 +251,10 @@ def test_clear_apple_callback_cookies_clears_all_three_cookies():
     response = HttpResponse()
     clear_apple_callback_cookies(response)
 
-    assert OAUTH_STATE_COOKIE_NAME in response.cookies
-    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["max-age"] == 0
-    assert OAUTH_PKCE_VERIFIER_COOKIE_NAME in response.cookies
-    assert response.cookies[OAUTH_PKCE_VERIFIER_COOKIE_NAME]["max-age"] == 0
+    assert oauth_state_cookie_name("apple") in response.cookies
+    assert response.cookies[oauth_state_cookie_name("apple")]["max-age"] == 0
+    assert oauth_pkce_verifier_cookie_name("apple") in response.cookies
+    assert response.cookies[oauth_pkce_verifier_cookie_name("apple")]["max-age"] == 0
     assert APPLE_NONCE_COOKIE_NAME in response.cookies
     assert response.cookies[APPLE_NONCE_COOKIE_NAME]["max-age"] == 0
 
@@ -269,7 +272,7 @@ def test_clear_apple_callback_cookies_uses_callback_samesite_default():
     clear_apple_callback_cookies(response)
 
     # apple_settings sets APPLE_CALLBACK_COOKIE_SAMESITE="None".
-    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == "none"
+    assert response.cookies[oauth_state_cookie_name("apple")]["samesite"].lower() == "none"
 
 
 @pytest.mark.usefixtures("apple_settings")
@@ -284,7 +287,7 @@ def test_clear_apple_callback_cookies_honours_explicit_samesite():
     response = HttpResponse()
     clear_apple_callback_cookies(response, samesite="Lax")
 
-    assert response.cookies[OAUTH_STATE_COOKIE_NAME]["samesite"].lower() == "lax"
+    assert response.cookies[oauth_state_cookie_name("apple")]["samesite"].lower() == "lax"
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +355,7 @@ def test_web_callback_post_routes_through_build_success_response(
     from blockauth.apple.views import AppleWebCallbackView
 
     init_response = client.get("/apple/")
-    state_value = init_response.cookies[OAUTH_STATE_COOKIE_NAME].value
+    state_value = init_response.cookies[oauth_state_cookie_name("apple")].value
     raw_nonce = init_response.cookies[APPLE_NONCE_COOKIE_NAME].value
     expected_nonce_hash = hashlib.sha256(raw_nonce.encode()).hexdigest()
 
