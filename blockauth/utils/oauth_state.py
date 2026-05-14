@@ -28,7 +28,7 @@ from rest_framework.exceptions import ValidationError
 
 OAUTH_STATE_COOKIE_PREFIX = "blockauth_oauth_state"
 OAUTH_PKCE_VERIFIER_COOKIE_PREFIX = "blockauth_oauth_pkce"
-OAUTH_STATE_COOKIE_MAX_AGE = 600
+OAUTH_STATE_COOKIE_MAX_AGE = 600  # 10 minutes — covers human consent screens
 OAUTH_STATE_TOKEN_BYTES = 32
 
 
@@ -41,6 +41,12 @@ def oauth_pkce_verifier_cookie_name(provider: str) -> str:
 
 
 def _get_setting(key: str, default):
+    """Read a cookie-policy override from `BLOCK_AUTH_SETTINGS`.
+
+    Local import so this module stays usable in non-Django contexts
+    (unit tests, scripts) — `django.conf.settings` is only touched when
+    the helper is actually called at request time.
+    """
     try:
         from django.conf import settings as _settings
 
@@ -51,10 +57,27 @@ def _get_setting(key: str, default):
 
 
 def _cookie_secure() -> bool:
+    """True unless explicitly disabled for local http dev.
+
+    Local dev over plain `http://localhost` cannot set Secure cookies in
+    production-equivalent mode in every browser. Deployed envs run TLS
+    end-to-end and want Secure=True. Read the override from
+    `BLOCK_AUTH_SETTINGS["OAUTH_STATE_COOKIE_SECURE"]` so integrators
+    can set one value per environment via env vars.
+    """
     return bool(_get_setting("OAUTH_STATE_COOKIE_SECURE", True))
 
 
 def _cookie_samesite() -> str:
+    """`Lax` by default — permits the IdP→callback top-level GET while
+    still blocking CSRF via cross-site subresource requests.
+
+    `Strict` would actually break the callback (cross-site navigation
+    doesn't send Strict cookies). Keep Lax unless an integrator knows
+    their topology permits Strict (e.g. same-origin callback). Apple's
+    cross-site `form_post` POST needs `None` and passes it explicitly
+    via the per-call `samesite` argument.
+    """
     return str(_get_setting("OAUTH_STATE_COOKIE_SAMESITE", "Lax"))
 
 
@@ -74,6 +97,10 @@ def set_state_cookie(response, state: str, *, provider: str, samesite: str | Non
 
 
 def verify_state_values(cookie_state: str | None, provided_state: str | None) -> None:
+    """Constant-time compare of the cookie-stored state against any other
+    source (query string for redirect callbacks, form body for `form_post`
+    callbacks like Apple). Raises `ValidationError` on missing or mismatched
+    values so callers can convert to HTTP 400 directly."""
     if not cookie_state or not provided_state:
         raise ValidationError({"detail": "OAuth state missing"}, 4030)
     if not hmac.compare_digest(cookie_state, provided_state):
@@ -81,6 +108,8 @@ def verify_state_values(cookie_state: str | None, provided_state: str | None) ->
 
 
 def verify_state(request, *, provider: str) -> None:
+    """Backwards-compatible wrapper that reads `state` from the request's
+    query parameters and compares against the per-provider state cookie."""
     verify_state_values(
         request.COOKIES.get(oauth_state_cookie_name(provider)),
         request.query_params.get("state"),
