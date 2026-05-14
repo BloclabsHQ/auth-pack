@@ -33,10 +33,12 @@ OAUTH_STATE_TOKEN_BYTES = 32
 
 
 def oauth_state_cookie_name(provider: str) -> str:
+    """Cookie name for the OAuth `state` token, namespaced by provider."""
     return f"{OAUTH_STATE_COOKIE_PREFIX}_{provider}"
 
 
 def oauth_pkce_verifier_cookie_name(provider: str) -> str:
+    """Cookie name for the PKCE `code_verifier`, namespaced by provider."""
     return f"{OAUTH_PKCE_VERIFIER_COOKIE_PREFIX}_{provider}"
 
 
@@ -82,10 +84,17 @@ def _cookie_samesite() -> str:
 
 
 def generate_state() -> str:
+    """Cryptographically random, URL-safe state token (32 bytes of entropy)."""
     return secrets.token_urlsafe(OAUTH_STATE_TOKEN_BYTES)
 
 
 def set_state_cookie(response, state: str, *, provider: str, samesite: str | None = None) -> None:
+    """Bind the state token to the browser session via a short-lived HttpOnly cookie.
+
+    `samesite` may override the env-driven default on a per-call basis — Apple's
+    `form_post` callback needs `None` because the POST is cross-site, while the
+    other providers run on `Lax`.
+    """
     response.set_cookie(
         oauth_state_cookie_name(provider),
         state,
@@ -117,6 +126,8 @@ def verify_state(request, *, provider: str) -> None:
 
 
 def clear_state_cookie(response, *, provider: str, samesite: str | None = None) -> None:
+    """Clear the per-provider state cookie. `samesite` must match the set-time
+    value so browsers treat the delete as applying to the same cookie."""
     response.delete_cookie(
         oauth_state_cookie_name(provider),
         samesite=samesite or _cookie_samesite(),
@@ -124,6 +135,11 @@ def clear_state_cookie(response, *, provider: str, samesite: str | None = None) 
 
 
 def set_pkce_verifier_cookie(response, verifier: str, *, provider: str, samesite: str | None = None) -> None:
+    """Persist the PKCE `code_verifier` across the authorize → callback hop.
+
+    Lifecycle (TTL, HttpOnly, Secure, SameSite) mirrors the state cookie since
+    they share the same trust boundary.
+    """
     response.set_cookie(
         oauth_pkce_verifier_cookie_name(provider),
         verifier,
@@ -135,10 +151,13 @@ def set_pkce_verifier_cookie(response, verifier: str, *, provider: str, samesite
 
 
 def read_pkce_verifier_cookie(request, *, provider: str) -> str | None:
+    """Return the PKCE `code_verifier` cookie value for `provider`, or None."""
     return request.COOKIES.get(oauth_pkce_verifier_cookie_name(provider))
 
 
 def clear_pkce_verifier_cookie(response, *, provider: str, samesite: str | None = None) -> None:
+    """Clear the per-provider PKCE verifier cookie. `samesite` must match the
+    set-time value."""
     response.delete_cookie(
         oauth_pkce_verifier_cookie_name(provider),
         samesite=samesite or _cookie_samesite(),
