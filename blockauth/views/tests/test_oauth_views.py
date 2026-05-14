@@ -21,6 +21,7 @@ cover those.
 
 import hashlib
 import json
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -310,14 +311,19 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
 
     with patch(
-        "blockauth.views.facebook_auth_views.requests.get", side_effect=[token_response, me_response]
+        "blockauth.views.facebook_auth_views.requests.post", return_value=token_response,
+    ) as mock_post, patch(
+        "blockauth.views.facebook_auth_views.requests.get", return_value=me_response,
     ) as mock_get:
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content
     body = callback.json()
     assert "access" in body and "user" in body
-    timeouts = [call.kwargs["timeout"] for call in mock_get.call_args_list]
+    timeouts = [
+        call.kwargs["timeout"]
+        for call in (*mock_post.call_args_list, *mock_get.call_args_list)
+    ]
     assert timeouts == [(3.05, 10), (3.05, 10)]
 
     from blockauth.social.models import SocialIdentity
@@ -346,13 +352,15 @@ class TestFacebookAuthLoginView:
 class TestFacebookAuthCallbackView:
 
     @patch("blockauth.views.facebook_auth_views.requests.get")
-    def test_callback_mismatched_state_rejects(self, mock_get, api_client):
+    @patch("blockauth.views.facebook_auth_views.requests.post")
+    def test_callback_mismatched_state_rejects(self, mock_post, mock_get, api_client):
         _prime_state(api_client, "facebook", value="victim-state")
         response = api_client.get(
             reverse("facebook-login-callback"),
             {"code": "auth-code", "state": "attacker-state"},
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        mock_post.assert_not_called()
         mock_get.assert_not_called()
 
     def test_callback_missing_code(self, api_client):
@@ -831,8 +839,12 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
     with (
         patch("blockauth.views.facebook_auth_views.SocialIdentityService") as service_cls,
         patch(
+            "blockauth.views.facebook_auth_views.requests.post",
+            return_value=token_response,
+        ),
+        patch(
             "blockauth.views.facebook_auth_views.requests.get",
-            side_effect=[token_response, me_response],
+            return_value=me_response,
         ) as mock_get,
     ):
         service = service_cls.return_value
@@ -840,7 +852,7 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
         client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     # The Graph request must explicitly include first_name / last_name.
-    me_call_params = mock_get.call_args_list[1].kwargs["params"]
+    me_call_params = mock_get.call_args_list[0].kwargs["params"]
     assert "first_name" in me_call_params["fields"]
     assert "last_name" in me_call_params["fields"]
 
@@ -849,6 +861,48 @@ def test_facebook_callback_forwards_first_and_last_name_to_service(client):
         "first_name": "Grace",
         "last_name": "Hopper",
     }
+
+
+@pytest.mark.django_db
+@pytest.mark.usefixtures("facebook_settings")
+def test_facebook_callback_uses_post_for_token_exchange(client):
+    """RFC 6749 §4.1.3 — client MUST use POST for the access token request.
+
+    Keeps client_secret and the authorization code out of URLs and any
+    upstream access log on the path.
+    """
+    init = client.get("/facebook/")
+    state = init.cookies[oauth_state_cookie_name("facebook")].value
+
+    token_response = mock.Mock(status_code=200, json=lambda: {"access_token": "fb-token"})
+    me_response = mock.Mock(
+        status_code=200,
+        json=lambda: {
+            "id": "fb_user_post",
+            "name": "FB User",
+            "first_name": "FB",
+            "last_name": "User",
+            "email": "fb-post@example.com",
+        },
+    )
+
+    with mock.patch(
+        "blockauth.views.facebook_auth_views.requests.post",
+        return_value=token_response,
+    ) as post_mock, mock.patch(
+        "blockauth.views.facebook_auth_views.requests.get",
+        return_value=me_response,
+    ):
+        callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
+
+    assert callback.status_code == 200, callback.content
+    assert post_mock.call_count == 1
+    called_args, called_kwargs = post_mock.call_args
+    assert called_args[0].endswith("/oauth/access_token")
+    body = called_kwargs.get("data") or {}
+    assert body["code"] == "auth-code"
+    assert body["client_secret"]
+    assert body["grant_type"] == "authorization_code"
 
 
 @pytest.mark.django_db

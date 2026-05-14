@@ -156,13 +156,14 @@ class FacebookAuthCallbackView(APIView):
             raise ValidationError({"detail": "PKCE verifier missing"}, 4051)
 
         try:
-            token_response = requests.get(
+            token_response = requests.post(
                 FACEBOOK_TOKEN_URL,
-                params={
+                data={
                     "code": code,
                     "client_id": client_id,
                     "client_secret": client_secret,
                     "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code",
                     "code_verifier": pkce_verifier,
                 },
                 timeout=get_social_outbound_timeout(),
