@@ -47,8 +47,8 @@ from blockauth.utils.social import social_login_data
 
 logger = logging.getLogger(__name__)
 
-FACEBOOK_AUTHORIZE_URL = "https://www.facebook.com/v18.0/dialog/oauth"
-FACEBOOK_TOKEN_URL = "https://graph.facebook.com/v18.0/oauth/access_token"
+FACEBOOK_AUTHORIZE_URL = "https://www.facebook.com/v25.0/dialog/oauth"
+FACEBOOK_TOKEN_URL = "https://graph.facebook.com/v25.0/oauth/access_token"
 FACEBOOK_USERINFO_URL = "https://graph.facebook.com/me"
 
 
