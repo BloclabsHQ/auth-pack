@@ -17,6 +17,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.16.9] - 2026-05-28
+
+### Fixed
+
+- TOTP setup is now idempotent over an unconfirmed enrollment. Calling `TOTPService.setup_totp()` (POST `/totp/setup/`) again while a `PENDING_CONFIRMATION` device exists regenerates the secret and backup codes and returns a fresh setup payload, instead of dead-ending with `TOTPAlreadyEnabledError` (HTTP 409). `DjangoTOTP2FAStore.create()` now reserves the conflict for genuinely `ENABLED` devices and replaces disabled or unconfirmed configurations, so an abandoned setup no longer locks the user out of re-enrolling. Adds direct DB-backed coverage for the storage layer in `blockauth/totp/tests/test_django_storage.py`.
+- Restored `blockauth.__version__` so it matches the packaged `pyproject.toml` version; it had lagged at `0.16.7` through the `0.16.8` release.
+
+---
+
 ## [0.16.8] - 2026-05-14
 
 ### Changed
