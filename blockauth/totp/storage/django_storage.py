@@ -74,9 +74,16 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
         status: str = "pending_confirmation",
     ) -> TOTP2FAData:
         """Create a new TOTP configuration."""
-        # Check if already exists
-        existing = self.get_by_user_id(user_id)
-        if existing and existing.status != TOTPStatus.DISABLED.value:
+        # Lock any existing row for this user up front (within this atomic block)
+        # so a concurrent confirm/enable cannot slip an ENABLED device in between
+        # this guard and the delete below. Only a fully ENABLED device blocks
+        # re-creation; a DISABLED row (after disable) or an unconfirmed
+        # PENDING_CONFIRMATION row (setup started but never confirmed) is safe to
+        # overwrite — the user is (re)enrolling, so reserve the conflict for
+        # genuinely enabled devices. select_for_update takes a row lock on
+        # PostgreSQL and is a harmless no-op on SQLite (which serializes writes).
+        existing = TOTP2FA.objects.select_for_update().filter(user_id=user_id).first()
+        if existing and existing.status == TOTPStatus.ENABLED.value:
             raise TOTPAlreadyEnabledError()
 
         try:
@@ -84,9 +91,10 @@ class DjangoTOTP2FAStore(ITOTP2FAStore):
             User = get_user_model()
             user = User.objects.get(pk=user_id)
 
-            # Delete existing disabled config if any
+            # Replace any existing non-enabled row (disabled or pending) so setup
+            # regenerates a fresh secret and backup codes.
             if existing:
-                TOTP2FA.objects.filter(user_id=user_id).delete()
+                existing.delete()
 
             # Create new config
             totp = TOTP2FA.objects.create(

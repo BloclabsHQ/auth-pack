@@ -93,7 +93,9 @@ class ITOTP2FAStore(ABC):
             Created TOTP2FAData
 
         Raises:
-            TOTPAlreadyEnabledError: If TOTP already exists for user
+            TOTPAlreadyEnabledError: If an enabled TOTP device already exists
+                for the user. A disabled or unconfirmed (pending) configuration
+                is replaced rather than rejected.
         """
 
     @abstractmethod
