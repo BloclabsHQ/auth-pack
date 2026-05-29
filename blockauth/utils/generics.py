@@ -48,15 +48,17 @@ def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any
     """
     from blockauth.constants import REDACTION_STRING, SENSITIVE_FIELDS
 
+    # Merge first, then redact: additional_context can itself carry sensitive
+    # keys (e.g. a decoded JWT under "payload"), so sanitizing only `data` and
+    # updating afterwards would leak those values straight through.
+    merged = {**data, **(additional_context or {})}
+
     sanitized = {}
-    for key, value in data.items():
+    for key, value in merged.items():
         if key.lower() in SENSITIVE_FIELDS:
             sanitized[key] = REDACTION_STRING
         else:
             sanitized[key] = value
-
-    if additional_context:
-        sanitized.update(additional_context)
 
     return sanitized
 

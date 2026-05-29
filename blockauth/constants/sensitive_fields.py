@@ -9,6 +9,11 @@ in logs to prevent sensitive data exposure.
 SENSITIVE_FIELDS = {
     # Authentication related
     "password",
+    "old_password",
+    "new_password",
+    "confirm_password",
+    "current_password",
+    "hashed_password",
     "token",
     "access",
     "refresh",
