@@ -62,3 +62,24 @@ def test_non_sensitive_fields_pass_through_unredacted():
 
     assert sanitized["email"] == "creator@example.test"
     assert sanitized["remember"] is True
+
+
+def test_sensitive_key_in_additional_context_is_redacted():
+    # Regression: additional_context used to be merged AFTER sanitizing data,
+    # so a sensitive key passed there (e.g. a decoded JWT under "payload")
+    # leaked through unredacted.
+    sanitized = sanitize_log_context(
+        {"refresh_token": "raw-refresh"},
+        {"payload": {"type": "access", "sub": "user-1"}, "user": "user-1"},
+    )
+
+    assert sanitized["payload"] == REDACTION_STRING
+    assert sanitized["refresh_token"] == REDACTION_STRING
+    assert sanitized["user"] == "user-1"
+
+
+def test_additional_context_still_overrides_data_keys():
+    # Preserve prior behaviour: additional_context wins on key conflicts.
+    sanitized = sanitize_log_context({"user": "from-data"}, {"user": "from-context"})
+
+    assert sanitized["user"] == "from-context"
