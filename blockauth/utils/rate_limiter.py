@@ -1,5 +1,7 @@
 import ipaddress
+import os
 import time
+import uuid
 from typing import Optional
 
 from django.core.cache import cache as default_cache
@@ -11,6 +13,11 @@ from blockauth.utils.logger import blockauth_logger
 
 # Maximum length for IP-related header values (security limit)
 MAX_IP_HEADER_LENGTH = 500
+
+# Per-process token used by the cache-liveness probe. A fixed token per process
+# means concurrent probes within the same worker write the same value, so a
+# successful read-back is never a false negative under load.
+_HEALTHCHECK_TOKEN = uuid.uuid4().hex
 
 
 def validate_ip_address(ip_string: str) -> Optional[str]:
@@ -57,12 +64,30 @@ def validate_ip_address(ip_string: str) -> Optional[str]:
         return None
 
 
+def _get_trusted_proxy_depth() -> int:
+    """Number of trusted reverse proxies in front of the application.
+
+    Drives how X-Forwarded-For is interpreted in get_client_ip(). Defaults to
+    1 (one trusted edge proxy). Set TRUSTED_PROXY_DEPTH to 0 for deployments
+    where the application is directly internet-facing (no proxy), or to the
+    number of trusted hops for multi-proxy topologies.
+    """
+    try:
+        return max(0, int(get_config("TRUSTED_PROXY_DEPTH")))
+    except (AttributeError, TypeError, ValueError):
+        return 1
+
+
 def get_client_ip(request) -> str:
     """
-    Extract and validate client IP from request, handling proxies.
+    Extract and validate the client IP from the request.
 
-    Security: Validates IP address format to prevent header injection attacks.
-    Falls back to REMOTE_ADDR if X-Forwarded-For is invalid or missing.
+    Security: X-Forwarded-For is appended to by each proxy, so the rightmost
+    entries are written by infrastructure we control and the leftmost entries
+    are client-supplied and forgeable. We therefore count from the RIGHT using
+    the configured trusted-proxy depth instead of trusting the leftmost value.
+    The IP format is validated to prevent header injection. Falls back to
+    REMOTE_ADDR (the immediate peer) when X-Forwarded-For cannot be trusted.
 
     Args:
         request: Django/DRF request object
@@ -70,32 +95,45 @@ def get_client_ip(request) -> str:
     Returns:
         Validated IP address string, or empty string if none found
     """
-    # Try X-Forwarded-For first (for proxied requests)
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    depth = _get_trusted_proxy_depth()
+    remote_addr = request.META.get("REMOTE_ADDR", "")
 
-    if x_forwarded_for:
-        # Security: Limit header length to prevent DoS
-        if len(x_forwarded_for) > MAX_IP_HEADER_LENGTH:
-            blockauth_logger.warning(
-                "X-Forwarded-For header exceeds maximum length", sanitize_log_context({"length": len(x_forwarded_for)})
-            )
-            x_forwarded_for = x_forwarded_for[:MAX_IP_HEADER_LENGTH]
+    if depth > 0:
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
 
-        # X-Forwarded-For format: "client, proxy1, proxy2, ..."
-        # The first IP is the original client
-        first_ip = x_forwarded_for.split(",")[0].strip()
-        validated_ip = validate_ip_address(first_ip)
+        if x_forwarded_for:
+            # Security: Limit header length to prevent DoS
+            if len(x_forwarded_for) > MAX_IP_HEADER_LENGTH:
+                blockauth_logger.warning(
+                    "X-Forwarded-For header exceeds maximum length",
+                    sanitize_log_context({"length": len(x_forwarded_for)}),
+                )
+                x_forwarded_for = x_forwarded_for[:MAX_IP_HEADER_LENGTH]
 
-        if validated_ip:
-            return validated_ip
+            # "client, proxy1, proxy2" — trust the rightmost `depth` hops and
+            # treat the next value in from the right as the real client.
+            parts = [p.strip() for p in x_forwarded_for.split(",") if p.strip()]
 
-        # Log invalid X-Forwarded-For for security monitoring
-        blockauth_logger.warning(
-            "Invalid IP in X-Forwarded-For header", sanitize_log_context({"raw_value": first_ip[:50]})
-        )
+            if len(parts) >= depth:
+                candidate = parts[-depth]
+                validated_ip = validate_ip_address(candidate)
+                if validated_ip:
+                    return validated_ip
+
+                blockauth_logger.warning(
+                    "Invalid IP at trusted X-Forwarded-For position",
+                    sanitize_log_context({"raw_value": candidate[:50]}),
+                )
+            else:
+                # Fewer forwarded hops than trusted depth — the chain is shorter
+                # than expected (possible spoof or misconfiguration). Do not
+                # trust it; fall back to the immediate peer.
+                blockauth_logger.warning(
+                    "X-Forwarded-For shorter than trusted proxy depth",
+                    sanitize_log_context({"entries": len(parts), "trusted_depth": depth}),
+                )
 
     # Fall back to REMOTE_ADDR
-    remote_addr = request.META.get("REMOTE_ADDR", "")
     validated_remote = validate_ip_address(remote_addr)
 
     if validated_remote:
@@ -219,10 +257,16 @@ class EnhancedThrottle(BaseThrottle):
     Enhanced throttle with daily limits, cooldowns, and failure tracking.
 
     Features:
-    - Per-minute rate limiting (IP + user/identifier)
+    - Per-minute rate limiting
     - Daily limits
     - Cooldown after repeated failures
-    - Separate IP and user tracking
+    - Fail-closed on cache unavailability for brute-force-critical subjects
+
+    Bucket keying: all counters (rate, failures, cooldown, daily) are keyed on
+    the authenticated principal when one is present, falling back to the client
+    IP only for unauthenticated flows. A client-controlled IP / X-Forwarded-For
+    therefore cannot be varied to mint a fresh bucket and reset the lockout for
+    an authenticated user.
     """
 
     cache = default_cache
@@ -234,6 +278,7 @@ class EnhancedThrottle(BaseThrottle):
         daily_limit: int = None,
         max_failures: int = 5,
         cooldown_minutes: int = 15,
+        fail_closed: bool = False,
     ):
         """
         Args:
@@ -241,6 +286,9 @@ class EnhancedThrottle(BaseThrottle):
             daily_limit: Max requests per day (None = no daily limit)
             max_failures: Failures before cooldown triggers
             cooldown_minutes: Cooldown duration after max failures
+            fail_closed: When True, deny the request if the cache backend is
+                unavailable/degraded instead of failing open. Set for
+                brute-force-critical subjects (verify, confirm, disable).
         """
         if rate is None:
             rate = get_config("REQUEST_LIMIT")
@@ -248,6 +296,7 @@ class EnhancedThrottle(BaseThrottle):
         self.daily_limit = daily_limit
         self.max_failures = max_failures
         self.cooldown_minutes = cooldown_minutes
+        self.fail_closed = fail_closed
         self._block_reason = None
 
     def _get_identifier(self, request):
@@ -257,11 +306,46 @@ class EnhancedThrottle(BaseThrottle):
             identifier = str(request.user.id)
         return identifier
 
+    @staticmethod
+    def _axis(ip, identifier) -> str:
+        """Throttle bucket axis.
+
+        Prefer the authenticated principal so the bucket cannot be reset by
+        varying a client-controlled IP / X-Forwarded-For. Fall back to the IP
+        for unauthenticated flows where it is the only available signal.
+        """
+        return identifier or ip or "anon"
+
+    def _cache_alive(self) -> bool:
+        """Active liveness probe for the cache backend.
+
+        A backend configured to swallow errors (e.g. django-redis
+        IGNORE_EXCEPTIONS=True) makes every cache.get() return its empty
+        default and cache.set() a silent no-op — which would make every
+        throttle read appear unthrottled. A raising backend is caught here too.
+        Writes a per-process sentinel and reads it back to confirm the cache is
+        actually serving reads/writes.
+        """
+        key = f"throttle_healthcheck_{os.getpid()}"
+        try:
+            self.cache.set(key, _HEALTHCHECK_TOKEN, 30)
+            return self.cache.get(key) == _HEALTHCHECK_TOKEN
+        except Exception:
+            return False
+
     def allow_request(self, request, subject) -> bool:
         """Check all rate limits."""
         ip = get_client_ip(request)
         identifier = self._get_identifier(request)
         now = self.timer()
+
+        # Fail closed for brute-force-critical subjects when the cache backend
+        # is unavailable/degraded — otherwise every counter reads empty and the
+        # throttle silently allows all requests.
+        if self.fail_closed and not self._cache_alive():
+            self._block_reason = "cache_unavailable"
+            self._log_blocked(request, subject, "cache_unavailable")
+            return False
 
         # Check cooldown first
         if not self._check_cooldown(ip, identifier, subject):
@@ -285,7 +369,7 @@ class EnhancedThrottle(BaseThrottle):
 
     def _check_rate(self, ip, identifier, subject, now) -> bool:
         """Check per-minute rate limit."""
-        key = f"throttle_rate_{subject}_{ip}_{identifier or 'anon'}"
+        key = f"throttle_rate_{subject}_{self._axis(ip, identifier)}"
         history = self.cache.get(key, [])
         history = [t for t in history if now - t < self.duration]
 
@@ -298,7 +382,7 @@ class EnhancedThrottle(BaseThrottle):
 
     def _check_daily(self, ip, identifier, subject, now) -> bool:
         """Check daily limit."""
-        day_key = f"throttle_daily_{subject}_{identifier or ip}_{int(now // 86400)}"
+        day_key = f"throttle_daily_{subject}_{self._axis(ip, identifier)}_{int(now // 86400)}"
         count = self.cache.get(day_key, 0)
 
         if count >= self.daily_limit:
@@ -309,20 +393,20 @@ class EnhancedThrottle(BaseThrottle):
 
     def _check_cooldown(self, ip, identifier, subject) -> bool:
         """Check if in cooldown period."""
-        key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+        key = f"throttle_cooldown_{subject}_{self._axis(ip, identifier)}"
         return not self.cache.get(key, False)
 
     def record_failure(self, request, subject):
         """Record a failed attempt. Call when operation fails."""
         ip = get_client_ip(request)
         identifier = self._get_identifier(request)
-        key = f"throttle_failures_{subject}_{ip}_{identifier or 'anon'}"
+        key = f"throttle_failures_{subject}_{self._axis(ip, identifier)}"
 
         count = self.cache.get(key, 0) + 1
         self.cache.set(key, count, 3600)  # Track for 1 hour
 
         if count >= self.max_failures:
-            cooldown_key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+            cooldown_key = f"throttle_cooldown_{subject}_{self._axis(ip, identifier)}"
             self.cache.set(cooldown_key, True, self.cooldown_minutes * 60)
             blockauth_logger.warning(
                 f"Cooldown triggered for {subject}",
@@ -342,11 +426,11 @@ class EnhancedThrottle(BaseThrottle):
         identifier = self._get_identifier(request)
 
         # Clear failures
-        key = f"throttle_failures_{subject}_{ip}_{identifier or 'anon'}"
+        key = f"throttle_failures_{subject}_{self._axis(ip, identifier)}"
         self.cache.delete(key)
 
         # Clear cooldown
-        cooldown_key = f"throttle_cooldown_{subject}_{ip}_{identifier or 'anon'}"
+        cooldown_key = f"throttle_cooldown_{subject}_{self._axis(ip, identifier)}"
         self.cache.delete(cooldown_key)
 
     def _log_blocked(self, request, subject, reason):

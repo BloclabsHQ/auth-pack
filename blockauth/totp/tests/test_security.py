@@ -110,11 +110,12 @@ class TestGetClientIP(unittest.TestCase):
         result = get_client_ip(request)
         self.assertEqual(result, "203.0.113.1")
 
-    def test_handles_multiple_forwarded_ips(self):
-        """Should extract first IP from X-Forwarded-For chain."""
+    def test_counts_forwarded_ips_from_the_right(self):
+        """Should count from the right (trusted-proxy depth), not trust the
+        client-supplied leftmost value. Default depth=1 -> rightmost entry."""
         request = self._make_request(x_forwarded_for="203.0.113.1, 198.51.100.1, 192.0.2.1")
         result = get_client_ip(request)
-        self.assertEqual(result, "203.0.113.1")
+        self.assertEqual(result, "192.0.2.1")
 
     def test_validates_forwarded_ip(self):
         """Should validate X-Forwarded-For IP."""
@@ -135,6 +136,34 @@ class TestGetClientIP(unittest.TestCase):
         # Should not raise, should return a valid IP or empty
         result = get_client_ip(request)
         self.assertIsInstance(result, str)
+
+    def test_spoofed_leftmost_is_ignored(self):
+        """A client prepending a forged IP cannot control the result; the
+        rightmost (trusted-proxy-appended) entry wins at default depth=1."""
+        request = self._make_request(remote_addr="10.0.0.1", x_forwarded_for="6.6.6.6, 192.0.2.10")
+        result = get_client_ip(request)
+        self.assertEqual(result, "192.0.2.10")
+
+    @patch("blockauth.utils.rate_limiter._get_trusted_proxy_depth", return_value=0)
+    def test_depth_zero_ignores_forwarded_header(self, _mock_depth):
+        """With no trusted proxies, X-Forwarded-For is ignored entirely."""
+        request = self._make_request(remote_addr="10.0.0.1", x_forwarded_for="6.6.6.6")
+        result = get_client_ip(request)
+        self.assertEqual(result, "10.0.0.1")
+
+    @patch("blockauth.utils.rate_limiter._get_trusted_proxy_depth", return_value=2)
+    def test_depth_two_counts_two_from_the_right(self, _mock_depth):
+        """With two trusted proxies, the client is the entry two in from the right."""
+        request = self._make_request(x_forwarded_for="203.0.113.5, 198.51.100.2, 192.0.2.20")
+        result = get_client_ip(request)
+        self.assertEqual(result, "198.51.100.2")
+
+    @patch("blockauth.utils.rate_limiter._get_trusted_proxy_depth", return_value=2)
+    def test_chain_shorter_than_depth_falls_back_to_remote_addr(self, _mock_depth):
+        """A chain shorter than the trusted depth is not trusted."""
+        request = self._make_request(remote_addr="10.0.0.9", x_forwarded_for="192.0.2.30")
+        result = get_client_ip(request)
+        self.assertEqual(result, "10.0.0.9")
 
 
 # =============================================================================

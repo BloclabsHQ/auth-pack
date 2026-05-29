@@ -56,40 +56,46 @@ class TestTOTPThrottles(unittest.TestCase):
     """Test rate limiting configurations."""
 
     def test_setup_throttle_configuration(self):
-        """Setup should have 3/hour rate limit."""
+        """Setup should have 10/hour rate limit (relaxed: minting is low-risk)."""
         throttle = TOTPThrottles.SETUP
-        self.assertEqual(throttle.num_requests, 3)
+        self.assertEqual(throttle.num_requests, 10)
         self.assertEqual(throttle.duration, 3600)  # 1 hour
+        self.assertEqual(throttle.daily_limit, 30)
 
     def test_verify_throttle_configuration(self):
-        """Verify should have 5/minute rate limit."""
+        """Verify should have 5/minute rate limit and fail closed."""
         throttle = TOTPThrottles.VERIFY
         self.assertEqual(throttle.num_requests, 5)
         self.assertEqual(throttle.duration, 60)
+        self.assertTrue(throttle.fail_closed)
 
     def test_confirm_throttle_configuration(self):
-        """Confirm should have 5/minute rate limit."""
+        """Confirm should have 5/minute rate limit and fail closed."""
         throttle = TOTPThrottles.CONFIRM
         self.assertEqual(throttle.num_requests, 5)
         self.assertEqual(throttle.duration, 60)
+        self.assertTrue(throttle.fail_closed)
 
     def test_disable_throttle_configuration(self):
-        """Disable should have 3/hour rate limit."""
+        """Disable should have 3/hour rate limit and fail closed."""
         throttle = TOTPThrottles.DISABLE
         self.assertEqual(throttle.num_requests, 3)
         self.assertEqual(throttle.duration, 3600)
+        self.assertTrue(throttle.fail_closed)
 
     def test_regenerate_backup_throttle_configuration(self):
-        """Regenerate backup codes should have 3/hour rate limit."""
+        """Regenerate backup codes should have 3/hour rate limit and fail closed."""
         throttle = TOTPThrottles.REGENERATE_BACKUP
         self.assertEqual(throttle.num_requests, 3)
         self.assertEqual(throttle.duration, 3600)
+        self.assertTrue(throttle.fail_closed)
 
     def test_status_throttle_configuration(self):
-        """Status should have 30/minute rate limit."""
+        """Status should have 30/minute rate limit and fail open (read-only)."""
         throttle = TOTPThrottles.STATUS
         self.assertEqual(throttle.num_requests, 30)
         self.assertEqual(throttle.duration, 60)
+        self.assertFalse(throttle.fail_closed)
 
 
 class TestRateLimitingBehavior(unittest.TestCase):
@@ -146,7 +152,24 @@ class TestRateLimitingBehavior(unittest.TestCase):
         response = view(request)
 
         self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], "rate_limit_exceeded")
+        self.assertEqual(response.data["error"], "throttled")
+
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_verify_throttle_uses_unified_envelope(self, mock_throttles):
+        """The in-method throttle path must emit the same {error: throttled}/429
+        envelope as every other throttled path."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = False
+        mock_throttles.VERIFY = mock_throttle
+
+        request = self.factory.post("/totp/verify/", {"code": "123456"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPVerifyView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data["error"], "throttled")
 
 
 class TestViewAuthentication(unittest.TestCase):
