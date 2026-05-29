@@ -8,7 +8,7 @@ This module contains validators for:
 - Passwords
 
 Password Requirements:
-- 8-128 characters
+- 12-128 characters
 - At least 1 uppercase letter (A-Z)
 - At least 1 lowercase letter (a-z)
 - At least 1 number (0-9)
@@ -43,13 +43,13 @@ from django.utils.translation import gettext as _
 # PASSWORD VALIDATION CONSTANTS
 # =============================================================================
 
-PASSWORD_MIN_LENGTH = 8
+PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 128
 PASSWORD_SYMBOLS = r"!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?"
 
 # Standard error message for invalid passwords (platform-wide)
 PASSWORD_VALIDATION_ERROR = (
-    "Password must be 8-128 characters and contain at least one uppercase letter, "
+    "Password must be 12-128 characters and contain at least one uppercase letter, "
     "one lowercase letter, one number, and one symbol (!@#$%^&*)."
 )
 
@@ -71,7 +71,7 @@ def validate_password(password: str) -> List[str]:
 
     Example:
         >>> validate_password("weak")
-        ['Password must be 8-128 characters and contain...']
+        ['Password must be 12-128 characters and contain...']
         >>> validate_password("StrongPass1!")
         []
     """
@@ -123,7 +123,7 @@ class BlockAuthPasswordValidator:
         {'NAME': 'blockauth.utils.validators.BlockAuthPasswordValidator'}
 
     Requirements:
-        - 8-128 characters
+        - 12-128 characters
         - At least 1 uppercase letter (A-Z)
         - At least 1 lowercase letter (a-z)
         - At least 1 number (0-9)
