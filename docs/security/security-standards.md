@@ -51,6 +51,33 @@ This page summarizes the mandatory security standards for BlockAuth.
 | Password reset | 3/hour |
 | Token refresh | 10/minute |
 | KDF derivation | 10/hour |
+| TOTP setup | 10/hour |
+| TOTP confirm / verify | 5/minute, 5 failures → cooldown |
+
+### Throttle wire contract
+
+When a request is throttled, the API returns HTTP `429` with a single,
+stable body:
+
+```json
+{ "error": "throttled", "message": "..." }
+```
+
+This `error` code is a public contract — consumers should match `throttled`,
+not the response message. Note that a `429` may also be returned by the TOTP
+service-layer account lockout after repeated failed verification attempts; that
+case carries the TOTP error envelope (e.g. `{"error": "totp_too_many_attempts"}`)
+rather than the throttle envelope. Both use status `429`.
+
+### Throttle bucket keying
+
+Throttle counters (rate, failures, cooldown, daily) are keyed on the
+authenticated principal when present, falling back to the client IP only for
+unauthenticated flows. The client IP is read from `X-Forwarded-For` counted
+from the right using `TRUSTED_PROXY_DEPTH` (default `1`); set it to `0` when the
+app is directly internet-facing, or to the number of trusted proxy hops. For
+brute-force-critical subjects the throttle fails **closed** if the cache backend
+is unavailable.
 
 ## Input Validation
 
