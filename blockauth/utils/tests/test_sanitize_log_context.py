@@ -5,6 +5,8 @@ change / reset-confirm success paths logged raw ``request.data`` and the
 sanitizer did not know about the ``*_password`` field names.
 """
 
+from unittest.mock import patch
+
 from blockauth.constants import REDACTION_STRING, SENSITIVE_FIELDS
 from blockauth.utils.generics import sanitize_log_context
 
@@ -234,3 +236,19 @@ def test_exact_sensitive_fields_still_redact():
 
     assert sanitized["password"] == REDACTION_STRING
     assert sanitized["token"] == REDACTION_STRING
+
+
+def test_sensitive_fields_win_over_allowlist_on_overlap():
+    # Structural invariant: SENSITIVE_FIELDS is checked before NON_SENSITIVE_KEYS,
+    # so a key that ends up in BOTH sets still redacts. Guards against a future
+    # edit that adds an overlap silently leaking a secret through the allowlist.
+    with patch(
+        "blockauth.constants.NON_SENSITIVE_KEYS",
+        {"password", "credential_id"},
+    ):
+        sanitized = sanitize_log_context({"password": "s3cr3t", "credential_id": "cred-123"})
+
+    # password is in SENSITIVE_FIELDS -> redacted despite the (hypothetical) overlap.
+    assert sanitized["password"] == REDACTION_STRING
+    # credential_id is allow-listed and not a sensitive field -> passes through.
+    assert sanitized["credential_id"] == "cred-123"
