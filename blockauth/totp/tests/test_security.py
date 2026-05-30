@@ -11,6 +11,7 @@ Tests specifically for security features:
 import unittest
 from unittest.mock import MagicMock, patch
 
+from blockauth.constants import REDACTION_STRING
 from blockauth.utils.audit import _is_sensitive, _sanitize_value, audit_trail
 from blockauth.utils.rate_limiter import get_client_ip, validate_ip_address
 
@@ -258,9 +259,9 @@ class TestAuditTrailDecorator(unittest.TestCase):
 
         if "arguments" in logged_data:
             args = logged_data["arguments"]
-            self.assertEqual(args.get("password"), "[REDACTED]")
-            self.assertEqual(args.get("secret"), "[REDACTED]")
-            self.assertNotEqual(args.get("user_id"), "[REDACTED]")
+            self.assertEqual(args.get("password"), REDACTION_STRING)
+            self.assertEqual(args.get("secret"), REDACTION_STRING)
+            self.assertNotEqual(args.get("user_id"), REDACTION_STRING)
 
     def test_decorator_preserves_function_metadata(self):
         """Decorator should preserve function name and docstring."""
