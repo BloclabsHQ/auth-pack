@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from importlib import import_module
 from typing import Any, Dict, List
@@ -7,6 +8,12 @@ from django.db import models
 
 # Import from enums module (Django-independent, no AppRegistryNotReady errors)
 from blockauth.enums import AuthenticationType
+
+# Hard ceiling on how deep the sanitizer will walk a nested structure. Logging
+# context is JSON-shaped (no cycles in practice), but a bound is cheap insurance
+# against a pathological or cyclic payload spinning forever. Anything beyond the
+# limit is redacted wholesale — fail safe, never leak.
+_MAX_REDACTION_DEPTH = 6
 
 
 def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[str, Any]:
@@ -35,9 +42,67 @@ def model_to_json(instance: models.Model, remove_fields: tuple = None) -> Dict[s
     return data
 
 
+def _is_sensitive_key(key: Any) -> bool:
+    """
+    Decide whether a mapping key names a sensitive value.
+
+    Two layers, both case-insensitive:
+      1. Exact membership in ``SENSITIVE_FIELDS`` — the known request-body and
+         token field names.
+      2. Regex match against ``SENSITIVE_PATTERNS`` — a defence-in-depth net for
+         keys we don't enumerate (``user_password``, ``x_api_token``, a decoded
+         JWT's ``signature``...), which matter most inside nested, unknown
+         structures. Over-redaction is the safe failure mode for a log sink.
+    """
+    from blockauth.constants import SENSITIVE_FIELDS, SENSITIVE_PATTERNS
+
+    lowered = str(key).lower()
+    if lowered in SENSITIVE_FIELDS:
+        return True
+    return any(re.fullmatch(pattern, lowered) for pattern in SENSITIVE_PATTERNS)
+
+
+def _redact(value: Any, depth: int) -> Any:
+    """
+    Recursively redact sensitive keys inside a nested structure.
+
+    A sensitive *key* redacts its entire value (subtree included) — we never
+    walk into something already known to be secret. A non-sensitive key whose
+    value is a ``dict``/``list`` is walked so secrets nested under innocuous keys
+    (e.g. ``{"profile": {"password": "..."}}``) don't slip through. Scalars pass
+    through untouched.
+    """
+    from blockauth.constants import REDACTION_STRING
+
+    if depth > _MAX_REDACTION_DEPTH:
+        # Too deep to reason about safely — redact wholesale rather than risk a leak.
+        return REDACTION_STRING
+
+    if isinstance(value, dict):
+        result = {}
+        for key, val in value.items():
+            if _is_sensitive_key(key):
+                result[key] = REDACTION_STRING
+            else:
+                result[key] = _redact(val, depth + 1)
+        return result
+
+    if isinstance(value, (list, tuple)):
+        redacted = [_redact(item, depth + 1) for item in value]
+        return type(value)(redacted) if isinstance(value, tuple) else redacted
+
+    return value
+
+
 def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Sanitize sensitive data from logging context.
+
+    Redaction is recursive: sensitive keys are redacted at every level of a
+    nested ``dict``/``list``, not just the top, so a secret tucked under an
+    innocuous key (a decoded JWT ``payload``, a serializer error ``detail``)
+    cannot reach a log sink. A sensitive key redacts its whole value; the walker
+    descends only through non-sensitive keys.
 
     Args:
         data: Original data dictionary
@@ -46,21 +111,12 @@ def sanitize_log_context(data: Dict[str, Any], additional_context: Dict[str, Any
     Returns:
         Sanitized dictionary safe for logging
     """
-    from blockauth.constants import REDACTION_STRING, SENSITIVE_FIELDS
-
     # Merge first, then redact: additional_context can itself carry sensitive
     # keys (e.g. a decoded JWT under "payload"), so sanitizing only `data` and
     # updating afterwards would leak those values straight through.
     merged = {**data, **(additional_context or {})}
 
-    sanitized = {}
-    for key, value in merged.items():
-        if key.lower() in SENSITIVE_FIELDS:
-            sanitized[key] = REDACTION_STRING
-        else:
-            sanitized[key] = value
-
-    return sanitized
+    return _redact(merged, depth=0)
 
 
 def get_authentication_types_display(authentication_types: List[str]) -> List[str]:
