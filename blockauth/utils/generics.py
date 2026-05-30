@@ -46,17 +46,26 @@ def _is_sensitive_key(key: Any) -> bool:
     """
     Decide whether a mapping key names a sensitive value.
 
-    Two layers, both case-insensitive:
+    Three layers, checked in order, all case-insensitive:
+      0. Allowlist (``NON_SENSITIVE_KEYS``) — keys that match a broad pattern
+         but are provably non-secret (e.g. ``credential_id``, a WebAuthn
+         identifier; ``authentication_type`` / ``authentication_types``, enum
+         display values). Checked FIRST so they are never redacted. None of
+         these appear in ``SENSITIVE_FIELDS``, so exact-field redaction is
+         unaffected by this ordering.
       1. Exact membership in ``SENSITIVE_FIELDS`` — the known request-body and
-         token field names.
+         token field names. Authoritative: an exact match always redacts,
+         regardless of the allowlist.
       2. Regex match against ``SENSITIVE_PATTERNS`` — a defence-in-depth net for
          keys we don't enumerate (``user_password``, ``x_api_token``, a decoded
          JWT's ``signature``...), which matter most inside nested, unknown
          structures. Over-redaction is the safe failure mode for a log sink.
     """
-    from blockauth.constants import SENSITIVE_FIELDS, SENSITIVE_PATTERNS
+    from blockauth.constants import NON_SENSITIVE_KEYS, SENSITIVE_FIELDS, SENSITIVE_PATTERNS
 
     lowered = str(key).lower()
+    if lowered in NON_SENSITIVE_KEYS:
+        return False
     if lowered in SENSITIVE_FIELDS:
         return True
     return any(re.fullmatch(pattern, lowered) for pattern in SENSITIVE_PATTERNS)

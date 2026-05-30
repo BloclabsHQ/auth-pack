@@ -171,3 +171,66 @@ def test_scalars_and_clean_nesting_pass_through():
 
     assert sanitized["count"] == 3
     assert sanitized["meta"] == {"ok": True, "items": ["a", "b"]}
+
+
+# ---------------------------------------------------------------------------
+# Allowlist: NON_SENSITIVE_KEYS pass through even though broad patterns match.
+# ---------------------------------------------------------------------------
+
+
+def test_credential_id_passes_through_unredacted():
+    # credential_id is a WebAuthn credential identifier (not a secret).
+    # It matches r".*credential.*" but must NOT be redacted.
+    sanitized = sanitize_log_context({"credential_id": "cred-abc123", "user": "user-1"})
+
+    assert sanitized["credential_id"] == "cred-abc123"
+    assert sanitized["user"] == "user-1"
+
+
+def test_authentication_type_passes_through_unredacted():
+    # authentication_type is an enum display value like "email" or "wallet".
+    # It matches r".*auth.*" but must NOT be redacted.
+    sanitized = sanitize_log_context({"authentication_type": "email"})
+
+    assert sanitized["authentication_type"] == "email"
+
+
+def test_authentication_types_passes_through_unredacted():
+    # authentication_types (plural) is also an enum display list — not a secret.
+    sanitized = sanitize_log_context({"authentication_types": ["email", "wallet"]})
+
+    assert sanitized["authentication_types"] == ["email", "wallet"]
+
+
+def test_allowlisted_key_nested_under_another_dict_still_passes_through():
+    # Allowlist exemption applies at every nesting level, not just top-level.
+    # Use a parent key that matches no sensitive pattern.
+    sanitized = sanitize_log_context({"fido_data": {"credential_id": "cred-xyz", "user_id": "user-2"}})
+
+    assert sanitized["fido_data"]["credential_id"] == "cred-xyz"
+    assert sanitized["fido_data"]["user_id"] == "user-2"
+
+
+def test_sensitive_key_nested_next_to_allowlisted_key_still_redacts():
+    # A real secret sitting next to an allowlisted key must still be redacted.
+    sanitized = sanitize_log_context({"fido_data": {"credential_id": "cred-xyz", "private_key": "super-secret"}})
+
+    assert sanitized["fido_data"]["credential_id"] == "cred-xyz"
+    assert sanitized["fido_data"]["private_key"] == REDACTION_STRING
+
+
+def test_pattern_matched_secrets_still_redact_when_not_allowlisted():
+    # Keys caught only by SENSITIVE_PATTERNS (not in allowlist) still redact.
+    sanitized = sanitize_log_context({"user_password": "p1", "x_api_token": "t1", "wallet_secret": "s1"})
+
+    assert sanitized["user_password"] == REDACTION_STRING
+    assert sanitized["x_api_token"] == REDACTION_STRING
+    assert sanitized["wallet_secret"] == REDACTION_STRING
+
+
+def test_exact_sensitive_fields_still_redact():
+    # Exact SENSITIVE_FIELDS entries are never overridden by the allowlist.
+    sanitized = sanitize_log_context({"password": "s3cr3t", "token": "tok-abc"})
+
+    assert sanitized["password"] == REDACTION_STRING
+    assert sanitized["token"] == REDACTION_STRING
