@@ -17,6 +17,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ---
 
+## [0.18.1] - 2026-06-04
+
+### Added
+
+- Added package-level view coverage that guards the generic `TOTPDisableView` contract: disabling TOTP remains supported after either a valid TOTP/backup code or the account password.
+
+---
+
 ## [0.16.9] - 2026-05-28
 
 ### Fixed
