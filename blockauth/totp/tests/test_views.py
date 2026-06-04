@@ -207,6 +207,89 @@ class TestViewAuthentication(unittest.TestCase):
         self.assertIn(IsAuthenticated, view.permission_classes)
 
 
+class TestTOTPDisableView(unittest.TestCase):
+    """Test TOTP disable behavior through the public view."""
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = MockUser()
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_accepts_account_password_without_totp_code(self, mock_throttles, mock_get_service):
+        """Disable should accept account password as a generic recovery path."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"password": "correct_password"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_service.verify.assert_not_called()
+        mock_service.disable.assert_called_once_with(str(self.user.id))
+        mock_throttle.record_success.assert_called_once()
+        self.assertEqual(mock_throttle.record_success.call_args.args[1], TOTPSubject.DISABLE)
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_rejects_wrong_account_password(self, mock_throttles, mock_get_service):
+        """Wrong password should not disable TOTP."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"password": "wrong_password"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"], "invalid_password")
+        mock_service.disable.assert_not_called()
+        mock_throttle.record_failure.assert_called_once()
+        self.assertEqual(mock_throttle.record_failure.call_args.args[1], TOTPSubject.DISABLE)
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_accepts_verified_code(self, mock_throttles, mock_get_service):
+        """Disable should accept a TOTP or backup code verified by the service."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"code": "BACKUP42"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+        request.META["HTTP_USER_AGENT"] = "Test Agent"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_service.verify.assert_called_once_with(
+            user_id=str(self.user.id),
+            code="BACKUP42",
+            ip_address="127.0.0.1",
+            user_agent="Test Agent",
+        )
+        mock_service.disable.assert_called_once_with(str(self.user.id))
+        mock_throttle.record_success.assert_called_once()
+        self.assertEqual(mock_throttle.record_success.call_args.args[1], TOTPSubject.DISABLE)
+
+
 class TestErrorResponses(unittest.TestCase):
     """Test error response formatting."""
 
