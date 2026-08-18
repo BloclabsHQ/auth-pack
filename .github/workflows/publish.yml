@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.FLEET_ENABLED == 'true' && fromJSON('["self-hosted","linux","x64"]') || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v6
