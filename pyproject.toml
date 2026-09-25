@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "django>=5.2.14,<7.0",
-    "pyjwt>=2.8,<3.0",
+    "pyjwt>=2.13.0,<3.0",
     "requests>=2.31,<3.0",
     "djangorestframework>=3.14,<4.0",
     "django-ratelimit>=4.1,<5.0",
