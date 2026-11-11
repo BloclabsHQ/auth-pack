@@ -1,4 +1,5 @@
 import ipaddress
+import math
 import os
 import time
 import uuid
@@ -298,6 +299,7 @@ class EnhancedThrottle(BaseThrottle):
         self.cooldown_minutes = cooldown_minutes
         self.fail_closed = fail_closed
         self._block_reason = None
+        self._wait = None
 
     def _get_identifier(self, request):
         """Get user identifier from request."""
@@ -338,6 +340,7 @@ class EnhancedThrottle(BaseThrottle):
         ip = get_client_ip(request)
         identifier = self._get_identifier(request)
         now = self.timer()
+        self._wait = None
 
         # Fail closed for brute-force-critical subjects when the cache backend
         # is unavailable/degraded — otherwise every counter reads empty and the
@@ -348,7 +351,7 @@ class EnhancedThrottle(BaseThrottle):
             return False
 
         # Check cooldown first
-        if not self._check_cooldown(ip, identifier, subject):
+        if not self._check_cooldown(ip, identifier, subject, now):
             self._block_reason = "cooldown"
             self._log_blocked(request, subject, "cooldown")
             return False
@@ -374,6 +377,7 @@ class EnhancedThrottle(BaseThrottle):
         history = [t for t in history if now - t < self.duration]
 
         if len(history) >= self.num_requests:
+            self._set_wait(min(history) + self.duration - now)
             return False
 
         history.append(now)
@@ -386,15 +390,24 @@ class EnhancedThrottle(BaseThrottle):
         count = self.cache.get(day_key, 0)
 
         if count >= self.daily_limit:
+            self._set_wait(86400 - now % 86400)
             return False
 
         self.cache.set(day_key, count + 1, 86400)
         return True
 
-    def _check_cooldown(self, ip, identifier, subject) -> bool:
+    def _check_cooldown(self, ip, identifier, subject, now) -> bool:
         """Check if in cooldown period."""
         key = f"throttle_cooldown_{subject}_{self._axis(ip, identifier)}"
-        return not self.cache.get(key, False)
+        until = self.cache.get(key, False)
+        if not until:
+            return True
+        # Entries written before the value held the end time store True.
+        self._set_wait(self.cooldown_minutes * 60 if until is True else until - now)
+        return False
+
+    def _set_wait(self, seconds) -> None:
+        self._wait = max(1, math.ceil(seconds))
 
     def record_failure(self, request, subject):
         """Record a failed attempt. Call when operation fails."""
@@ -407,7 +420,8 @@ class EnhancedThrottle(BaseThrottle):
 
         if count >= self.max_failures:
             cooldown_key = f"throttle_cooldown_{subject}_{self._axis(ip, identifier)}"
-            self.cache.set(cooldown_key, True, self.cooldown_minutes * 60)
+            cooldown_seconds = self.cooldown_minutes * 60
+            self.cache.set(cooldown_key, self.timer() + cooldown_seconds, cooldown_seconds)
             blockauth_logger.warning(
                 f"Cooldown triggered for {subject}",
                 sanitize_log_context(
@@ -450,6 +464,10 @@ class EnhancedThrottle(BaseThrottle):
     def get_block_reason(self) -> str:
         """Get reason for last block."""
         return self._block_reason
+
+    def wait(self) -> Optional[int]:
+        """Seconds until the last blocked request can succeed, for Retry-After."""
+        return self._wait
 
 
 class OTPThrottle(RequestThrottle):
