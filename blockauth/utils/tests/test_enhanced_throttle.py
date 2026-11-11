@@ -118,6 +118,55 @@ class TestEnhancedThrottleDailyLimit:
         assert throttle.get_block_reason() == "daily"
 
 
+class TestEnhancedThrottleWait:
+    """wait() returns the seconds until the blocking window ends."""
+
+    # 2026-01-01T00:00:00Z plus 10 hours.
+    NOW = 1767225600.0 + 36000
+
+    def _throttle(self, **kwargs):
+        throttle = EnhancedThrottle(**kwargs)
+        throttle.timer = lambda: self.NOW
+        return throttle
+
+    def test_daily_wait_is_seconds_until_next_utc_day(self):
+        throttle = self._throttle(rate=(100, 60), daily_limit=1, max_failures=100)
+        request = FakeRequest()
+
+        assert throttle.allow_request(request, "test_daily_wait") is True
+        assert throttle.allow_request(request, "test_daily_wait") is False
+        assert throttle.get_block_reason() == "daily"
+        assert throttle.wait() == 86400 - 36000
+
+    def test_rate_wait_is_seconds_until_oldest_request_expires(self):
+        throttle = self._throttle(rate=(2, 3600), max_failures=100)
+        request = FakeRequest()
+
+        assert throttle.allow_request(request, "test_rate_wait") is True
+        throttle.timer = lambda: self.NOW + 600
+        assert throttle.allow_request(request, "test_rate_wait") is True
+        throttle.timer = lambda: self.NOW + 900
+        assert throttle.allow_request(request, "test_rate_wait") is False
+        assert throttle.get_block_reason() == "rate"
+        assert throttle.wait() == 3600 - 900
+
+    def test_cooldown_wait_is_seconds_until_cooldown_ends(self):
+        throttle = self._throttle(rate=(100, 60), max_failures=1, cooldown_minutes=15)
+        request = FakeRequest()
+
+        throttle.record_failure(request, "test_cooldown_wait")
+        throttle.timer = lambda: self.NOW + 60
+        assert throttle.allow_request(request, "test_cooldown_wait") is False
+        assert throttle.get_block_reason() == "cooldown"
+        assert throttle.wait() == 15 * 60 - 60
+
+    def test_wait_is_none_when_allowed(self):
+        throttle = self._throttle(rate=(100, 60))
+
+        assert throttle.allow_request(FakeRequest(), "test_no_wait") is True
+        assert throttle.wait() is None
+
+
 class TestDifferentIdentifiersIsolated:
     def test_failures_isolated_per_identifier(self):
         throttle = EnhancedThrottle(rate=(100, 60), max_failures=2, cooldown_minutes=15)

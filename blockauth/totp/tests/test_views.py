@@ -155,6 +155,23 @@ class TestRateLimitingBehavior(unittest.TestCase):
         self.assertEqual(response.data["error"], "throttled")
 
     @patch("blockauth.totp.views.TOTPThrottles")
+    def test_setup_throttle_sets_retry_after(self, mock_throttles):
+        """A throttled setup carries the remaining window as Retry-After."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = False
+        mock_throttle.wait.return_value = 1234
+        mock_throttles.SETUP = mock_throttle
+
+        request = self.factory.post("/totp/setup/", {})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPSetupView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response["Retry-After"], "1234")
+
+    @patch("blockauth.totp.views.TOTPThrottles")
     def test_verify_throttle_uses_unified_envelope(self, mock_throttles):
         """The in-method throttle path must emit the same {error: throttled}/429
         envelope as every other throttled path."""

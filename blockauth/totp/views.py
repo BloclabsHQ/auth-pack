@@ -169,10 +169,14 @@ class TOTPSetupView(APIView):
             logger.warning(
                 "TOTP setup rate limit exceeded for user %s", request.user.id, extra={"user_id": str(request.user.id)}
             )
-            return Response(
+            response = Response(
                 {"error": "throttled", "message": "Too many setup attempts. Please try again later."},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
+            retry_after = throttle.wait()
+            if retry_after is not None:
+                response["Retry-After"] = str(retry_after)
+            return response
 
         serializer = TOTPSetupRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
