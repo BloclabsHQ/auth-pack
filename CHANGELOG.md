@@ -15,6 +15,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+---
+
+## [0.18.2] - 2026-11-11
+
+### Fixed
+
 - `POST /totp/setup/` now sends a `Retry-After` header on its `429` response. The value is the seconds until the blocking window ends: the next UTC day for the daily cap, the oldest request leaving the window for the hourly rate, or the end of the failure cooldown. `EnhancedThrottle.wait()` returns this value.
 
 ---
