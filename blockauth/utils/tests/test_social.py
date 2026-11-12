@@ -52,3 +52,20 @@ def test_social_login_data_tags_google_authentication_type():
 
     user.refresh_from_db()
     assert AuthenticationType.GOOGLE.value in (user.authentication_types or [])
+
+
+@pytest.mark.django_db
+def test_social_links_mixed_case_email():
+    """SEC-08: social login links the stored email and adds no row."""
+    user_model = get_block_auth_user_model()
+    user = user_model.objects.create(email="Legacy@Test.com")
+    result = social_login_data(
+        email="legacy@test.com",
+        name="",
+        provider_data={"provider": "google"},
+    )
+    assert result.created is False
+    assert result.user.pk == user.pk
+    stored = "legacy@test.com"
+    matches = user_model.objects.filter(email__iexact=stored)
+    assert matches.count() == 1

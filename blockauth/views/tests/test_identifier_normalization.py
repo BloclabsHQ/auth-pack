@@ -95,3 +95,73 @@ def test_passwordless_confirm_reuses_mixed_case_email(api_client, create_user, c
     assert response.status_code == status.HTTP_200_OK
     User = get_block_auth_user_model()
     assert User.objects.filter(email__iexact="user@example.com").count() == 1
+
+
+_STORED = "Legacy@Test.com"
+_NORMAL = "legacy@test.com"
+_NEW_PASSWORD = "NewStrongP@ss2!"
+RESET_CONFIRM_URL = reverse("password-reset-confirm")
+
+
+@pytest.mark.django_db
+def test_reset_confirm_mixed_case(api_client, create_user, create_otp):
+    """SEC-08: reset confirm finds a mixed-case stored email."""
+    user = create_user(email=_STORED, password=_PASSWORD)
+    create_otp(
+        identifier=_NORMAL,
+        subject=OTPSubject.PASSWORD_RESET,
+        code="ABC123",
+    )
+    response = api_client.post(
+        RESET_CONFIRM_URL,
+        {
+            "identifier": _NORMAL,
+            "code": "ABC123",
+            "new_password": _NEW_PASSWORD,
+            "confirm_password": _NEW_PASSWORD,
+        },
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    user.refresh_from_db()
+    assert user.check_password(_NEW_PASSWORD)
+
+
+@pytest.mark.django_db
+def test_legacy_signup_confirm_mixed_case(api_client, create_user, create_otp):
+    """SEC-08: legacy signup confirm finds a mixed-case email."""
+    user = create_user(email=_STORED, is_verified=False)
+    create_otp(
+        identifier=_NORMAL,
+        subject=OTPSubject.SIGNUP,
+        code="ABC123",
+    )
+    response = api_client.post(
+        SIGNUP_CONFIRM_URL,
+        {"identifier": _NORMAL, "code": "ABC123"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    user.refresh_from_db()
+    assert user.is_verified is True
+    User = get_block_auth_user_model()
+    assert User.objects.filter(email__iexact=_NORMAL).count() == 1
+
+
+@pytest.mark.django_db
+def test_wallet_email_confirm_mixed_case(api_client, create_user, create_otp):
+    """SEC-08: wallet email confirm finds a mixed-case email."""
+    user = create_user(email=_STORED, is_verified=False)
+    create_otp(
+        identifier=_NORMAL,
+        subject=OTPSubject.WALLET_EMAIL_VERIFICATION,
+        code="ABC123",
+    )
+    response = api_client.post(
+        SIGNUP_CONFIRM_URL,
+        {"identifier": _NORMAL, "code": "ABC123"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    user.refresh_from_db()
+    assert user.is_verified is True

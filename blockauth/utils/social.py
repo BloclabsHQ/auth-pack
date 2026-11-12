@@ -23,6 +23,7 @@ from blockauth.serializers.user_account_serializers import AuthStateResponseSeri
 from blockauth.utils.auth_state import build_user_payload, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import model_to_json
+from blockauth.utils.validators import user_identifier_lookup
 
 _User = get_block_auth_user_model()
 
@@ -67,8 +68,8 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
     # via the (provider, subject) primary key — bypassing email-based
     # `get_or_create` is the whole point of the SocialIdentity layer
     # (preventing account-linking bypass when a hostile IdP forges email
-    # claims). Legacy callers that still match by email keep the old
-    # `get_or_create` behavior — `preexisting_user` is optional.
+    # claims). Legacy callers that still match by email find the
+    # existing row regardless of case. `preexisting_user` is optional.
     #
     # Defensive: only honor `preexisting_user` when it's an instance of the
     # configured `BLOCK_AUTH_USER_MODEL`. SocialIdentityService resolves users
@@ -77,7 +78,7 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
     # class. In test envs where AUTH_USER_MODEL is the default Django User
     # but BLOCK_AUTH_USER_MODEL points at TestBlockUser, the SocialIdentity
     # user lacks BlockUser-specific attributes (`is_verified`,
-    # `add_authentication_type`); fall back to email-based `get_or_create`
+    # `add_authentication_type`); fall back to the email lookup
     # so the call doesn't AttributeError on assets that only exist on the
     # BlockUser subclass.
     preexisting_user = (provider_data or {}).get("preexisting_user") if provider_data else None
@@ -86,13 +87,17 @@ def social_login_data(email: str, name: str, provider_data: dict) -> SocialLogin
         created = False
     else:
         # Only include `first_name` in defaults if the configured user model
-        # actually defines it. Otherwise get_or_create raises FieldError on
+        # actually defines it. Otherwise create raises FieldError on
         # the create path (first OAuth signup for a new email). See #109.
         defaults = {"email": email, "is_verified": True}
         if _user_model_has_field("first_name"):
             defaults["first_name"] = name
 
-        user, created = _User.objects.get_or_create(email=email, defaults=defaults)
+        lookup = user_identifier_lookup(email, email=True)
+        user = _User.objects.filter(**lookup).first()
+        created = user is None
+        if created:
+            user = _User.objects.create(**defaults)
     user.last_login = timezone.now()
 
     # Add authentication type based on provider
