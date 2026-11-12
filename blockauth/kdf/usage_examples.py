@@ -8,6 +8,8 @@ in different scenarios and frameworks.
 # Example 1: Basic KDF Usage in Django
 # In your Django views or services
 
+from django.http import JsonResponse
+
 
 def create_user_with_wallet(request):
     """Create a user with automatic wallet generation"""
@@ -175,7 +177,7 @@ app = Flask(__name__)
 
 
 @app.route("/create-wallet", methods=["POST"])
-def create_wallet():
+def create_wallet_flask():
     """Create wallet for user"""
 
     try:
@@ -329,6 +331,7 @@ class PasswordChangeService:
             )
 
             # Generate new salt for new password
+            import json
             import os
 
             new_salt = os.urandom(32).hex()

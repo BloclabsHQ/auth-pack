@@ -372,7 +372,6 @@ class TestRateLimiting(TestCase):
     def test_rate_limit_response_format(self):
         """Test rate limit response format"""
         # Rate limit response should have specific format
-        expected_error_code = "RATE_LIMIT"
         expected_status = status.HTTP_429_TOO_MANY_REQUESTS
 
         # Verify the status code constant

@@ -62,7 +62,12 @@ Startup Validation (recommended in Django AppConfig):
     validate_totp_encryption_config()  # Raises if misconfigured
 """
 
+from typing import TYPE_CHECKING
+
 from .constants import DEFAULTS, TOTP_CONFIG_KEY, TOTP_FEATURE_FLAG, TOTPAlgorithm, TOTPConfigKeys, TOTPStatus
+
+if TYPE_CHECKING:
+    from .services import TOTPService
 
 
 def is_enabled() -> bool:

@@ -374,7 +374,7 @@ class TOTPStatusView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
-        service = get_totp_service()
+        get_totp_service()
         store = DjangoTOTP2FAStore()
 
         totp_data = store.get_by_user_id(str(request.user.id))

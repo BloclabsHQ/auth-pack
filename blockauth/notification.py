@@ -153,7 +153,7 @@ def _invalidate_existing_otps(identifier: str, subject: str) -> int:
 
     except Exception as e:
         blockauth_logger.error(
-            f"Failed to invalidate existing OTPs",
+            "Failed to invalidate existing OTPs",
             sanitize_log_context({"identifier": identifier, "subject": subject, "error": str(e)}),
         )
         # Don't raise exception - allow OTP generation to continue

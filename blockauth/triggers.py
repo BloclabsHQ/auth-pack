@@ -26,7 +26,7 @@ class DummyPreSignupTrigger(BaseTrigger):
         """
         This trigger will be called before the user signs up.
         """
-        blockauth_logger.info(f"Pre signup trigger called with context")
+        blockauth_logger.info("Pre signup trigger called with context")
 
 
 # post signup trigger
@@ -35,7 +35,7 @@ class DummyPostSignupTrigger(BaseTrigger):
         """
         This trigger will be called after the user signs up.
         """
-        blockauth_logger.info(f"Post signup trigger called with context")
+        blockauth_logger.info("Post signup trigger called with context")
 
 
 # post login trigger
@@ -44,7 +44,7 @@ class DummyPostLoginTrigger(BaseTrigger):
         """
         This trigger will be called after the user logs in.
         """
-        blockauth_logger.info(f"Post login trigger called with context")
+        blockauth_logger.info("Post login trigger called with context")
 
 
 # post password change trigger
@@ -53,7 +53,7 @@ class DummyPostPasswordChangeTrigger(BaseTrigger):
         """
         This trigger will be called after the user changes their password.
         """
-        blockauth_logger.info(f"Post password change trigger called with context")
+        blockauth_logger.info("Post password change trigger called with context")
 
 
 # post password reset trigger
@@ -62,7 +62,7 @@ class DummyPostPasswordResetTrigger(BaseTrigger):
         """
         This trigger will be called after the user resets their password.
         """
-        blockauth_logger.info(f"Post password reset trigger called with context")
+        blockauth_logger.info("Post password reset trigger called with context")
 
 
 class DummyPostWalletLinkTrigger(BaseTrigger):

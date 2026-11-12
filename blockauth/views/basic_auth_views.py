@@ -255,7 +255,7 @@ class SignUpConfirmView(APIView):
                     user.is_verified = True
                     user.save()
 
-                user_data = model_to_json(user, remove_fields=("password",))
+                model_to_json(user, remove_fields=("password",))
 
                 # Call POST_SIGNUP_TRIGGER with user data
                 post_signup_trigger = get_config("POST_SIGNUP_TRIGGER")()

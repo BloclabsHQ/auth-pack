@@ -346,7 +346,7 @@ class PasswordlessKDFService:
 
             return address
 
-        except Exception as e:
+        except Exception:
             # Use secure error handling to prevent information disclosure
             # Return generic error message to prevent information disclosure
             raise ValueError("Unable to retrieve wallet address. Please try again.")
@@ -459,7 +459,7 @@ class KeyDerivationService:
                 "deterministic": False,
             }
 
-        except Exception as e:
+        except Exception:
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
 
@@ -532,7 +532,7 @@ class KeyDerivationService:
 
             return address
 
-        except Exception as e:
+        except Exception:
             # Use secure error handling to prevent information disclosure
             # Return generic error message to prevent information disclosure
             raise ValueError("Unable to retrieve wallet address. Please try again.")
@@ -968,7 +968,7 @@ class KDFManager:
 
             return private_key
 
-        except Exception as e:
+        except Exception:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please check your credentials.")
 
@@ -988,7 +988,7 @@ class KDFManager:
 
             return private_key
 
-        except Exception as e:
+        except Exception:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please try again.")
 
@@ -1047,7 +1047,7 @@ class KDFManager:
 
             return address
 
-        except Exception as e:
+        except Exception:
             # Return generic error message to prevent information disclosure
             raise ValueError("Unable to retrieve wallet address. Please try again.")
 

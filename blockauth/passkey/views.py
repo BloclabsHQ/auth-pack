@@ -487,7 +487,7 @@ class PasskeyCredentialDetailView(PasskeyBaseView):
                 }
             )
 
-        except CredentialNotFoundError as e:
+        except CredentialNotFoundError:
             blockauth_logger.warning(
                 "Passkey credential not found", sanitize_log_context({"credential_id": str(credential_id)})
             )
@@ -548,7 +548,7 @@ class PasskeyCredentialDetailView(PasskeyBaseView):
                 }
             )
 
-        except CredentialNotFoundError as e:
+        except CredentialNotFoundError:
             blockauth_logger.warning(
                 "Passkey credential not found for update", sanitize_log_context({"credential_id": str(credential_id)})
             )
@@ -585,7 +585,7 @@ class PasskeyCredentialDetailView(PasskeyBaseView):
 
             return Response(status=status.HTTP_204_NO_CONTENT)
 
-        except CredentialNotFoundError as e:
+        except CredentialNotFoundError:
             blockauth_logger.warning(
                 "Passkey credential not found for delete", sanitize_log_context({"credential_id": str(credential_id)})
             )
