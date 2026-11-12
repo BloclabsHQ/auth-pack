@@ -13,6 +13,7 @@ from blockauth.docs.auth_docs import (
     basic_login_docs,
     email_change_confirm_docs,
     email_change_docs,
+    logout_docs,
     password_change_docs,
     password_reset_confirm_docs,
     password_reset_docs,
@@ -32,6 +33,7 @@ from blockauth.serializers.user_account_serializers import (
     BasicLoginSerializer,
     EmailChangeConfirmationSerializer,
     EmailChangeRequestSerializer,
+    LogoutSerializer,
     PasswordChangeSerializer,
     PasswordlessLoginConfirmationSerializer,
     PasswordlessLoginResponseSerializer,
@@ -735,7 +737,9 @@ class AuthLogoutView(APIView):
     """Revoke the presented refresh family and access token (SEC-02)."""
 
     permission_classes = (IsAuthenticated,)
+    serializer_class = LogoutSerializer
 
+    @extend_schema(**logout_docs)
     def post(self, request):
         refresh_token_value = request.data.get("refresh_token")
         if not refresh_token_value:

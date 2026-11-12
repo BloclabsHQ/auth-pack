@@ -12,6 +12,7 @@ from blockauth.serializers.user_account_serializers import (
     BasicLoginSerializer,
     EmailChangeConfirmationSerializer,
     EmailChangeRequestSerializer,
+    LogoutSerializer,
     PasswordChangeSerializer,
     PasswordlessLoginConfirmationSerializer,
     PasswordlessLoginResponseSerializer,
@@ -772,6 +773,20 @@ refresh_token_docs = {
             description="Internal server error",
             response={"type": "object", "properties": {"detail": {"type": "string"}, "error_code": {"type": "string"}}},
         ),
+    },
+}
+
+
+logout_docs = {
+    "operation_id": "logout",
+    "summary": "Log out",
+    "description": "Revoke the presented refresh token and access token.",
+    "tags": ["Token Management"],
+    "request": LogoutSerializer,
+    "responses": {
+        204: OpenApiResponse(description="Logged out"),
+        400: OpenApiResponse(description="Refresh token is required"),
+        401: OpenApiResponse(description="Authentication failed"),
     },
 }
 
