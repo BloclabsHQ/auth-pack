@@ -154,11 +154,6 @@ signup_docs = {
                     },
                     status_codes=[400],
                 ),
-                OpenApiExample(
-                    "User Already Exists",
-                    value={"detail": "User with this email already exists.", "error_code": "4002"},
-                    status_codes=[400],
-                ),
             ],
         ),
         429: OpenApiResponse(

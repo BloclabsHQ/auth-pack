@@ -1,5 +1,6 @@
 import logging
 
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import EmailValidator
 from django.utils.text import format_lazy
 from rest_framework import serializers
@@ -24,12 +25,19 @@ logger = logging.getLogger(__name__)
 
 # Single instance of password validator to avoid duplicate error messages
 _password_validator = BlockAuthPasswordValidator()
+# Hashed once so an unknown login still runs the password hasher (SEC-07).
+_DUMMY_PASSWORD_HASH = make_password("blockauth-dummy-login")
+_BAD_LOGIN = "Invalid credentials. Please check your email/phone and password."
 
 
 def _reject_django_password(password: str, user, field: str) -> None:
     errors = django_password_errors(password, user)
     if errors:
         raise ValidationError(detail={field: errors}, code=4007)
+
+
+def _reject_login() -> None:
+    raise ValidationError(detail={"non_field_errors": _BAD_LOGIN}, code=4005)
 
 
 """account basic auth related serializers"""
@@ -45,25 +53,17 @@ class SignUpRequestSerializer(OTPRequestSerializer):
 
     def validate(self, data):
         super().validate(data)
+        _reject_django_password(data["password"], None, "password")
 
         identifier = data.get("identifier")
-        if data.get("email") and _User.objects.filter(**user_identifier_lookup(identifier, email=True)).exists():
-            logger.info("Signup attempted with existing email.")
-            raise ValidationError(
-                detail={"identifier": "Unable to complete registration with the provided information."},
-                code=4002,
-            )
-
-        if (
-            data.get("phone_number")
-            and _User.objects.filter(**user_identifier_lookup(identifier, email=False)).exists()
-        ):
-            logger.info("Signup attempted with existing phone number.")
-            raise ValidationError(
-                detail={"identifier": "Unable to complete registration with the provided information."},
-                code=4002,
-            )
-        _reject_django_password(data["password"], None, "password")
+        exists = False
+        if data.get("email"):
+            lookup = user_identifier_lookup(identifier, email=True)
+            exists = _User.objects.filter(**lookup).exists()
+        elif data.get("phone_number"):
+            lookup = user_identifier_lookup(identifier, email=False)
+            exists = _User.objects.filter(**lookup).exists()
+        data["_account_exists"] = exists
         return data
 
 
@@ -137,24 +137,20 @@ class BasicLoginSerializer(serializers.Serializer):
                 )
             data["phone_number"] = identifier
 
-        # validate credentials — use same message for all failures to prevent enumeration
         query_params = user_identifier_lookup(identifier, email=bool(data.get("email")))
         user = _User.objects.filter(**query_params).first()
 
-        if not user or not user.check_password(data["password"]):
-            raise ValidationError(
-                detail={"non_field_errors": "Invalid credentials. Please check your email/phone and password."},
-                code=4005,
-            )
+        if user is None:
+            check_password(data["password"], _DUMMY_PASSWORD_HASH)
+            _reject_login()
+        if not user.check_password(data["password"]):
+            _reject_login()
 
         # Inactive accounts get the same generic failure as bad
         # credentials so the response is not an enumeration signal.
         # Checked only after the password verifies.
         if getattr(user, "is_active", True) is False:
-            raise ValidationError(
-                detail={"non_field_errors": "Invalid credentials. Please check your email/phone and password."},
-                code=4005,
-            )
+            _reject_login()
 
         if not user.is_verified:
             raise ValidationError(

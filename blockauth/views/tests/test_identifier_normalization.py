@@ -4,7 +4,8 @@ import pytest
 from django.urls import reverse
 from rest_framework import status
 
-from blockauth.models.otp import OTPSubject
+from blockauth.models.otp import OTP, OTPSubject
+from blockauth.utils.config import get_block_auth_user_model
 
 SIGNUP_URL = reverse("signup")
 SIGNUP_CONFIRM_URL = reverse("signup-confirm")
@@ -60,7 +61,7 @@ def test_otp_confirms_with_other_email_case(api_client, create_otp):
 
 @pytest.mark.django_db
 def test_signup_does_not_open_a_second_account_for_email_case(api_client, create_user):
-    """SEC-08: signup with another case of an existing email is rejected."""
+    """SEC-08: another case of an existing email does not open an account."""
     create_user(email="User@Example.com", password=_PASSWORD, is_verified=True)
     response = api_client.post(
         SIGNUP_URL,
@@ -72,7 +73,11 @@ def test_signup_does_not_open_a_second_account_for_email_case(api_client, create
         },
         format="json",
     )
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.status_code == status.HTTP_200_OK
+    User = get_block_auth_user_model()
+    email = "user@example.com"
+    assert User.objects.filter(email__iexact=email).count() == 1
+    assert not OTP.objects.filter(identifier__iexact=email).exists()
 
 
 @pytest.mark.django_db

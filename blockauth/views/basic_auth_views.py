@@ -129,6 +129,16 @@ class SignUpView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
+            message = f"{data['verification_type']} sent via {data['method']}."
+            if data.get("_account_exists"):
+                blockauth_logger.info(
+                    "Signup attempted for an existing account.",
+                    sanitize_log_context(request.data),
+                )
+                return Response(
+                    {"message": message},
+                    status=status.HTTP_200_OK,
+                )
 
             pre_signup_trigger = get_config("PRE_SIGNUP_TRIGGER")()
             pre_signup_trigger.trigger(context=data)
@@ -147,7 +157,8 @@ class SignUpView(APIView):
                 f"User signup {data['verification_type']} sent", sanitize_log_context(request.data)
             )
             return Response(
-                {"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK
+                {"message": message},
+                status=status.HTTP_200_OK,
             )
         except ValidationError as e:
             blockauth_logger.warning(

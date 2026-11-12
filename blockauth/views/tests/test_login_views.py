@@ -7,7 +7,7 @@ Tests the HTTP contract — status codes and response keys — not implementatio
 from unittest.mock import patch
 
 import pytest
-from django.contrib.auth.hashers import PBKDF2PasswordHasher
+from django.contrib.auth.hashers import check_password
 from django.urls import reverse
 from rest_framework import status
 
@@ -199,11 +199,8 @@ class TestBasicLoginView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_unknown_login_runs_password_hasher(self, api_client):
-        with patch.object(
-            PBKDF2PasswordHasher,
-            "verify",
-            wraps=PBKDF2PasswordHasher.verify,
-        ) as hasher:
+        module = "blockauth.serializers.user_account_serializers"
+        with patch(module + ".check_password", wraps=check_password) as hasher:
             response = api_client.post(
                 BASIC_LOGIN_URL,
                 {

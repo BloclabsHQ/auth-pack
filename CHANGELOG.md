@@ -17,6 +17,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Changed
 
+- Signup for an existing account returns the same 200 body as a new signup and does not send an OTP. Login for an unknown account still runs password verification. Error codes on the new-account path are unchanged (SEC-07).
 - Wallet linking requires a server-issued challenge bound to the account, an allowed domain, and a chain. A client-built message is rejected. A consumed challenge cannot be reused. A link challenge is not accepted by login, and that rejection leaves the nonce unused. Link verification failures return a machine-readable code (SEC-05, SEC-21). Call `POST /wallet/link/challenge/`, sign the returned plaintext, then `POST /wallet/link/`.
 - Releases now come from `main`. The `dev` branch is retired as a release branch; its changes through `0.18.2` are merged into `main`.
 

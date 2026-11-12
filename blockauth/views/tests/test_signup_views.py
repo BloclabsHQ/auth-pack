@@ -106,13 +106,15 @@ class TestSignUpView:
         assert not User.objects.filter(email="new@test.com").exists(), "User row must still not exist until confirm"
 
     def test_signup_duplicate_email_blocked_after_confirm(self, api_client, create_user):
-        """Existing verified user blocks re-signup (code 4002 unchanged)."""
+        """An existing account gets the same signup response and no OTP."""
         create_user(email="exists@test.com", is_verified=True)
         response = api_client.post(
             SIGNUP_URL,
             {"identifier": "exists@test.com", "method": "email", "verification_type": "otp", "password": _TEST_PW},
         )
-        assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == {"message": "otp sent via email."}
+        assert not OTP.objects.filter(identifier="exists@test.com").exists()
 
     def test_existing_signup_matches_new(self, api_client, create_user):
         create_user(email="exists@test.com", is_verified=True)
