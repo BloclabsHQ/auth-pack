@@ -36,15 +36,7 @@ If the wallet address is not associated with an existing account, a new account 
 
 ## Replay Protection
 
-Signed messages have a TTL to prevent replay attacks. Configure with:
-
-```python
-BLOCK_AUTH_SETTINGS = {
-    'WALLET_MESSAGE_TTL': 300,  # 5 minutes (default)
-}
-```
-
-Messages older than the TTL are rejected.
+Login and link challenges are single-use. A challenge expires after `WALLET_LOGIN_NONCE_TTL_SECONDS` (a Django setting, default 300 seconds). `WALLET_MESSAGE_TTL` is unused.
 
 ## Add Email to Wallet Account
 

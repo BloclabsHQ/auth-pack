@@ -7,7 +7,10 @@ Separated from business logic for better maintainability and organization.
 
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse
 
-from blockauth.serializers.wallet_serializers import WalletEmailAddSerializer, WalletLoginSerializer
+from blockauth.serializers.wallet_auth_serializers import (
+    WalletLoginRequestSerializer,
+)
+from blockauth.serializers.wallet_serializers import WalletEmailAddSerializer
 
 # =============================================================================
 # WALLET AUTHENTICATION DOCUMENTATION
@@ -17,36 +20,20 @@ wallet_login_docs = {
     "operation_id": "wallet_login",
     "summary": "Ethereum Wallet Authentication",
     "description": (
-        "Authenticate user using Ethereum wallet signature verification\n"
+        "Authenticate with an Ethereum wallet signature.\n"
         "\n"
         "**Process:**\n"
-        "1. User provides wallet address, message, and signature\n"
-        "2. System verifies signature using Ethereum cryptography\n"
-        "3. Creates or retrieves user account\n"
-        "4. Returns JWT access and refresh tokens\n"
+        "1. Call POST /login/wallet/challenge/.\n"
+        "2. Sign the returned plaintext and submit it here.\n"
+        "3. The server checks the signature and the challenge.\n"
+        "4. The account is created or loaded, then tokens return.\n"
         "\n"
-        "**Security Features:**\n"
-        "- Cryptographic signature verification\n"
-        "- Nonce-based replay protection\n"
-        "- Wallet address validation\n"
-        "- Automatic user creation for new wallets\n"
-        "\n"
-        "**Message Format:**\n"
-        "The message to sign follows this format:\n"
-        "Welcome to BlockAuth!\n"
-        "\n"
-        "Please sign this message to authenticate with your wallet.\n"
-        "\n"
-        "Wallet Address: {wallet_address}\n"
-        "Nonce: {nonce}\n"
-        "Timestamp: {timestamp}\n"
-        "\n"
-        "This signature will be used to authenticate your account.\n"
+        "**Message:**\n"
+        "Submit the server-issued plaintext unchanged.\n"
         "\n"
         "**Prerequisites:**\n"
         "- Valid Ethereum wallet address\n"
-        "- Properly signed message with correct format\n"
-        "- Valid signature that matches the wallet address\n"
+        "- Signature over the server-issued plaintext\n"
         "\n"
         "**Use Cases:**\n"
         "- DeFi application user authentication\n"
@@ -56,13 +43,13 @@ wallet_login_docs = {
     ),
     "tags": ["Wallet"],
     "deprecated": False,
-    "request": WalletLoginSerializer,
+    "request": WalletLoginRequestSerializer,
     "examples": [
         OpenApiExample(
             "New Wallet User",
             value={
                 "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                "message": "Welcome to BlockAuth!\n\nPlease sign this message to authenticate with your wallet.\n\nWallet Address: 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6\nNonce: 1234567890\nTimestamp: 1640995200\n\nThis signature will be used to authenticate your account.",
+                "message": "<server-issued plaintext>",
                 "signature": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b",
             },
             request_only=True,
@@ -72,7 +59,7 @@ wallet_login_docs = {
             "Existing Wallet User",
             value={
                 "wallet_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
-                "message": "Welcome to BlockAuth!\n\nPlease sign this message to authenticate with your wallet.\n\nWallet Address: 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6\nNonce: 1234567891\nTimestamp: 1640995201\n\nThis signature will be used to authenticate your account.",
+                "message": "<server-issued plaintext>",
                 "signature": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1c",
             },
             request_only=True,

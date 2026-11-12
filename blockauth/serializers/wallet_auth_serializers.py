@@ -1,10 +1,6 @@
 """DRF serializers for the SIWE-backed wallet login flow (issue #90).
 
-These serializers are specific to the new ``/login/wallet/challenge/`` and
-the overridden ``/login/wallet/`` endpoints. The legacy JSON-message
-``WalletLoginSerializer`` in ``blockauth.serializers.wallet_serializers``
-remains in place for backwards compatibility but is no longer wired into the
-default URLconf.
+These serializers cover ``/login/wallet/challenge/`` and ``/login/wallet/``.
 """
 
 from rest_framework import serializers

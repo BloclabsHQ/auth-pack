@@ -39,7 +39,7 @@ All settings are configured in `BLOCK_AUTH_SETTINGS` in your Django settings mod
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `WALLET_MESSAGE_TTL` | `300` | Signed wallet message expiry in seconds (5 minutes) |
+| `WALLET_MESSAGE_TTL` | `300` | Unused. Nonce lifetime is the Django setting `WALLET_LOGIN_NONCE_TTL_SECONDS` (default 300 seconds). |
 
 ## Apple Sign-In
 

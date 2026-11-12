@@ -11,6 +11,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Added
 
+### Removed
+
+- `WalletAuthenticator` and `WalletLoginSerializer` are removed (SEC-05). Login is `POST /login/wallet/challenge/`, then sign the returned plaintext and call `POST /login/wallet/`. Linking an additional wallet is `POST /wallet/link/challenge/`, then `POST /wallet/link/`. `WALLET_MESSAGE_TTL` no longer affects verification. Nonce lifetime is the Django setting `WALLET_LOGIN_NONCE_TTL_SECONDS`.
+
 ### Changed
 
 - Wallet linking requires a server-issued challenge bound to the account, an allowed domain, and a chain. A client-built message is rejected. A consumed challenge cannot be reused. A link challenge is not accepted by login, and that rejection leaves the nonce unused. Link verification failures return a machine-readable code (SEC-05, SEC-21). Call `POST /wallet/link/challenge/`, sign the returned plaintext, then `POST /wallet/link/`.
