@@ -13,9 +13,12 @@ Security-focused test suite covering:
 Per security standards requirements.
 """
 
+import hashlib
+import hmac
 import unittest
 from datetime import datetime, timezone
 
+from ..config import _get_totp_config_dict
 from ..constants import DEFAULTS, TOTPAlgorithm, TOTPErrorCodes, TOTPStatus
 from ..exceptions import (
     TOTPAccountLockedError,
@@ -30,7 +33,11 @@ from ..exceptions import (
     TOTPTooManyAttemptsError,
     TOTPVerificationError,
 )
-from ..services.totp_service import SetupResult, TOTPService
+from ..services.totp_service import (
+    SetupResult,
+    TOTPService,
+    backup_code_pepper,
+)
 from ..storage.base import ITOTP2FAStore, TOTP2FAData
 
 
@@ -474,6 +481,33 @@ class TestBackupCodes(unittest.TestCase):
         code = TOTPService.generate_totp(secret)[0]
         self.service.confirm_setup(user_id, code)
         return secret, backup_codes
+
+    def test_backup_codes_are_16_hex_and_not_unsalted_sha256(self):
+        """SEC-13: default codes are 16 hex characters."""
+        result = self.service.setup_totp(user_id="user123", account_name="test@example.com")
+        codes = result.backup_codes
+        self.assertEqual(len(codes), 10)
+        code = codes[0]
+        self.assertEqual(len(code), 16)
+        self.assertTrue(all(char in "0123456789ABCDEF" for char in code))
+        stored = self.store.get_backup_codes("user123")[0]
+        unsalted = hashlib.sha256(code.encode()).hexdigest()
+        pepper = backup_code_pepper("totp-test-encryption-key")
+        expected = hmac.new(pepper, code.encode("utf-8"), hashlib.sha256).hexdigest()
+        self.assertNotEqual(stored, unsalted)
+        self.assertEqual(stored, expected)
+
+    def test_setup_fails_without_encryption_key(self):
+        """SEC-13: backup codes require TOTP_CONFIG.ENCRYPTION_KEY."""
+        config = _get_totp_config_dict()
+        saved = config.pop("ENCRYPTION_KEY", None)
+        try:
+            with self.assertRaises(TOTPEncryptionRequiredError) as context:
+                self.service.setup_totp(user_id="user123", account_name="test@example.com")
+            self.assertIn("TOTP_CONFIG.ENCRYPTION_KEY", str(context.exception))
+        finally:
+            if saved is not None:
+                config["ENCRYPTION_KEY"] = saved
 
     def test_backup_codes_generated_on_setup(self):
         """Backup codes should be generated during setup."""

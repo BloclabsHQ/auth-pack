@@ -133,6 +133,14 @@ def _load_config_from_settings() -> TOTPConfiguration:
     return config
 
 
+def get_totp_encryption_key() -> Optional[str]:
+    """Return the configured TOTP encryption key, or None when unset."""
+    key = _get_totp_config_dict().get(TOTPConfigKeys.ENCRYPTION_KEY)
+    if not isinstance(key, str) or not key:
+        return None
+    return key
+
+
 def reset_config() -> None:
     """Reset the cached configuration. Useful for testing."""
     global _config_instance

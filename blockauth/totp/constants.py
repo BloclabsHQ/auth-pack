@@ -129,7 +129,7 @@ DEFAULTS = {
     TOTPConfigKeys.WINDOW: 1,  # ±1 time step tolerance for clock skew
     TOTPConfigKeys.SECRET_LENGTH: 32,  # 256 bits (security standards requirement)
     TOTPConfigKeys.BACKUP_CODES_COUNT: 10,
-    TOTPConfigKeys.BACKUP_CODE_LENGTH: 8,
+    TOTPConfigKeys.BACKUP_CODE_LENGTH: 16,
     TOTPConfigKeys.MAX_ATTEMPTS: 5,
     TOTPConfigKeys.LOCKOUT_DURATION: 300,  # 5 minutes in seconds
     TOTPConfigKeys.REQUIRE_CONFIRMATION: True,
