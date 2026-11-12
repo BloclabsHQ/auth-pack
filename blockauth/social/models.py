@@ -40,4 +40,4 @@ class SocialIdentity(models.Model):
         app_label = "blockauth"
         db_table = "blockauth_social_identity"
         unique_together = (("provider", "subject"),)
-        indexes = [models.Index(fields=["user", "provider"])]
+        indexes = [models.Index(fields=["user", "provider"], name="social_iden_user_id_bc8105_idx")]
