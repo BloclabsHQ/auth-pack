@@ -114,6 +114,27 @@ class TestSignUpView:
         )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_existing_signup_matches_new(self, api_client, create_user):
+        create_user(email="exists@test.com", is_verified=True)
+        existing = api_client.post(
+            SIGNUP_URL,
+            {
+                "identifier": "exists@test.com",
+                "method": "email",
+                "verification_type": "otp",
+                "password": _TEST_PW,
+            },
+            format="json",
+        )
+        fresh = api_client.post(
+            SIGNUP_URL,
+            {**_SIGNUP_REQUEST, "password": _TEST_PW},
+            format="json",
+        )
+        assert existing.status_code == fresh.status_code
+        assert existing.data == fresh.data
+        assert not OTP.objects.filter(identifier="exists@test.com").exists()
+
     def test_signup_weak_password(self, api_client):
         response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": "weak"})
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)

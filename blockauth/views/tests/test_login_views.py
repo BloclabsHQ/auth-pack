@@ -4,7 +4,10 @@ Tests for login views: BasicAuthLoginView, PasswordlessLoginView, PasswordlessLo
 Tests the HTTP contract — status codes and response keys — not implementation details.
 """
 
+from unittest.mock import patch
+
 import pytest
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.urls import reverse
 from rest_framework import status
 
@@ -194,6 +197,23 @@ class TestBasicLoginView:
             },
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unknown_login_runs_password_hasher(self, api_client):
+        with patch.object(
+            PBKDF2PasswordHasher,
+            "verify",
+            wraps=PBKDF2PasswordHasher.verify,
+        ) as hasher:
+            response = api_client.post(
+                BASIC_LOGIN_URL,
+                {
+                    "identifier": "nobody@test.com",
+                    "password": _TEST_PASSWORD,
+                },
+                format="json",
+            )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert hasher.called
 
     def test_login_unverified_user(self, api_client, create_user):
         create_user(email="user@test.com", password="StrongP@ss1!", is_verified=False)
