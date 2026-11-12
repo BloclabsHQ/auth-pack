@@ -104,15 +104,13 @@ def get_client_ip(request) -> str:
     if depth > 0:
         x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
 
-        if x_forwarded_for:
-            # Security: Limit header length to prevent DoS
-            if len(x_forwarded_for) > MAX_IP_HEADER_LENGTH:
-                blockauth_logger.warning(
-                    "X-Forwarded-For header exceeds maximum length",
-                    sanitize_log_context({"length": len(x_forwarded_for)}),
-                )
-                x_forwarded_for = x_forwarded_for[:MAX_IP_HEADER_LENGTH]
-
+        if x_forwarded_for and len(x_forwarded_for) > MAX_IP_HEADER_LENGTH:
+            # Ignore the whole header. Do not truncate it (SEC-11).
+            blockauth_logger.warning(
+                "X-Forwarded-For header exceeds maximum length",
+                sanitize_log_context({"length": len(x_forwarded_for)}),
+            )
+        elif x_forwarded_for:
             # "client, proxy1, proxy2" — trust the rightmost `depth` hops and
             # treat the next value in from the right as the real client.
             parts = [p.strip() for p in x_forwarded_for.split(",") if p.strip()]

@@ -13,7 +13,11 @@ from unittest.mock import MagicMock, patch
 
 from blockauth.constants import REDACTION_STRING
 from blockauth.utils.audit import _is_sensitive, _sanitize_value, audit_trail
-from blockauth.utils.rate_limiter import get_client_ip, validate_ip_address
+from blockauth.utils.rate_limiter import (
+    MAX_IP_HEADER_LENGTH,
+    get_client_ip,
+    validate_ip_address,
+)
 
 # =============================================================================
 # IP Address Validation Tests
@@ -163,6 +167,48 @@ class TestGetClientIP(unittest.TestCase):
     def test_chain_shorter_than_depth_falls_back_to_remote_addr(self, _mock_depth):
         """A chain shorter than the trusted depth is not trusted."""
         request = self._make_request(remote_addr="10.0.0.9", x_forwarded_for="192.0.2.30")
+        result = get_client_ip(request)
+        self.assertEqual(result, "10.0.0.9")
+
+    def test_oversized_forwarded_header_uses_remote_addr(self):
+        """A header past the length limit is ignored (SEC-11)."""
+        left = "203.0.113.9"
+        trusted = "198.51.100.20"
+        remote = "10.0.0.8"
+        gap = MAX_IP_HEADER_LENGTH - len(left)
+        header = left + "," + (" " * gap) + trusted
+        self.assertGreater(len(header), MAX_IP_HEADER_LENGTH)
+        self.assertGreater(header.find(trusted), MAX_IP_HEADER_LENGTH)
+        request = self._make_request(
+            remote_addr=remote,
+            x_forwarded_for=header,
+        )
+        result = get_client_ip(request)
+        self.assertEqual(result, remote)
+
+    @patch(
+        "blockauth.utils.rate_limiter._get_trusted_proxy_depth",
+        return_value=2,
+    )
+    def test_exact_depth_chain_uses_the_client(self, _mock_depth):
+        """A chain as long as the trusted depth uses its leftmost entry."""
+        request = self._make_request(
+            remote_addr="10.0.0.8",
+            x_forwarded_for="203.0.113.7, 198.51.100.4",
+        )
+        result = get_client_ip(request)
+        self.assertEqual(result, "203.0.113.7")
+
+    @patch(
+        "blockauth.utils.rate_limiter._get_trusted_proxy_depth",
+        return_value=3,
+    )
+    def test_short_chain_uses_remote_addr(self, _mock_depth):
+        """A chain shorter than the trusted depth uses REMOTE_ADDR."""
+        request = self._make_request(
+            remote_addr="10.0.0.9",
+            x_forwarded_for="203.0.113.7, 198.51.100.4",
+        )
         result = get_client_ip(request)
         self.assertEqual(result, "10.0.0.9")
 

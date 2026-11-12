@@ -22,6 +22,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- An `X-Forwarded-For` value longer than 500 characters is ignored. The client IP falls back to `REMOTE_ADDR`. The header is not truncated (SEC-11).
 - Google, Facebook, and LinkedIn callbacks, Google native sign-in, and token refresh now return 429 after 30 requests per minute from the same client IP (SEC-04). The identifier field does not choose the bucket. Callback and native checks run before the provider token exchange or id_token verification. A callback 429 clears the callback cookies.
 - Signup, signup confirm, password-reset confirm, and email-change confirm now return 429 when their limit is reached (SEC-04). Confirm limits match TOTP confirm and deny when the cache is unavailable. Signup uses the same send limit as signup resend.
 - Per-request throttle fields stay with the calling thread. `wait()`, `get_block_reason()`, and `get_error_message()` keep their existing callers. Login and passwordless-confirm throttles deny the request when the cache is unavailable (SEC-11). Cache key formats are unchanged.
