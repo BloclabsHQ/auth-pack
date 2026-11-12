@@ -90,6 +90,10 @@ _DEFAULT_STATEMENT = (
 _LINK_STATEMENT_PREFIX = "Link this wallet to account "
 
 
+def _statement_is_link(statement: str) -> bool:
+    return statement.startswith(_LINK_STATEMENT_PREFIX)
+
+
 def link_statement(user_id) -> str:
     """Statement that binds a link challenge to one account."""
     subject = str(user_id).strip()
@@ -369,14 +373,19 @@ class WalletLoginService:
             if nonce_row.expires_at <= now:
                 raise WalletLoginError("nonce_expired", "Nonce is expired")
 
-            if expected_statement is not None:
-                signed_statement = parsed.statement or ""
-                stored_statement = nonce_row.statement or ""
-                if signed_statement != expected_statement or stored_statement != expected_statement:
+            signed_statement = parsed.statement or ""
+            stored_statement = nonce_row.statement or ""
+            if expected_statement is None:
+                if _statement_is_link(signed_statement) or _statement_is_link(stored_statement):
                     raise WalletLoginError(
                         "statement_mismatch",
-                        "Signed challenge is not bound to this account",
+                        "Signed challenge is not a login challenge",
                     )
+            elif signed_statement != expected_statement or stored_statement != expected_statement:
+                raise WalletLoginError(
+                    "statement_mismatch",
+                    "Signed challenge is not bound to this account",
+                )
 
             # Signature verification. We reject malleable signatures outright
             # so there's exactly one canonical (v, r, s) per signed message.

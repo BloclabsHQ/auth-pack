@@ -9,6 +9,7 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 from rest_framework.test import APIClient
 
+from blockauth.models.wallet_login_nonce import WalletLoginNonce
 from blockauth.utils.config import get_block_auth_user_model
 
 _KEY = "0x" + "3" * 64
@@ -109,3 +110,34 @@ def test_link_challenge_is_bound_to_the_authenticated_account():
     other.refresh_from_db()
     assert response.status_code != 200
     assert other.wallet_address is None
+
+
+@pytest.mark.django_db
+def test_link_challenge_is_rejected_by_login():
+    """SEC-05: a link challenge is not accepted as a login challenge.
+
+    The login attempt does not consume the nonce.
+    """
+    user = _user("link-as-login@example.com")
+    client = APIClient()
+    client.force_authenticate(user=user)
+    issued = client.post(
+        reverse("wallet-link-challenge"),
+        {"address": _ACCOUNT.address},
+        format="json",
+    )
+    assert issued.status_code == 200
+    message = issued.data["message"]
+    response = client.post(
+        reverse("wallet-login"),
+        {
+            "wallet_address": _ACCOUNT.address,
+            "message": message,
+            "signature": _sign(message),
+        },
+        format="json",
+    )
+    assert response.status_code != 200
+    assert "access" not in response.data
+    row = WalletLoginNonce.objects.get(nonce=issued.data["nonce"])
+    assert row.consumed_at is None
