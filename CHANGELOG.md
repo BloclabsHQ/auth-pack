@@ -22,6 +22,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- Google, Facebook, and LinkedIn callbacks, and Google native sign-in, now return 429 when their per-IP limit is reached (SEC-04). The check runs before the provider token exchange or id_token verification. A callback 429 clears the callback cookies.
 - Signup, signup confirm, password-reset confirm, email-change confirm, and token refresh now return 429 when their limit is reached (SEC-04). Confirm limits match TOTP confirm and deny when the cache is unavailable. Signup uses the same send limit as signup resend. Refresh is limited per IP.
 - Per-request throttle fields stay with the calling thread. `wait()`, `get_block_reason()`, and `get_error_message()` keep their existing callers. Login and passwordless-confirm throttles deny the request when the cache is unavailable (SEC-11). Cache key formats are unchanged.
 - JWT decode requires the `exp`, `iat`, `type`, and `jti` claims. Only HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384, ES512, PS256, PS384, and PS512 are accepted. A symmetric signing key shorter than 32 characters prevents boot when `DEBUG` is False and logs a warning when `DEBUG` is True. The boot check uses the same key that signing uses. A token with no `type` claim is rejected.

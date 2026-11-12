@@ -36,6 +36,7 @@ from blockauth.utils.jwt import (
     OIDCVerifierConfig,
 )
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.rate_limiter import EnhancedThrottle
 from blockauth.utils.social import social_login_data
 from blockauth.views.google_native_serializers import (
     GoogleNativeIdTokenVerifyRequestSerializer,
@@ -107,6 +108,22 @@ def _build_google_native_verifier() -> OIDCTokenVerifier:
         return verifier
 
 
+# Per IP, same window as the public native verify default (SEC-04).
+_NATIVE_THROTTLE = EnhancedThrottle(rate=(30, 60))
+
+
+def _limited(request):
+    """429 before id_token verification, or None when allowed."""
+    if _NATIVE_THROTTLE.allow_request(request, "google_native"):
+        return None
+    return Response(
+        data={
+            "detail": "Rate limit exceeded. Please try again later.",
+        },
+        status=drf_status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
+
 class GoogleNativeIdTokenVerifyView(APIView):
     """POST /google/native/verify/ — verify a Google-issued id_token.
 
@@ -132,6 +149,9 @@ class GoogleNativeIdTokenVerifyView(APIView):
 
     @extend_schema(**google_native_verify_schema)
     def post(self, request):
+        limited = _limited(request)
+        if limited is not None:
+            return limited
         serializer = GoogleNativeIdTokenVerifyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
