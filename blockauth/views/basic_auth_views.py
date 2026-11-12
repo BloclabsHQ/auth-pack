@@ -733,7 +733,7 @@ class PasswordResetConfirmView(APIView):
             # forcing them to follow up with /login/basic/ is pure
             # ceremony.
             access_token, refresh_token = _issue_auth_tokens(user)
-            blockauth_logger.success("Password reset confirmed", {"user": user.id, **request.data})
+            blockauth_logger.success("Password reset confirmed", sanitize_log_context(request.data, {"user": user.id}))
             response_serializer = AuthStateResponseSerializer(
                 {
                     "access": access_token,
@@ -820,7 +820,9 @@ class PasswordChangeView(APIView):
             # this is also the right moment to rotate out any tokens
             # that were issued against the old password.
             access_token, refresh_token = _issue_auth_tokens(user)
-            blockauth_logger.success("Password change successful", {"user": user.id, **request.data})
+            blockauth_logger.success(
+                "Password change successful", sanitize_log_context(request.data, {"user": user.id})
+            )
             response_serializer = AuthStateResponseSerializer(
                 {
                     "access": access_token,

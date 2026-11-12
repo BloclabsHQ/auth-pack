@@ -167,7 +167,7 @@ totp_setup_docs = {
                 OpenApiExample(
                     "Rate Limited",
                     value={
-                        "error": "rate_limit_exceeded",
+                        "error": "throttled",
                         "message": "Too many setup attempts. Please try again later.",
                     },
                     status_codes=[429],
@@ -276,7 +276,7 @@ totp_confirm_docs = {
                 OpenApiExample(
                     "Rate Limited",
                     value={
-                        "error": "rate_limit_exceeded",
+                        "error": "throttled",
                         "message": "Too many confirmation attempts. Please try again later.",
                     },
                     status_codes=[429],
@@ -466,7 +466,7 @@ totp_verify_docs = {
                 OpenApiExample(
                     "Rate Limited",
                     value={
-                        "error": "rate_limit_exceeded",
+                        "error": "throttled",
                         "message": "Too many verification attempts. Please try again later.",
                     },
                     status_codes=[429],
@@ -582,7 +582,7 @@ totp_status_docs = {
             examples=[
                 OpenApiExample(
                     "Rate Limited",
-                    value={"error": "rate_limit_exceeded", "message": "Too many requests. Please try again later."},
+                    value={"error": "throttled", "message": "Too many requests. Please try again later."},
                     status_codes=[429],
                 )
             ],
@@ -687,7 +687,7 @@ totp_disable_docs = {
                 OpenApiExample(
                     "Rate Limited",
                     value={
-                        "error": "rate_limit_exceeded",
+                        "error": "throttled",
                         "message": "Too many disable attempts. Please try again later.",
                     },
                     status_codes=[429],
@@ -820,7 +820,7 @@ totp_regenerate_backup_codes_docs = {
                 OpenApiExample(
                     "Rate Limited",
                     value={
-                        "error": "rate_limit_exceeded",
+                        "error": "throttled",
                         "message": "Too many regeneration attempts. Please try again later.",
                     },
                     status_codes=[429],

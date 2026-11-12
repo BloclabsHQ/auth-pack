@@ -24,6 +24,10 @@ DEFAULTS = {
         3,
         30,
     ),  # (number of request, duration in second) rate limits based on per (email, subject, and IP address)
+    # Number of trusted reverse proxies in front of the app. Controls how the
+    # client IP is read from X-Forwarded-For (counted from the right). Set to 0
+    # when the app is directly internet-facing, or to the trusted hop count.
+    "TRUSTED_PROXY_DEPTH": 1,
     # Email verification settings
     "EMAIL_VERIFICATION_REQUIRED": False,  # Whether users must verify email before accessing non-auth endpoints
     # Feature flags - Enable/disable specific authentication features

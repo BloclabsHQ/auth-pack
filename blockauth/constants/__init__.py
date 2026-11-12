@@ -18,7 +18,7 @@ Usage:
 from .core import ConfigKeys, ErrorMessages, Features, SocialProviders, URLNames
 
 # Import sensitive fields constants
-from .sensitive_fields import REDACTION_STRING, SENSITIVE_FIELDS, SENSITIVE_PATTERNS
+from .sensitive_fields import NON_SENSITIVE_KEYS, REDACTION_STRING, SENSITIVE_FIELDS, SENSITIVE_PATTERNS
 
 __all__ = [
     # Core constants
@@ -30,5 +30,6 @@ __all__ = [
     # Sensitive fields constants
     "SENSITIVE_FIELDS",
     "SENSITIVE_PATTERNS",
+    "NON_SENSITIVE_KEYS",
     "REDACTION_STRING",
 ]
