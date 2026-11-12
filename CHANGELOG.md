@@ -23,6 +23,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- An access token is rejected when its family is revoked. A token with no family claim is unchanged (SEC-02).
 - `makemigrations` no longer reports pending changes for `blockauth`. The models now match the existing migrations, so no new migration or schema change is needed.
 - A password change or reset rejects access and refresh tokens issued earlier. The pair returned by that response stays valid. The record lasts for the refresh lifetime and needs the shared cache (SEC-02).
 - A login's access and refresh tokens share a `family` claim. Reuse of an already-rotated refresh token revokes that family, so the successor refresh token is rejected. `POST /token/logout/` revokes the presented refresh token's family and the presented access token. Revocation is stored in the cache and applies across workers only when the cache is shared. A family revocation lasts for the full refresh lifetime (SEC-02).

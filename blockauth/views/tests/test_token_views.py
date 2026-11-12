@@ -193,3 +193,94 @@ class TestAuthRefreshTokenView:
             format="json",
         )
         assert refreshed.status_code == status.HTTP_403_FORBIDDEN
+
+    def _access_status(self, api_client, access):
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+        )
+        response = api_client.post(
+            reverse("change-password"),
+            {},
+            format="json",
+        )
+        return response.status_code
+
+    def test_reuse_rejects_family_access(self, api_client, create_user):
+        user = create_user()
+        token = Token()
+        access, refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        rotated = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": refresh},
+            format="json",
+        )
+        assert rotated.status_code == status.HTTP_200_OK
+        replay = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": refresh},
+            format="json",
+        )
+        assert replay.status_code == status.HTTP_403_FORBIDDEN
+        denied = status.HTTP_401_UNAUTHORIZED
+        assert self._access_status(api_client, access) == denied
+        rotated_access = rotated.data["access"]
+        assert self._access_status(api_client, rotated_access) == denied
+
+    def test_logout_rejects_prior_access(self, api_client, create_user):
+        user = create_user()
+        token = Token()
+        earlier, refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        rotated = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": refresh},
+            format="json",
+        )
+        assert rotated.status_code == status.HTTP_200_OK
+        current = rotated.data["access"]
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {current}")
+        logout = api_client.post(
+            "/token/logout/",
+            {"refresh_token": rotated.data["refresh"]},
+            format="json",
+        )
+        assert logout.status_code == status.HTTP_204_NO_CONTENT
+        denied = status.HTTP_401_UNAUTHORIZED
+        assert self._access_status(api_client, earlier) == denied
+
+    def test_other_family_access_works(self, api_client, create_user):
+        user = create_user()
+        token = Token()
+        _, refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        rotated = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": refresh},
+            format="json",
+        )
+        assert rotated.status_code == status.HTTP_200_OK
+        replay = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": refresh},
+            format="json",
+        )
+        assert replay.status_code == status.HTTP_403_FORBIDDEN
+        other, _ = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        allowed = status.HTTP_400_BAD_REQUEST
+        assert self._access_status(api_client, other) == allowed
+        plain = token.generate_token(
+            user_id=str(user.id),
+            token_type="access",
+            token_lifetime=timedelta(minutes=5),
+        )
+        assert self._access_status(api_client, plain) == allowed
