@@ -249,6 +249,7 @@ class URLNames:
     # Wallet
     WALLET_EMAIL_ADD = "wallet-email-add"
     WALLET_LINK = "wallet-link"
+    WALLET_LINK_CHALLENGE = "wallet-link-challenge"
     WALLET_UNLINK = "wallet-unlink"
 
     # Social Auth

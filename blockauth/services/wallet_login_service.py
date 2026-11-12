@@ -87,6 +87,22 @@ _DEFAULT_NONCE_TTL_SECONDS = 300  # 5 minutes
 _DEFAULT_STATEMENT = (
     "Sign in to this application. This request will not trigger a blockchain " "transaction or cost any gas fees."
 )
+_LINK_STATEMENT_PREFIX = "Link this wallet to account "
+
+
+def _statement_is_link(statement: str) -> bool:
+    return statement.startswith(_LINK_STATEMENT_PREFIX)
+
+
+def link_statement(user_id) -> str:
+    """Statement that binds a link challenge to one account."""
+    subject = str(user_id).strip()
+    if not subject or "\n" in subject or "\r" in subject:
+        raise WalletLoginError("invalid_subject", "Account id cannot be placed in a link challenge")
+    statement = f"{_LINK_STATEMENT_PREFIX}{subject}."
+    if len(statement) > 512:
+        raise WalletLoginError("invalid_subject", "Account id is too long for a link challenge")
+    return statement
 
 
 @dataclass(frozen=True)
@@ -236,6 +252,24 @@ class WalletLoginService:
             expires_at=expires_at,
         )
 
+    def issue_link_challenge(
+        self,
+        *,
+        user_id,
+        address: str,
+        domain: Optional[str] = None,
+        chain_id: Optional[int] = None,
+        uri: Optional[str] = None,
+    ) -> ChallengeResult:
+        """Mint a SIWE challenge whose statement is bound to ``user_id``."""
+        return self.issue_challenge(
+            address=address,
+            domain=domain,
+            chain_id=chain_id,
+            uri=uri,
+            statement=link_statement(user_id),
+        )
+
     # =========================================================================
     # Login verification
     # =========================================================================
@@ -246,6 +280,7 @@ class WalletLoginService:
         wallet_address: str,
         message: str,
         signature: str,
+        expected_statement: Optional[str] = None,
     ) -> VerifiedLogin:
         """Verify a signed SIWE message and consume the underlying nonce."""
         try:
@@ -338,6 +373,20 @@ class WalletLoginService:
             if nonce_row.expires_at <= now:
                 raise WalletLoginError("nonce_expired", "Nonce is expired")
 
+            signed_statement = parsed.statement or ""
+            stored_statement = nonce_row.statement or ""
+            if expected_statement is None:
+                if _statement_is_link(signed_statement) or _statement_is_link(stored_statement):
+                    raise WalletLoginError(
+                        "statement_mismatch",
+                        "Signed challenge is not a login challenge",
+                    )
+            elif signed_statement != expected_statement or stored_statement != expected_statement:
+                raise WalletLoginError(
+                    "statement_mismatch",
+                    "Signed challenge is not bound to this account",
+                )
+
             # Signature verification. We reject malleable signatures outright
             # so there's exactly one canonical (v, r, s) per signed message.
             self._verify_signature(address=normalized_claim, message=message, signature=signature)
@@ -360,6 +409,15 @@ class WalletLoginService:
                 nonce_id=nonce_row.id,
                 siwe=parsed,
             )
+
+    def verify_link(self, *, user_id, wallet_address: str, message: str, signature: str) -> VerifiedLogin:
+        """Verify a link challenge bound to ``user_id`` and consume its nonce."""
+        return self.verify_login(
+            wallet_address=wallet_address,
+            message=message,
+            signature=signature,
+            expected_statement=link_statement(user_id),
+        )
 
     # =========================================================================
     # Internal helpers
