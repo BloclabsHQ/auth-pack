@@ -8,13 +8,23 @@ This module tests all KDF functionality including:
 - Security features
 """
 
+import json
 import unittest
 from unittest.mock import patch
 
-from .constants import KDFAlgorithms
+from eth_account import Account
+
+from .constants import KDFAlgorithms, SecurityConstants
 
 # Import the services to test
-from .services import Argon2Service, KDFManager, KeyDerivationService, KeyEncryptionService, PBKDF2Service
+from .services import (
+    Argon2Service,
+    KDFManager,
+    KeyDerivationService,
+    KeyEncryptionService,
+    PasswordlessKDFService,
+    PBKDF2Service,
+)
 
 
 class TestPBKDF2Service(unittest.TestCase):
@@ -22,7 +32,7 @@ class TestPBKDF2Service(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.service = PBKDF2Service(iterations=1000, hash_algorithm="sha256")
+        self.service = PBKDF2Service(iterations=1000, hash_algorithm="sha256", version="v1")
         self.email = "test@example.com"
         self.password = "TestPassword123"
         self.salt = "test_salt_123"
@@ -65,13 +75,31 @@ class TestPBKDF2Service(unittest.TestCase):
 
     def test_minimum_iterations(self):
         """Test that minimum iterations are enforced"""
-        # Should not allow less than 1000 iterations
         with self.assertRaises(ValueError):
-            PBKDF2Service(iterations=999)
+            PBKDF2Service(iterations=SecurityConstants.V2_MIN_ITERATIONS - 1)
 
-        # Should allow 1000 or more
-        service = PBKDF2Service(iterations=1000)
-        self.assertEqual(service.iterations, 1000)
+        service = PBKDF2Service(iterations=SecurityConstants.V2_MIN_ITERATIONS)
+        self.assertEqual(service.iterations, SecurityConstants.V2_MIN_ITERATIONS)
+        self.assertEqual(service.version, "v2")
+
+        with self.assertRaises(ValueError):
+            PBKDF2Service(iterations=999, version="v1")
+        legacy = PBKDF2Service(iterations=1000, version="v1")
+        self.assertEqual(legacy.iterations, 1000)
+
+    def test_v1_verify_accepts_recorded_iterations(self):
+        """SEC-06: v1 verify accepts a key from the recorded 100000-iteration path."""
+        golden = "0x3974bcc6fc8bcd29b2a7dfdaa1d9268d8bccaeaeb9448efb3ba71df14d3af44f"
+        service = PBKDF2Service()
+        self.assertEqual(service.version, "v2")
+        self.assertTrue(service.verify_key(self.email, self.password, self.salt, golden, version="v1"))
+        self.assertTrue(service.verify_key(self.email, f"  {self.password}  ", self.salt, golden, version="v1"))
+        fresh = service.derive_key(self.email, self.password, self.salt)
+        self.assertNotEqual(fresh, golden)
+        self.assertRegex(fresh, r"^0x[0-9a-f]{64}$")
+        self.assertTrue(service.verify_key(self.email, self.password, self.salt, fresh))
+        padded = service.derive_key(self.email, f"  {self.password}  ", self.salt)
+        self.assertNotEqual(padded, fresh)
 
     def test_unsupported_hash_algorithm(self):
         """Test that unsupported hash algorithms are rejected"""
@@ -127,6 +155,13 @@ class TestArgon2Service(unittest.TestCase):
         with self.assertRaises(ValueError):
             Argon2Service(parallelism=0)
 
+    def test_derive_key_is_private_key_hex(self):
+        """SEC-06: a new Argon2 key is 0x plus 64 hex characters."""
+        key = self.service.derive_key(self.email, self.password, self.salt)
+        self.assertRegex(key, r"^0x[0-9a-f]{64}$")
+        self.assertNotIn(self.salt, key)
+        Account.from_key(key)
+
     @patch.dict("sys.modules", {"argon2": None})
     def test_fallback_to_pbkdf2(self):
         """Test fallback to PBKDF2 when Argon2 is not available"""
@@ -152,8 +187,9 @@ class TestKeyDerivationService(unittest.TestCase):
         service = KeyDerivationService()
 
         self.assertEqual(service.algorithm, KDFAlgorithms.PBKDF2_SHA256)
-        self.assertEqual(service.iterations, 100000)
+        self.assertEqual(service.iterations, SecurityConstants.V2_MIN_ITERATIONS)
         self.assertIsInstance(service.kdf_service, PBKDF2Service)
+        self.assertEqual(service.kdf_service.version, "v2")
 
     def test_custom_algorithm(self):
         """Test custom algorithm initialization"""
@@ -314,6 +350,11 @@ class TestKeyEncryptionService(unittest.TestCase):
         with self.assertRaises(ValueError):
             KeyEncryptionService("")
 
+        with patch.dict("os.environ", {"MASTER_ENCRYPTION_KEY": ""}, clear=False):
+            with patch("blockauth.kdf.services.get_kdf_config", return_value={"encryption_key": None}):
+                with self.assertRaises(ValueError):
+                    KeyEncryptionService()
+
 
 class TestKDFManager(unittest.TestCase):
     """Test high-level KDF manager"""
@@ -427,9 +468,54 @@ class TestSecurityFeatures(unittest.TestCase):
         # Should be identical (case-insensitive email)
         self.assertEqual(wallet1["wallet_address"], wallet2["wallet_address"])
 
-        # Test password trimming
+        # v2 keeps password whitespace. v1 verification still trims.
         wallet3 = service.create_user_wallet("test@example.com", "  password123  ", user_salt=fixed_salt)
-        self.assertEqual(wallet1["wallet_address"], wallet3["wallet_address"])
+        self.assertNotEqual(wallet1["wallet_address"], wallet3["wallet_address"])
+
+
+_MASTER = "platform_master_salt_32_chars_minimum"
+_V1_EMAIL = "test@example.com"
+_V1_PASSWORD = "TestPassword123"
+_V1_SALT = "test_salt_123"
+_V1_KEY = "0xd45f908d903283bd1e8cac698576a49120dcdc5e22c45ec9c64f078310e25c21"
+_V1_ADDRESS = "0x8746c26143c613CB3bdd987b0012Ff872D786756"
+_PASSWORDLESS_ADDRESS = "0x5Cd56a4C9356C34a70A40939db11325B3F8bB23a"
+
+
+class TestPasswordlessV1Address(unittest.TestCase):
+    """SEC-06: passwordless addresses stay on the recorded v1 derivation."""
+
+    def test_default_address_matches_v1_golden(self):
+        service = PasswordlessKDFService(platform_master_salt=_MASTER)
+        self.assertEqual(service.get_wallet_address("user@example.com"), _PASSWORDLESS_ADDRESS)
+        created = service.create_user_wallet("user@example.com")
+        self.assertEqual(created["wallet_address"], _PASSWORDLESS_ADDRESS)
+        opted_in = service.get_wallet_address("user@example.com", version="v2")
+        self.assertNotEqual(opted_in, _PASSWORDLESS_ADDRESS)
+
+
+class TestV1PasswordVerification(unittest.TestCase):
+    """SEC-06: public verify paths accept a v1 password-derived key."""
+
+    def test_verify_password_accepts_v1(self):
+        service = KeyDerivationService(master_salt=_MASTER)
+        self.assertTrue(service.verify_password(_V1_EMAIL, _V1_PASSWORD, _V1_SALT, _V1_ADDRESS, version="v1"))
+
+    def test_key_derivation_get_wallet_address_accepts_v1(self):
+        service = KeyDerivationService(master_salt=_MASTER)
+        address = service.get_wallet_address(_V1_EMAIL, _V1_PASSWORD, _V1_SALT, version="v1")
+        self.assertEqual(address, _V1_ADDRESS)
+
+    def test_verify_and_decrypt_key_accepts_v1(self):
+        manager = KDFManager(master_salt=_MASTER, encryption_key="0x" + "b" * 64)
+        encrypted = manager.encryption_service.encrypt_private_key(_V1_KEY)
+        result = manager.verify_and_decrypt_key(_V1_EMAIL, _V1_PASSWORD, _V1_SALT, json.dumps(encrypted), version="v1")
+        self.assertEqual(result, _V1_KEY)
+
+    def test_manager_get_wallet_address_accepts_v1(self):
+        manager = KDFManager(master_salt=_MASTER, encryption_key="0x" + "b" * 64)
+        address = manager.get_wallet_address(_V1_EMAIL, _V1_PASSWORD, _V1_SALT, version="v1")
+        self.assertEqual(address, _V1_ADDRESS)
 
 
 if __name__ == "__main__":

@@ -225,6 +225,18 @@ Email + Platform Salt → Deterministic Hash → Private Key → Wallet Address
 - **Deterministic**: Same input always produces same output
 - **Memory Safety**: Sensitive data automatically cleared from memory
 
+## Derivation versions
+
+New password-derived keys are version `v2`. Material created before this change stays readable as version `v1`.
+
+Passwordless deterministic addresses stay on version `v1`. The address is the derived key, so pass `version="v2"` only when a new address is intended.
+
+1. Verify a stored password-derived key with `version="v1"` on `KeyDerivationService.verify_password`, `KeyDerivationService.get_wallet_address`, `KDFManager.verify_and_decrypt_key`, or `KDFManager.get_wallet_address`.
+2. Derive and encrypt again with the default version `v2`.
+3. After the `v2` key is stored, delete the `v1` material.
+
+`v2` PBKDF2 writes use at least 600000 iterations and keep password whitespace. `v1` verification still uses 100000 iterations and trims passwords. Rollback after any `v2` key is stored has to keep the `v2` read path.
+
 ## 🔐 Security Considerations
 
 ### Required Security Measures
@@ -232,7 +244,7 @@ Email + Platform Salt → Deterministic Hash → Private Key → Wallet Address
 1. **Master Salt**: Must be at least 32 characters, unique to your platform
 2. **Encryption Key**: 256-bit key for AES-256-GCM encryption
 3. **Platform Master Salt**: Required for passwordless wallets
-4. **Iteration Count**: Minimum 10,000 for PBKDF2, higher for production
+4. **Iteration Count**: PBKDF2 writes use at least 600000 iterations. Version `v1` reads use the recorded 100000.
 5. **Secure Storage**: Store encrypted keys securely, never in plain text
 
 ### Best Practices
