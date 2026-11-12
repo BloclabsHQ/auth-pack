@@ -134,3 +134,16 @@ def test_native_verify_no_audiences_configured_returns_4020(client, build_id_tok
                 content_type="application/json",
             )
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_native_verify_is_limited(google_settings, client):
+    last = None
+    for _ in range(31):
+        response = client.post(
+            "/google/native/verify/",
+            data={},
+            content_type="application/json",
+        )
+        last = response.status_code
+    assert last == 429
