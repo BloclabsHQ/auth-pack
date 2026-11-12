@@ -9,6 +9,7 @@ from rest_framework.exceptions import ValidationError
 
 from blockauth.utils.config import get_config
 from blockauth.utils.token import _resolve_keys
+from blockauth.utils.validators import normalize_identifier
 
 
 class OTPSubject(models.TextChoices):
@@ -44,11 +45,14 @@ class OTP(models.Model):
         Raises ValidationError on invalid/expired code. Deletes the OTP on
         success so it cannot be replayed.
         """
+        identifier = normalize_identifier(identifier)
+        otp_lookup = {"subject": subject}
+        if "@" in identifier:
+            otp_lookup["identifier__iexact"] = identifier
+        else:
+            otp_lookup["identifier"] = identifier
         otp_instance = (
-            cls.objects.filter(
-                identifier=identifier,
-                subject=subject,
-            )
+            cls.objects.filter(**otp_lookup)
             .values("code", "created_at", "is_used", "payload")
             .order_by("-created_at")
             .first()
@@ -74,7 +78,13 @@ class OTP(models.Model):
 
     @classmethod
     def clear_otp(cls, identifier: str, subject: str) -> None:
-        cls.objects.filter(identifier=identifier, subject=subject).delete()
+        identifier = normalize_identifier(identifier)
+        lookup = {"subject": subject}
+        if "@" in identifier:
+            lookup["identifier__iexact"] = identifier
+        else:
+            lookup["identifier"] = identifier
+        cls.objects.filter(**lookup).delete()
 
     @staticmethod
     def generate_otp(length):

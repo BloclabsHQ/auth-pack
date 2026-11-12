@@ -211,16 +211,17 @@ class SignUpConfirmView(APIView):
 
             # Check if wallet email verification OTP exists
             code_digest = otp_code_digest(code)
+            identifier_lookup = {"identifier__iexact": identifier} if "@" in identifier else {"identifier": identifier}
             wallet_otp_exists = OTP.objects.filter(
-                identifier=identifier,
                 code=code_digest,
                 subject=OTPSubject.WALLET_EMAIL_VERIFICATION,
                 is_used=False,
+                **identifier_lookup,
             ).exists()
 
             # Check if signup OTP exists
             signup_otp_exists = OTP.objects.filter(
-                identifier=identifier, code=code_digest, subject=OTPSubject.SIGNUP, is_used=False
+                code=code_digest, subject=OTPSubject.SIGNUP, is_used=False, **identifier_lookup
             ).exists()
 
             if wallet_otp_exists:

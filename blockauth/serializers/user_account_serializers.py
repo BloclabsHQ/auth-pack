@@ -14,6 +14,9 @@ from blockauth.utils.validators import (
     account_has_password,
     django_password_errors,
     is_valid_phone_number,
+    normalize_email,
+    normalize_identifier,
+    user_identifier_lookup,
 )
 
 _User = get_block_auth_user_model()
@@ -44,14 +47,17 @@ class SignUpRequestSerializer(OTPRequestSerializer):
         super().validate(data)
 
         identifier = data.get("identifier")
-        if data.get("email") and _User.objects.filter(email=identifier).exists():
+        if data.get("email") and _User.objects.filter(**user_identifier_lookup(identifier, email=True)).exists():
             logger.info("Signup attempted with existing email.")
             raise ValidationError(
                 detail={"identifier": "Unable to complete registration with the provided information."},
                 code=4002,
             )
 
-        if data.get("phone_number") and _User.objects.filter(phone_number=identifier).exists():
+        if (
+            data.get("phone_number")
+            and _User.objects.filter(**user_identifier_lookup(identifier, email=False)).exists()
+        ):
             logger.info("Signup attempted with existing phone number.")
             raise ValidationError(
                 detail={"identifier": "Unable to complete registration with the provided information."},
@@ -70,7 +76,7 @@ class SignUpResendOTPSerializer(OTPRequestSerializer):
         super().validate(data)
 
         identifier = data.get("identifier")
-        query_params = {"email": identifier} if data.get("email") else {"phone_number": identifier}
+        query_params = user_identifier_lookup(identifier, email=bool(data.get("email")))
         user = _User.objects.filter(**query_params).first()
 
         # Store validation results for the view — never expose to the client
@@ -115,7 +121,8 @@ class BasicLoginSerializer(serializers.Serializer):
     def validate(self, data):
         super().validate(data)
 
-        identifier = data.get("identifier")
+        identifier = normalize_identifier(data.get("identifier") or "")
+        data["identifier"] = identifier
         # validate email or phone number format
         try:
             EmailValidator()(identifier)
@@ -131,7 +138,7 @@ class BasicLoginSerializer(serializers.Serializer):
             data["phone_number"] = identifier
 
         # validate credentials — use same message for all failures to prevent enumeration
-        query_params = {"email": identifier} if data.get("email") else {"phone_number": identifier}
+        query_params = user_identifier_lookup(identifier, email=bool(data.get("email")))
         user = _User.objects.filter(**query_params).first()
 
         if not user or not user.check_password(data["password"]):
@@ -184,7 +191,7 @@ class PasswordResetRequestSerializer(OTPRequestSerializer):
         super().validate(data)
 
         identifier = data.get("identifier")
-        query_params = {"email": identifier} if data.get("email") else {"phone_number": identifier}
+        query_params = user_identifier_lookup(identifier, email=bool(data.get("email")))
         user = _User.objects.filter(**query_params).first()
 
         # Store validation result for the view — never expose to the client
@@ -210,7 +217,7 @@ class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
                 detail={"new_password": "Passwords do not match. Please make sure both passwords are identical."},
                 code=4007,
             )
-        query = {"email": data["identifier"]} if data.get("email") else {"phone_number": data["identifier"]}
+        query = user_identifier_lookup(data["identifier"], email=bool(data.get("email")))
         _reject_django_password(data["new_password"], _User.objects.filter(**query).first(), "new_password")
         return data
 
@@ -266,7 +273,8 @@ class EmailChangeRequestSerializer(serializers.Serializer):
         if not self.context["request"].user.check_password(current_password):
             raise ValidationError(detail={"current_password": "Incorrect password. Please try again."}, code=4005)
 
-        if _User.objects.filter(email=data["new_email"]).exists():
+        data["new_email"] = normalize_email(data.get("new_email") or "")
+        if _User.objects.filter(**user_identifier_lookup(data["new_email"], email=True)).exists():
             logger.info("Email change attempted with an unavailable email address.")
             raise ValidationError(
                 detail={"new_email": "Unable to change to this email address."},
@@ -283,7 +291,8 @@ class EmailChangeConfirmationSerializer(serializers.Serializer):
     code = serializers.CharField(help_text="Verification code received")
 
     def validate(self, data):
-        identifier = data.get("identifier")
+        identifier = normalize_email(data.get("identifier") or "")
+        data["identifier"] = identifier
         try:
             EmailValidator()(identifier)
         except Exception:

@@ -11,6 +11,7 @@ from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import WalletConflictError
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
+from blockauth.utils.validators import normalize_email, user_identifier_lookup
 from blockauth.utils.web3.wallet import WalletAuthenticator
 
 _User = get_block_auth_user_model()
@@ -221,14 +222,15 @@ class WalletEmailAddSerializer(serializers.Serializer):
             EmailValidator()(value)
         except Exception:
             raise ValidationError("Invalid email address format. Please provide a valid email address.")
-        return value
+        return normalize_email(value)
 
     def validate(self, data):
         """Validate the email add request"""
         # Check if email is already in use by another user
         request = self.context.get("request")
         if request and request.user.is_authenticated:
-            if _User.objects.filter(email=data["email"]).exclude(wallet_address=request.user.wallet_address).exists():
+            lookup = user_identifier_lookup(data["email"], email=True)
+            if _User.objects.filter(**lookup).exclude(wallet_address=request.user.wallet_address).exists():
                 raise ValidationError(detail={"email": "Unable to use this email address."})
 
             # Check if user already has a verified email
