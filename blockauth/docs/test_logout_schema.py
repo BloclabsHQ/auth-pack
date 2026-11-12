@@ -25,3 +25,4 @@ def test_logout_schema_has_no_warning():
     assert len(paths) == 1
     operation = schema["paths"][paths[0]]["post"]
     assert "requestBody" in operation
+    assert operation["operationId"] == "token_logout"

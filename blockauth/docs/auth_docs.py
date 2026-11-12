@@ -778,7 +778,7 @@ refresh_token_docs = {
 
 
 logout_docs = {
-    "operation_id": "logout",
+    "operation_id": "token_logout",
     "summary": "Log out",
     "description": "Revoke the presented refresh token and access token.",
     "tags": ["Token Management"],
