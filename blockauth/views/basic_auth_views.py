@@ -129,16 +129,28 @@ class SignUpView(APIView):
         try:
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
+            message = f"{data['verification_type']} sent via {data['method']}."
+            # Hash before the existing-account return and reuse it below.
+            hashed_password = make_password(data["password"])
+            if data.get("_account_exists"):
+                blockauth_logger.info(
+                    "Signup attempted for an existing account.",
+                    sanitize_log_context(request.data),
+                )
+                return Response(
+                    {"message": message},
+                    status=status.HTTP_200_OK,
+                )
 
             pre_signup_trigger = get_config("PRE_SIGNUP_TRIGGER")()
             pre_signup_trigger.trigger(context=data)
 
-            # Hash password now and carry it in the OTP payload so the user
-            # row is only created after inbox ownership is proven in
-            # SignUpConfirmView. If send_otp raises here, no orphan row is
-            # left behind and the same email can be retried immediately.
+            # Carry the hash in the OTP payload so the user row is only
+            # created after inbox ownership is proven in SignUpConfirmView.
+            # If send_otp raises here, no orphan row is left behind and the
+            # same email can be retried immediately.
             signup_payload = {
-                "hashed_password": make_password(data["password"]),
+                "hashed_password": hashed_password,
                 "authentication_types": [AuthenticationType.EMAIL],
             }
 
@@ -147,7 +159,8 @@ class SignUpView(APIView):
                 f"User signup {data['verification_type']} sent", sanitize_log_context(request.data)
             )
             return Response(
-                {"message": f"{data['verification_type']} sent via {data['method']}."}, status=status.HTTP_200_OK
+                {"message": message},
+                status=status.HTTP_200_OK,
             )
         except ValidationError as e:
             blockauth_logger.warning(
