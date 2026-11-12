@@ -63,6 +63,8 @@ from blockauth.utils.token_blacklist import (
     is_family_revoked,
     remember_family_head,
     revoke_family,
+    revoke_user_tokens,
+    token_predates_revocation,
 )
 from blockauth.utils.validators import account_has_password, user_identifier_lookup
 
@@ -656,6 +658,9 @@ class AuthRefreshTokenView(APIView):
                     sanitize_log_context(request.data, {"jti": old_jti}),
                 )
                 raise AuthenticationFailed("Invalid token.")
+            issued_at = payload.get("iat")
+            if token_predates_revocation(payload.get("user_id"), issued_at):
+                raise AuthenticationFailed("Invalid token.")
 
             user_id = payload["user_id"]
 
@@ -851,7 +856,8 @@ class PasswordResetConfirmView(APIView):
             # api-optimization: auto-sign-in after reset. The user just
             # proved ownership via the email OTP and the new password;
             # forcing them to follow up with /login/basic/ is pure
-            # ceremony.
+            # ceremony. Stamp first so this pair stays valid (SEC-02).
+            revoke_user_tokens(str(user.id))
             access_token, refresh_token = _issue_auth_tokens(user)
             self.confirm_throttle.record_success(request, subject)
             blockauth_logger.success("Password reset confirmed", sanitize_log_context(request.data, {"user": user.id}))
@@ -970,9 +976,9 @@ class PasswordChangeView(APIView):
 
             # api-optimization: hand back a fresh token pair so the
             # client doesn't have to re-login or run a refresh round-trip
-            # after a password change. If refresh-token rotation is on,
-            # this is also the right moment to rotate out any tokens
-            # that were issued against the old password.
+            # after a password change. Stamp first so this pair stays
+            # valid (SEC-02).
+            revoke_user_tokens(str(user.id))
             access_token, refresh_token = _issue_auth_tokens(user)
             blockauth_logger.success(
                 "Password change successful", sanitize_log_context(request.data, {"user": user.id})

@@ -85,7 +85,10 @@ is unavailable.
 Logout and reuse of an already-rotated refresh token are stored in the Django
 cache. Entries expire when the token would have expired. Revocation applies on
 every worker only when that cache is shared. A per-process cache applies only
-on the worker that wrote the entry (SEC-02).
+on the worker that wrote the entry. A password change or reset records
+`tokens_valid_after` for that user, for the refresh lifetime. Tokens whose
+`iat` is earlier are rejected. The pair returned by that response is issued
+after the stamp (SEC-02).
 
 ## Input Validation
 
