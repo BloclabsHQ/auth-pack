@@ -18,6 +18,7 @@ import hmac
 import unittest
 from datetime import datetime, timezone
 
+from ..config import _get_totp_config_dict
 from ..constants import DEFAULTS, TOTPAlgorithm, TOTPErrorCodes, TOTPStatus
 from ..exceptions import (
     TOTPAccountLockedError,
@@ -495,6 +496,18 @@ class TestBackupCodes(unittest.TestCase):
         expected = hmac.new(pepper, code.encode("utf-8"), hashlib.sha256).hexdigest()
         self.assertNotEqual(stored, unsalted)
         self.assertEqual(stored, expected)
+
+    def test_setup_fails_without_encryption_key(self):
+        """SEC-13: backup codes require TOTP_CONFIG.ENCRYPTION_KEY."""
+        config = _get_totp_config_dict()
+        saved = config.pop("ENCRYPTION_KEY", None)
+        try:
+            with self.assertRaises(TOTPEncryptionRequiredError) as context:
+                self.service.setup_totp(user_id="user123", account_name="test@example.com")
+            self.assertIn("TOTP_CONFIG.ENCRYPTION_KEY", str(context.exception))
+        finally:
+            if saved is not None:
+                config["ENCRYPTION_KEY"] = saved
 
     def test_backup_codes_generated_on_setup(self):
         """Backup codes should be generated during setup."""

@@ -17,7 +17,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
-- TOTP backup codes now default to 16 hex characters. Codes saved before this change no longer verify; regenerate them after upgrade.
+- TOTP backup codes now default to 16 hex characters. Codes saved before this change no longer verify; regenerate them after upgrade. `TOTP_CONFIG.ENCRYPTION_KEY` is now required for backup codes, also when a custom encryption service is passed.
 
 ---
 

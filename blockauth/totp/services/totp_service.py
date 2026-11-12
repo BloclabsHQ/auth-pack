@@ -324,11 +324,14 @@ class TOTPService:
 
         Returns:
             Hex digest of the code
+
+        Raises:
+            TOTPEncryptionRequiredError: If TOTP_CONFIG.ENCRYPTION_KEY is unset
         """
         normalized = code.upper().replace("-", "").replace(" ", "")
         encryption_key = get_totp_encryption_key()
         if not encryption_key:
-            raise TOTPEncryptionRequiredError()
+            raise TOTPEncryptionRequiredError("TOTP_CONFIG.ENCRYPTION_KEY is required for backup codes.")
         pepper = backup_code_pepper(encryption_key)
         return hmac.new(
             pepper,
