@@ -36,7 +36,12 @@ class OTP(models.Model):
     # Carries data that must survive until OTP confirmation. Used by the
     # ghost-free signup flow to defer user-row creation until inbox ownership
     # is proven.
-    payload = models.JSONField(null=True, blank=True, default=None)
+    payload = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Arbitrary data carried through to OTP confirmation (e.g. hashed password for signup).",
+    )
 
     @classmethod
     def validate_otp(cls, identifier: str, subject: str, code: str) -> dict | None:
