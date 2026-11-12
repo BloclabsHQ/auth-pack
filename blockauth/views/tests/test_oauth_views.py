@@ -310,20 +310,22 @@ def test_facebook_callback_links_by_subject(facebook_settings, client):
     me_response = MagicMock(status_code=200)
     me_response.json.return_value = {"id": "fb_user_123", "name": "FB User", "email": "u@example.com"}
 
-    with patch(
-        "blockauth.views.facebook_auth_views.requests.post", return_value=token_response,
-    ) as mock_post, patch(
-        "blockauth.views.facebook_auth_views.requests.get", return_value=me_response,
-    ) as mock_get:
+    with (
+        patch(
+            "blockauth.views.facebook_auth_views.requests.post",
+            return_value=token_response,
+        ) as mock_post,
+        patch(
+            "blockauth.views.facebook_auth_views.requests.get",
+            return_value=me_response,
+        ) as mock_get,
+    ):
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
     assert callback.status_code == 200, callback.content
     body = callback.json()
     assert "access" in body and "user" in body
-    timeouts = [
-        call.kwargs["timeout"]
-        for call in (*mock_post.call_args_list, *mock_get.call_args_list)
-    ]
+    timeouts = [call.kwargs["timeout"] for call in (*mock_post.call_args_list, *mock_get.call_args_list)]
     assert timeouts == [(3.05, 10), (3.05, 10)]
 
     from blockauth.social.models import SocialIdentity
@@ -773,9 +775,7 @@ def _stub_upsert_returning(user):
 
 @pytest.mark.django_db
 @pytest.mark.usefixtures("google_web_settings")
-def test_google_callback_forwards_given_and_family_name_to_service(
-    client, build_id_token, jwks_response
-):
+def test_google_callback_forwards_given_and_family_name_to_service(client, build_id_token, jwks_response):
     """Google's OIDC id_token ships `given_name` / `family_name`; the
     callback view must forward them so the user's name is populated on
     signup."""
@@ -886,12 +886,15 @@ def test_facebook_callback_uses_post_for_token_exchange(client):
         },
     )
 
-    with mock.patch(
-        "blockauth.views.facebook_auth_views.requests.post",
-        return_value=token_response,
-    ) as post_mock, mock.patch(
-        "blockauth.views.facebook_auth_views.requests.get",
-        return_value=me_response,
+    with (
+        mock.patch(
+            "blockauth.views.facebook_auth_views.requests.post",
+            return_value=token_response,
+        ) as post_mock,
+        mock.patch(
+            "blockauth.views.facebook_auth_views.requests.get",
+            return_value=me_response,
+        ),
     ):
         callback = client.get(f"/facebook/callback/?code=auth-code&state={state}")
 
@@ -907,9 +910,7 @@ def test_facebook_callback_uses_post_for_token_exchange(client):
 
 @pytest.mark.django_db
 @pytest.mark.usefixtures("linkedin_settings")
-def test_linkedin_callback_forwards_given_and_family_name_to_service(
-    client, build_id_token, linkedin_jwks_response
-):
+def test_linkedin_callback_forwards_given_and_family_name_to_service(client, build_id_token, linkedin_jwks_response):
     """LinkedIn's OIDC id_token ships `given_name` / `family_name` under
     the `profile` scope (Sign In with LinkedIn v2 includes it by
     default)."""

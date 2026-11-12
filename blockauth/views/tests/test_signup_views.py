@@ -235,7 +235,7 @@ class TestSignUpConfirmView:
         """Legacy path: pre-existing unverified user row is verified on confirm."""
         from blockauth.utils.config import get_block_auth_user_model
 
-        User = get_block_auth_user_model()
+        get_block_auth_user_model()
 
         user = create_user(email="new@test.com", is_verified=False)
         create_otp(identifier="new@test.com", subject=OTPSubject.SIGNUP, code="ABC123")
