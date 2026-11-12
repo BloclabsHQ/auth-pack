@@ -227,9 +227,11 @@ Email + Platform Salt → Deterministic Hash → Private Key → Wallet Address
 
 ## Derivation versions
 
-New keys are version `v2`. Material created before this change stays readable as version `v1`.
+New password-derived keys are version `v2`. Material created before this change stays readable as version `v1`.
 
-1. Verify the stored key with `version="v1"`.
+Passwordless deterministic addresses stay on version `v1`. The address is the derived key, so pass `version="v2"` only when a new address is intended.
+
+1. Verify a stored password-derived key with `version="v1"` on `KeyDerivationService.verify_password`, `KeyDerivationService.get_wallet_address`, `KDFManager.verify_and_decrypt_key`, or `KDFManager.get_wallet_address`.
 2. Derive and encrypt again with the default version `v2`.
 3. After the `v2` key is stored, delete the `v1` material.
 

@@ -52,12 +52,13 @@ def _iterations_for_version(version: str) -> int:
     raise ValueError(f"Unsupported derivation version: {version}")
 
 
-def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str, version: str = "v2") -> str:
+def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str, version: str = "v1") -> str:
     """
     Securely derive private key from email + salt using PBKDF2.
 
-    Writes default to version v2. Pass version v1 only to read material
-    derived before that change.
+    This deterministic path defaults to version v1. Pass version v2 only
+    as an explicit opt-in. The address is the derived key, so existing
+    addresses stay on v1.
 
     Args:
         email: User email address
@@ -310,7 +311,7 @@ class PasswordlessKDFService:
         if len(self.platform_master_salt) < SecurityConstants.MIN_SALT_LENGTH:
             raise ValueError(f"Platform master salt must be at least {SecurityConstants.MIN_SALT_LENGTH} characters")
 
-    def create_user_wallet(self, email: str, version: str = "v2") -> Dict[str, str]:
+    def create_user_wallet(self, email: str, version: str = "v1") -> Dict[str, str]:
         """
         Create deterministic wallet for passwordless user
 
@@ -351,7 +352,7 @@ class PasswordlessKDFService:
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
 
-    def get_wallet_address(self, email: str, version: str = "v2") -> str:
+    def get_wallet_address(self, email: str, version: str = "v1") -> str:
         """
         Get wallet address for email (deterministic)
 
@@ -384,7 +385,7 @@ class PasswordlessKDFService:
         salt_input = f"{email}:{self.platform_master_salt}"
         return hashlib.sha256(salt_input.encode()).hexdigest()
 
-    def _derive_private_key(self, email: str, salt: str, version: str = "v2") -> str:
+    def _derive_private_key(self, email: str, salt: str, version: str = "v1") -> str:
         """Derive private key from email + platform salt using PBKDF2"""
         return _derive_private_key_secure(email, salt, self.platform_master_salt, version=version)
 
@@ -512,7 +513,9 @@ class KeyDerivationService:
             kwargs["version"] = version
         return self.kdf_service.derive_key(email, password, salt, **kwargs)
 
-    def verify_password(self, email: str, password: str, stored_salt: str, stored_address: str) -> bool:
+    def verify_password(
+        self, email: str, password: str, stored_salt: str, stored_address: str, version: str = None
+    ) -> bool:
         """
         Verify if the provided password generates the correct wallet address
 
@@ -527,7 +530,7 @@ class KeyDerivationService:
         """
         try:
             # Derive private key with provided credentials
-            private_key = self.derive_private_key(email, password, stored_salt)
+            private_key = self.derive_private_key(email, password, stored_salt, version=version)
 
             # Generate address
             account = Account.from_key(private_key)
@@ -544,7 +547,7 @@ class KeyDerivationService:
             logger.error(f"Password verification failed: {e}")
             return False
 
-    def get_wallet_address(self, email: str, password: str, salt: str) -> str:
+    def get_wallet_address(self, email: str, password: str, salt: str, version: str = None) -> str:
         """
         Get wallet address for given credentials without storing private key
 
@@ -557,7 +560,7 @@ class KeyDerivationService:
             Wallet address (0x...)
         """
         try:
-            private_key = self.derive_private_key(email, password, salt)
+            private_key = self.derive_private_key(email, password, salt, version=version)
             account = Account.from_key(private_key)
             address = account.address
 
@@ -939,7 +942,9 @@ class KDFManager:
             "encryption_version": "1.0",
         }
 
-    def verify_and_decrypt_key(self, email: str, password: str, salt: str, encrypted_private_key: str) -> str:
+    def verify_and_decrypt_key(
+        self, email: str, password: str, salt: str, encrypted_private_key: str, version: str = None
+    ) -> str:
         """
         Verify credentials and decrypt the stored private key.
 
@@ -958,7 +963,7 @@ class KDFManager:
         Raises:
             ValueError: If password is incorrect or decryption fails
         """
-        derived_key = self.kdf_service.derive_private_key(email, password, salt)
+        derived_key = self.kdf_service.derive_private_key(email, password, salt, version=version)
 
         encrypted_data = json.loads(encrypted_private_key)
         decrypted_key = self.encryption_service.decrypt_private_key(encrypted_data)
@@ -1054,7 +1059,7 @@ class KDFManager:
             logger.error(f"Wallet ownership verification failed: {e}")
             return False
 
-    def get_wallet_address(self, email: str, password: str, user_salt: str) -> str:
+    def get_wallet_address(self, email: str, password: str, user_salt: str, version: str = None) -> str:
         """
         Get wallet address for given credentials
 
@@ -1067,7 +1072,7 @@ class KDFManager:
             Wallet address
         """
         try:
-            private_key = self.password_kdf_service.derive_private_key(email, password, user_salt)
+            private_key = self.password_kdf_service.derive_private_key(email, password, user_salt, version=version)
             account = Account.from_key(private_key)
             address = account.address
 
@@ -1202,8 +1207,8 @@ class KDFManager:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please try again.")
 
-    def _derive_private_key(self, email: str, salt: str, version: str = "v2") -> str:
-        """Derive private key from email + platform salt using PBKDF2"""
+    def _derive_private_key(self, email: str, salt: str, version: str = "v1") -> str:
+        """Derive private key from email + platform salt using PBKDF2. v2 is opt-in."""
         return _derive_private_key_secure(email, salt, self.platform_master_salt, version=version)
 
 
