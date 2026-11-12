@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from blockauth.enums import AuthenticationType
+from blockauth.services.wallet_login_service import WalletLoginError, get_wallet_login_service
 from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import WalletConflictError
@@ -16,6 +17,14 @@ from blockauth.utils.web3.wallet import WalletAuthenticator
 
 _User = get_block_auth_user_model()
 logger = logging.getLogger(__name__)
+
+_LINK_SIGNATURE_CODES = {
+    "invalid_signature",
+    "signature_mismatch",
+    "signature_recovery_failed",
+    "malleable_signature",
+    "signature_internal_error",
+}
 
 
 class WalletLoginSerializer(serializers.Serializer):
@@ -148,14 +157,14 @@ class WalletLinkSerializer(serializers.Serializer):
     """
     Validates a wallet link request from an already-authenticated user.
 
-    Performs full signature verification (including replay protection) via
-    WalletAuthenticator. Raises WalletConflictError (409) if the address
-    belongs to another user, ValidationError (400) if the user already has
-    a wallet linked.
+    Performs signature verification through the SIWE login service. The
+    challenge must be the server-issued plaintext bound to this account.
+    Raises WalletConflictError (409) if the address belongs to another
+    user, ValidationError (400) if the user already has a wallet linked.
     """
 
     wallet_address = serializers.CharField(max_length=42, help_text="Ethereum wallet address (0x...)")
-    message = serializers.CharField(help_text="JSON-encoded message with nonce + timestamp that was signed.")
+    message = serializers.CharField(help_text="Server-issued SIWE plaintext that was signed.")
     signature = serializers.CharField(max_length=132, help_text="Ethereum signature (0x-prefixed, 130 hex chars)")
 
     def validate_wallet_address(self, value):
@@ -169,32 +178,18 @@ class WalletLinkSerializer(serializers.Serializer):
         signature = data.get("signature")
         request = self.context.get("request")
 
-        # 1. Verify signature — replay protection, nonce, timestamp all handled here
+        # 1. Verify the server-issued challenge. Typed codes come from the service.
+        service = get_wallet_login_service()
         try:
-            authenticator = WalletAuthenticator()
-            if not authenticator.verify_signature(wallet_address, message, signature):
-                raise ValidationError(
-                    detail={"signature": "Invalid signature. Signature verification failed."},
-                    code="INVALID_SIGNATURE",
-                )
-        except ValueError as e:
-            # Map to static strings — don't surface raw exception messages externally.
-            _reason = str(e).lower()
-            if "expired" in _reason:
-                _detail = "Message has expired. Please sign a new message."
-            elif "nonce" in _reason:
-                _detail = "Nonce has already been used. Please sign a new message."
-            else:
-                _detail = "Message validation failed. Please sign a new message."
-            raise ValidationError(detail={"message": _detail}, code=4009)
-        except ValidationError:
-            raise
-        except Exception as e:
-            logger.error(f"Signature verification error: {str(e)}")
-            raise ValidationError(
-                detail={"signature": "Signature verification failed."},
-                code="INVALID_SIGNATURE",
+            service.verify_link(
+                user_id=str(request.user.pk),
+                wallet_address=wallet_address,
+                message=message,
+                signature=signature,
             )
+        except WalletLoginError as exc:
+            field = "signature" if exc.code in _LINK_SIGNATURE_CODES else "message"
+            raise ValidationError(detail={field: exc.message}, code=exc.code) from exc
 
         # 2. User must not already have a wallet linked (cheap — attribute access, no DB)
         if request.user.wallet_address:

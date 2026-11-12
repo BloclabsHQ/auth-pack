@@ -66,6 +66,7 @@ from blockauth.views.wallet_auth_views import (
     WalletAuthLoginView,
     WalletChallengeView,
     WalletEmailAddView,
+    WalletLinkChallengeView,
     WalletLinkView,
     WalletUnlinkView,
 )
@@ -124,6 +125,7 @@ URL_PATTERN_MAPPINGS = {
         ("wallet/email/add/", WalletEmailAddView, URLNames.WALLET_EMAIL_ADD),  # Add email to wallet account
     ],
     Features.WALLET_LINK: [
+        ("wallet/link/challenge/", WalletLinkChallengeView, URLNames.WALLET_LINK_CHALLENGE),
         ("wallet/link/", WalletLinkView, URLNames.WALLET_LINK),
         ("wallet/unlink/", WalletUnlinkView, URLNames.WALLET_UNLINK),
     ],

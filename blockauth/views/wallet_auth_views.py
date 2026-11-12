@@ -8,8 +8,9 @@ Includes:
 * :class:`WalletAuthLoginView` — ``POST /login/wallet/``, consumes the
   nonce, verifies the signature, and issues JWTs. Response shape is
   ``{"access", "refresh", "user"}`` (issue #97 — parity with basic-login).
-* :class:`WalletEmailAddView` / :class:`WalletLinkView` — unchanged from
-  pre-SIWE behavior.
+* :class:`WalletLinkChallengeView` — ``POST /wallet/link/challenge/``,
+  mints a SIWE challenge bound to the authenticated account.
+* :class:`WalletLinkView` — ``POST /wallet/link/`` consumes that challenge.
 
 Background: issue #90 tracks SIWE replay protection and challenge binding.
 """
@@ -86,6 +87,8 @@ _AUTH_ERROR_STATUS_MAP = {
     "signature_mismatch": status.HTTP_401_UNAUTHORIZED,
     # #5: a library regression in signature recovery is NOT a 400.
     "signature_internal_error": status.HTTP_500_INTERNAL_SERVER_ERROR,
+    "statement_mismatch": status.HTTP_401_UNAUTHORIZED,
+    "invalid_subject": status.HTTP_400_BAD_REQUEST,
     # #4: default wallet-not-registered surfaces as a generic 401 so the
     # endpoint doesn't work as a registration oracle. A deployment that
     # explicitly opts into the 403 via WALLET_LOGIN_EXPOSE_REGISTRATION_STATUS
@@ -102,6 +105,19 @@ def _reject(error: Union[WalletLoginError, WalletUserLinkError]) -> Response:
         {"error": {"code": error.code, "message": error.message}},
         status=http_status,
     )
+
+
+def _typed_link_error(exc: ValidationError):
+    """Return the SIWE error envelope when ``exc`` carries a known code."""
+    detail = exc.detail
+    if not isinstance(detail, dict) or not detail:
+        return None
+    first = next(iter(detail.values()))
+    item = first[0] if isinstance(first, (list, tuple)) and first else first
+    code = getattr(item, "code", None)
+    if code not in _AUTH_ERROR_STATUS_MAP:
+        return None
+    return _reject(WalletLoginError(str(code), str(item)))
 
 
 class WalletChallengeView(APIView):
@@ -326,13 +342,46 @@ class WalletEmailAddView(APIView):
             raise APIException()
 
 
+class WalletLinkChallengeView(APIView):
+    """``POST /wallet/link/challenge/`` — SIWE plaintext bound to the caller."""
+
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = [WalletChallengeThrottle]
+
+    def post(self, request):
+        serializer = WalletChallengeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        service = get_wallet_login_service()
+        try:
+            result = service.issue_link_challenge(
+                user_id=str(request.user.pk),
+                address=serializer.validated_data["address"],
+                chain_id=serializer.validated_data.get("chain_id"),
+                domain=serializer.validated_data.get("domain"),
+                uri=serializer.validated_data.get("uri"),
+            )
+        except WalletLoginError as exc:
+            return _reject(exc)
+        response_serializer = WalletChallengeResponseSerializer(
+            {
+                "message": result.message,
+                "nonce": result.nonce,
+                "domain": result.domain,
+                "chain_id": result.chain_id,
+                "uri": result.uri,
+                "issued_at": result.issued_at,
+                "expires_at": result.expires_at,
+            }
+        )
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
 class WalletLinkView(APIView):
     """
-    API endpoint for authenticated users to link a MetaMask (or compatible) wallet.
+    API endpoint for authenticated users to link a wallet.
 
-    The user must already hold a valid JWT. They sign a structured JSON message
-    with their wallet and submit address + message + signature. Full replay
-    protection (nonce + timestamp) is enforced by WalletAuthenticator.
+    The caller signs the plaintext from ``POST /wallet/link/challenge/``.
+    That plaintext is bound to the account, an allowed domain, and a chain.
     """
 
     permission_classes = (IsAuthenticated,)
@@ -399,6 +448,10 @@ class WalletLinkView(APIView):
             raise
 
         except ValidationError as e:
+            typed = _typed_link_error(e)
+            if typed is not None:
+                self.link_throttle.record_failure(request, "wallet_link")
+                return typed
             self.link_throttle.record_failure(request, "wallet_link")
             blockauth_logger.warning(
                 "Wallet link validation failed",
