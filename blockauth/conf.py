@@ -18,9 +18,9 @@ DEFAULTS = {
     "ALGORITHM": "HS256",
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
-    # Symmetric JWT secrets (JWT_SECRET_KEY, or SECRET_KEY when that is unset)
-    # must be at least 32 characters. Startup raises when DEBUG is False and
-    # warns when DEBUG is True.
+    # Symmetric JWT signing key (JWT_SECRET_KEY when configured, otherwise
+    # SECRET_KEY) must be at least 32 characters. Startup checks that signing
+    # key and raises when DEBUG is False, and warns when DEBUG is True.
     "SECRET_KEY": settings.SECRET_KEY,
     # Asymmetric JWT (RS256/ES256): set these instead of JWT_SECRET_KEY
     "JWT_PRIVATE_KEY": None,  # PEM-encoded private key for signing

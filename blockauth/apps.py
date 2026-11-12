@@ -155,7 +155,8 @@ def validate_jwt_secret() -> None:
     """Reject a short symmetric JWT secret when DEBUG is False. Warn when DEBUG is True.
 
     Uses the same offline-command guard as the wallet check: management
-    commands that do not serve traffic skip this.
+    commands that do not serve traffic skip this. The checked value is the
+    signing key from ``_resolve_keys``, including an empty ``JWT_SECRET_KEY``.
     """
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command in _OFFLINE_MANAGEMENT_COMMANDS:
@@ -163,14 +164,14 @@ def validate_jwt_secret() -> None:
 
     # Local import: token configuration imports Django settings, and this
     # module is loaded while the app registry is still starting.
-    from blockauth.utils.token import _SYMMETRIC_ALGORITHMS
+    from blockauth.utils.token import _SYMMETRIC_ALGORITHMS, _resolve_keys
 
     block = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
     algorithm = block.get("ALGORITHM") or "HS256"
     if algorithm not in _SYMMETRIC_ALGORITHMS:
         return
 
-    secret = block.get("JWT_SECRET_KEY") or block.get("SECRET_KEY") or getattr(settings, "SECRET_KEY", "")
+    secret = _resolve_keys(algorithm)[0]
     if isinstance(secret, str) and len(secret) >= 32:
         return
 

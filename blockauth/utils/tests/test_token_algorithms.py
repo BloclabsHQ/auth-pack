@@ -24,6 +24,7 @@ from rest_framework.test import APIRequestFactory
 
 from blockauth.apps import validate_jwt_secret
 from blockauth.authentication import JWTAuthentication
+from blockauth.conf import auth_settings
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.token import _ASYMMETRIC_ALGORITHMS, Token, _resolve_keys
 
@@ -265,5 +266,31 @@ def test_short_secret_refuses_boot_when_debug_false(settings):
     block["SECRET_KEY"] = "1234567890"
     block.pop("JWT_SECRET_KEY", None)
     settings.BLOCK_AUTH_SETTINGS = block
-    with pytest.raises(ImproperlyConfigured):
-        validate_jwt_secret()
+    auth_settings.SECRET_KEY = "1234567890"
+    try:
+        with pytest.raises(ImproperlyConfigured):
+            validate_jwt_secret()
+    finally:
+        del auth_settings.SECRET_KEY
+
+
+def test_empty_jwt_secret_key_refuses_boot_when_debug_false(settings):
+    """SEC-10: empty JWT_SECRET_KEY is the signing key.
+
+    A long SECRET_KEY and DEBUG=False still refuse boot.
+    """
+    settings.DEBUG = False
+    settings.SECRET_KEY = "x" * 50
+    block = dict(settings.BLOCK_AUTH_SETTINGS)
+    block["JWT_SECRET_KEY"] = ""
+    block["SECRET_KEY"] = "x" * 50
+    settings.BLOCK_AUTH_SETTINGS = block
+    auth_settings.JWT_SECRET_KEY = ""
+    auth_settings.SECRET_KEY = "x" * 50
+    try:
+        assert _resolve_keys("HS256")[0] == ""
+        with pytest.raises(ImproperlyConfigured):
+            validate_jwt_secret()
+    finally:
+        del auth_settings.JWT_SECRET_KEY
+        del auth_settings.SECRET_KEY
