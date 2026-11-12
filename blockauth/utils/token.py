@@ -50,6 +50,9 @@ logger = logging.getLogger(__name__)
 
 # Algorithms that use asymmetric keys (private key for signing, public key for verification)
 _ASYMMETRIC_ALGORITHMS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512"}
+_SYMMETRIC_ALGORITHMS = {"HS256", "HS384", "HS512"}
+_ALLOWED_ALGORITHMS = _ASYMMETRIC_ALGORITHMS | _SYMMETRIC_ALGORITHMS
+_REQUIRED_CLAIMS = ["exp", "iat", "type", "jti"]
 
 
 def _resolve_keys(algorithm: str, explicit_secret_key=None):
@@ -62,6 +65,9 @@ def _resolve_keys(algorithm: str, explicit_secret_key=None):
     Returns:
         tuple: (signing_key, verification_key)
     """
+    if algorithm not in _ALLOWED_ALGORITHMS:
+        raise ImproperlyConfigured(f"ALGORITHM {algorithm!r} is not an allowed JWT algorithm.")
+
     if explicit_secret_key:
         return explicit_secret_key, explicit_secret_key
 
@@ -209,7 +215,12 @@ class Token(AbstractToken):
             AuthenticationFailed: If the token is invalid, expired, or has an invalid signature
         """
         try:
-            payload = jwt.decode(token, self.verification_key, algorithms=[self.algorithm])
+            payload = jwt.decode(
+                token,
+                self.verification_key,
+                algorithms=[self.algorithm],
+                options={"require": _REQUIRED_CLAIMS},
+            )
             return payload
 
         except jwt.ExpiredSignatureError:

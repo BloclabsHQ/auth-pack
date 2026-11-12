@@ -16,11 +16,14 @@ just to build a static-asset layer was a silent landmine every new consumer
 tripped over (issue #93).
 """
 
+import logging
 import sys
 
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
+logger = logging.getLogger(__name__)
 
 # Management commands that run ``django.setup()`` but don't serve HTTP
 # traffic. The SIWE allow-list check doesn't need to fire for any of these:
@@ -72,6 +75,7 @@ class BlockAuthConfig(AppConfig):
 
     def ready(self):
         validate_wallet_login_settings()
+        validate_jwt_secret()
         _wire_apple_revoke_signal()
 
 
@@ -145,3 +149,36 @@ def validate_wallet_login_settings() -> None:
     bad = [d for d in domains if not isinstance(d, str) or not d.strip()]
     if bad:
         raise ImproperlyConfigured(f"WALLET_LOGIN_EXPECTED_DOMAINS contains invalid entries: {bad!r}")
+
+
+def validate_jwt_secret() -> None:
+    """Reject a short symmetric JWT secret when DEBUG is False. Warn when DEBUG is True.
+
+    Uses the same offline-command guard as the wallet check: management
+    commands that do not serve traffic skip this.
+    """
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command in _OFFLINE_MANAGEMENT_COMMANDS:
+        return
+
+    # Local import: token configuration imports Django settings, and this
+    # module is loaded while the app registry is still starting.
+    from blockauth.utils.token import _SYMMETRIC_ALGORITHMS
+
+    block = getattr(settings, "BLOCK_AUTH_SETTINGS", {}) or {}
+    algorithm = block.get("ALGORITHM") or "HS256"
+    if algorithm not in _SYMMETRIC_ALGORITHMS:
+        return
+
+    secret = block.get("JWT_SECRET_KEY") or block.get("SECRET_KEY") or getattr(settings, "SECRET_KEY", "")
+    if isinstance(secret, str) and len(secret) >= 32:
+        return
+
+    message = (
+        "JWT symmetric secret must be at least 32 characters. "
+        "Set BLOCK_AUTH_SETTINGS JWT_SECRET_KEY or SECRET_KEY to a longer value."
+    )
+    if getattr(settings, "DEBUG", False):
+        logger.warning(message)
+        return
+    raise ImproperlyConfigured(message)

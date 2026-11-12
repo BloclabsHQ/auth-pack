@@ -76,7 +76,7 @@ class JWTAuthentication(BaseAuthentication):
         else:
             payload = self._TOKEN_CLASS().decode_token(validated_token)
 
-        if payload["type"] != "access":
+        if payload.get("type") != "access":
             raise AuthenticationFailed("Invalid token type. Only access tokens are allowed")
 
         user = self._get_user(payload)
