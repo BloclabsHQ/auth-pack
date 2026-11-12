@@ -9,6 +9,7 @@ from blockauth.models.otp import OTPSubject
 SIGNUP_URL = reverse("signup")
 SIGNUP_CONFIRM_URL = reverse("signup-confirm")
 LOGIN_URL = reverse("basic-login")
+PASSWORDLESS_CONFIRM_URL = reverse("passwordless-login-confirm")
 _PASSWORD = "StrongP@ss1!"
 
 
@@ -72,3 +73,20 @@ def test_signup_does_not_open_a_second_account_for_email_case(api_client, create
         format="json",
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_passwordless_confirm_reuses_mixed_case_email(api_client, create_user, create_otp):
+    """SEC-08: passwordless confirm for the lowercase form reuses the existing account."""
+    from blockauth.utils.config import get_block_auth_user_model
+
+    create_user(email="User@Example.com", password=_PASSWORD, is_verified=True)
+    create_otp(identifier="user@example.com", subject=OTPSubject.LOGIN, code="ABC123")
+    response = api_client.post(
+        PASSWORDLESS_CONFIRM_URL,
+        {"identifier": "user@example.com", "code": "ABC123"},
+        format="json",
+    )
+    assert response.status_code == status.HTTP_200_OK
+    User = get_block_auth_user_model()
+    assert User.objects.filter(email__iexact="user@example.com").count() == 1
