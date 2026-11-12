@@ -186,6 +186,31 @@ PASSWORD_REGEX_PATTERN = (
 # =============================================================================
 
 
+def normalize_email(value: str) -> str:
+    """Strip and lowercase an email address."""
+    return (value or "").strip().lower()
+
+
+def normalize_phone(value: str) -> str:
+    """Drop spaces, dashes, and parentheses. Keep a leading +."""
+    return re.sub(r"[()\s-]", "", (value or "").strip())
+
+
+def normalize_identifier(value: str) -> str:
+    """Normalize an email or phone identifier from request input."""
+    text = (value or "").strip()
+    if "@" in text:
+        return normalize_email(text)
+    return normalize_phone(text)
+
+
+def user_identifier_lookup(identifier: str, *, email: bool) -> dict:
+    """Lookup kwargs for an account. Email matches existing rows of either case."""
+    if email:
+        return {"email__iexact": normalize_email(identifier)}
+    return {"phone_number": normalize_phone(identifier)}
+
+
 def is_valid_phone_number(phone: str) -> bool:
     """
     Validate international phone number format.

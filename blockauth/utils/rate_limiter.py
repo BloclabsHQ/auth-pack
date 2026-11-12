@@ -11,6 +11,7 @@ from rest_framework.throttling import BaseThrottle
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
+from blockauth.utils.validators import normalize_identifier
 
 # Maximum length for IP-related header values (security limit)
 MAX_IP_HEADER_LENGTH = 500
@@ -166,6 +167,8 @@ class RequestThrottle(BaseThrottle):
 
     def get_cache_key(self, request, subject):
         identifier = request.data.get("identifier")
+        if isinstance(identifier, str):
+            identifier = normalize_identifier(identifier)
         ip_address = get_client_ip(request)
 
         if not identifier and request.user.id:
@@ -304,6 +307,8 @@ class EnhancedThrottle(BaseThrottle):
     def _get_identifier(self, request):
         """Get user identifier from request."""
         identifier = request.data.get("identifier")
+        if isinstance(identifier, str):
+            identifier = normalize_identifier(identifier)
         if not identifier and hasattr(request, "user") and request.user.is_authenticated:
             identifier = str(request.user.id)
         return identifier
@@ -556,6 +561,8 @@ class OTPThrottle(RequestThrottle):
     def _check_daily_limit(self, request, subject):
         """Check daily OTP generation limits per identifier."""
         identifier = request.data.get("identifier")
+        if isinstance(identifier, str):
+            identifier = normalize_identifier(identifier)
         if not identifier:
             return True
 
@@ -582,6 +589,8 @@ class OTPThrottle(RequestThrottle):
             from blockauth.models.otp import OTP
 
             identifier = request.data.get("identifier")
+            if isinstance(identifier, str):
+                identifier = normalize_identifier(identifier)
             if not identifier:
                 return True
 

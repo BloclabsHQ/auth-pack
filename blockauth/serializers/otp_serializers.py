@@ -3,7 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from blockauth.utils.config import get_block_auth_user_model, get_config
-from blockauth.utils.validators import is_valid_phone_number
+from blockauth.utils.validators import is_valid_phone_number, normalize_identifier
 
 _User = get_block_auth_user_model()
 
@@ -15,7 +15,8 @@ class OTPRequestSerializer(serializers.Serializer):
 
     def validate(self, data):
         method = data.get("method")
-        identifier = data.get("identifier")
+        identifier = normalize_identifier(data.get("identifier") or "")
+        data["identifier"] = identifier
         verification_type = data.get("verification_type")
 
         # validate email or phone number format
@@ -50,7 +51,8 @@ class OTPVerifySerializer(serializers.Serializer):
     code = serializers.CharField(help_text="Verification code received")
 
     def validate(self, data):
-        identifier = data.get("identifier")
+        identifier = normalize_identifier(data.get("identifier") or "")
+        data["identifier"] = identifier
         # validate email or phone number format
         try:
             EmailValidator()(identifier)

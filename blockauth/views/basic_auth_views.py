@@ -52,7 +52,7 @@ from blockauth.utils.generics import model_to_json, sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.rate_limiter import EnhancedThrottle, OTPThrottle, RequestThrottle
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
-from blockauth.utils.validators import account_has_password
+from blockauth.utils.validators import account_has_password, user_identifier_lookup
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -211,16 +211,17 @@ class SignUpConfirmView(APIView):
 
             # Check if wallet email verification OTP exists
             code_digest = otp_code_digest(code)
+            identifier_lookup = {"identifier__iexact": identifier} if "@" in identifier else {"identifier": identifier}
             wallet_otp_exists = OTP.objects.filter(
-                identifier=identifier,
                 code=code_digest,
                 subject=OTPSubject.WALLET_EMAIL_VERIFICATION,
                 is_used=False,
+                **identifier_lookup,
             ).exists()
 
             # Check if signup OTP exists
             signup_otp_exists = OTP.objects.filter(
-                identifier=identifier, code=code_digest, subject=OTPSubject.SIGNUP, is_used=False
+                code=code_digest, subject=OTPSubject.SIGNUP, is_used=False, **identifier_lookup
             ).exists()
 
             if wallet_otp_exists:
@@ -479,9 +480,15 @@ class PasswordlessLoginConfirmView(APIView):
 
             email, phone_number = data.get("email"), data.get("phone_number")
             if email:
-                user, created = _User.objects.get_or_create(email=email, defaults={"is_verified": True})
+                lookup = user_identifier_lookup(email, email=True)
+                create_kwargs = {"email": email}
             else:
-                user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={"is_verified": True})
+                lookup = user_identifier_lookup(phone_number, email=False)
+                create_kwargs = {"phone_number": phone_number}
+            user = _User.objects.filter(**lookup).first()
+            created = user is None
+            if created:
+                user = _User.objects.create(**create_kwargs, is_verified=True)
             ensure_user_active(user)
             user.last_login = timezone.now()
             user.is_verified = True
