@@ -23,9 +23,10 @@ This page summarizes the mandatory security standards for BlockAuth.
 
 - Minimum 12 characters
 - Require uppercase, lowercase, numbers, and special characters
-- Maximum 3 consecutive identical characters
-- Check against common password lists
-- Prevent reuse of last 5 passwords
+- Also run Django `AUTH_PASSWORD_VALIDATORS` at signup, reset, and change. Common-password lists are integrator-owned.
+- Reject a new password equal to the current password on change
+- Setting a first password requires a password-reset code or a configured step-up receipt
+- Reuse of the last 5 passwords is integrator-owned
 
 ## JWT Standards
 

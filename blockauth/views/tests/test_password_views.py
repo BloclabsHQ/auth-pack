@@ -164,6 +164,53 @@ class TestPasswordChangeView:
         user.refresh_from_db()
         assert user.check_password(STRONG_PASS_NEW)
 
+    def test_change_rejects_same_password(self, authenticated_client):
+        """SEC-12: a new password equal to the current password is rejected."""
+        client, user = authenticated_client(password=STRONG_PASS)
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": STRONG_PASS,
+                "confirm_password": STRONG_PASS,
+            },
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        user.refresh_from_db()
+        assert user.check_password(STRONG_PASS)
+
+    def test_passwordless_change_requires_proof(self, authenticated_client):
+        """SEC-12: a passwordless account cannot set a password with only an access token."""
+        client, user = authenticated_client(email="none@test.com", password=None)
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": "unused",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        user.refresh_from_db()
+        assert not user.check_password(STRONG_PASS_NEW)
+
+    def test_passwordless_change_accepts_reset_otp(self, authenticated_client, create_otp):
+        """SEC-12: a password-reset code lets a passwordless account set a password."""
+        client, user = authenticated_client(email="none@test.com", password=None)
+        create_otp(identifier="none@test.com", subject=OTPSubject.PASSWORD_RESET, code="ABC123")
+        response = client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": "unused",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+                "otp_code": "ABC123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        user.refresh_from_db()
+        assert user.check_password(STRONG_PASS_NEW)
+
     def test_change_wrong_old(self, authenticated_client):
         client, user = authenticated_client(password=STRONG_PASS)
         response = client.post(
