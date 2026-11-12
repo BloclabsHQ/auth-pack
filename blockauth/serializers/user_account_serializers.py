@@ -302,6 +302,13 @@ class RefreshTokenSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(help_text="Refresh token to get new access token", required=True)
 
 
+class LogoutSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField(
+        required=True,
+        help_text="Refresh token for this session",
+    )
+
+
 """shared login response serializers (issue #97)
 
 These serializers describe the ``{access, refresh, user}`` response shape
