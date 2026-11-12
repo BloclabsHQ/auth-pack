@@ -9,9 +9,24 @@ change and every endpoint picks it up automatically.
 
 from typing import Tuple
 
+from rest_framework.exceptions import AuthenticationFailed
+
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 
 DEFAULT_WALLET_CHAIN_ID = 1
+
+
+def ensure_user_active(user):
+    """Reject a user whose model marks them inactive.
+
+    ``BlockUser`` extends ``AbstractBaseUser``, which exposes
+    ``is_active`` only as a class-attribute default (``True``);
+    downstream models may add it as a real column to disable accounts
+    (Django's convention). Read defensively so models without the
+    field keep working.
+    """
+    if getattr(user, "is_active", True) is False:
+        raise AuthenticationFailed("User inactive or deleted.")
 
 
 def _build_wallet_items(user, date_joined) -> list[dict]:
@@ -87,6 +102,7 @@ def issue_auth_tokens(user) -> Tuple[str, str]:
     callers only need to ensure ``user.save()`` has committed before
     invoking this helper.
     """
+    ensure_user_active(user)
     try:
         from blockauth.utils.token import generate_auth_token_with_custom_claims
 

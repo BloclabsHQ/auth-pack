@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from blockauth.jwt.token_manager import jwt_manager
 from blockauth.notification import NotificationEvent, emit_passkey_event
+from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
@@ -341,6 +342,7 @@ class PasskeyAuthenticationVerifyView(PasskeyBaseView):
             # Get user and generate tokens
             User = get_block_auth_user_model()
             user = User.objects.get(id=result.user_id)
+            ensure_user_active(user)
 
             # Generate JWT tokens
             tokens = jwt_manager.generate_tokens_for_user(user)

@@ -41,6 +41,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from blockauth.enums import AuthenticationType
+from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import model_to_json
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
@@ -131,6 +132,8 @@ class WalletUserLinker:
                 )
             user = existing
             created = False
+
+        ensure_user_active(user)
 
         # Last-login update + authentication type tag always run, regardless
         # of whether we created the row.

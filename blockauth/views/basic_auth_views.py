@@ -44,7 +44,7 @@ from blockauth.serializers.user_account_serializers import (
     SignUpRequestSerializer,
     SignUpResendOTPSerializer,
 )
-from blockauth.utils.auth_state import build_user_payload, issue_auth_tokens
+from blockauth.utils.auth_state import build_user_payload, ensure_user_active, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
@@ -263,6 +263,7 @@ class SignUpConfirmView(APIView):
 
                 # Issue JWTs so the client is signed in immediately instead
                 # of following up with /login/basic/.
+                ensure_user_active(user)
                 try:
                     from blockauth.utils.token import generate_auth_token_with_custom_claims
 
@@ -293,6 +294,8 @@ class SignUpConfirmView(APIView):
                     detail={"code": "Invalid or expired verification code. Please request a new one."}, code=4010
                 )
 
+        except AuthenticationFailed:
+            raise
         except ValidationError as e:
             blockauth_logger.warning(
                 "Verification confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail})
@@ -473,6 +476,7 @@ class PasswordlessLoginConfirmView(APIView):
                 user, created = _User.objects.get_or_create(email=email, defaults={"is_verified": True})
             else:
                 user, created = _User.objects.get_or_create(phone_number=phone_number, defaults={"is_verified": True})
+            ensure_user_active(user)
             user.last_login = timezone.now()
             user.is_verified = True
             user.add_authentication_type(AuthenticationType.PASSWORDLESS)
@@ -516,6 +520,9 @@ class PasswordlessLoginConfirmView(APIView):
                 }
             )
             return Response(data=response_serializer.data, status=status.HTTP_200_OK)
+        except AuthenticationFailed:
+            self.login_throttle.record_failure(request, "passwordless_login")
+            raise
         except ValidationError as e:
             self.login_throttle.record_failure(request, "passwordless_login")
             blockauth_logger.warning(
@@ -576,6 +583,7 @@ class AuthRefreshTokenView(APIView):
             # Get user to retrieve is_verified status
             user_model = get_block_auth_user_model()
             user = user_model.objects.get(id=user_id)
+            ensure_user_active(user)
 
             # Use enhanced token generation with custom claims support
             try:
@@ -742,6 +750,8 @@ class PasswordResetConfirmView(APIView):
                 }
             )
             return Response(data=response_serializer.data, status=status.HTTP_200_OK)
+        except AuthenticationFailed:
+            raise
         except ValidationError as e:
             blockauth_logger.warning(
                 "Password reset confirmation validation failed",
