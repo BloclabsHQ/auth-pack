@@ -116,6 +116,19 @@ class TestPasswordResetConfirmView:
         )
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_reset_confirm_is_limited(self, api_client):
+        payload = {
+            "identifier": "limit-reset@test.com",
+            "code": "ABC123",
+            "new_password": STRONG_PASS_NEW,
+            "confirm_password": STRONG_PASS_NEW,
+        }
+        statuses = []
+        for _ in range(6):
+            response = api_client.post(PASSWORD_RESET_CONFIRM_URL, payload)
+            statuses.append(response.status_code)
+        assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS
+
     def test_reset_confirm_auto_signs_in(self, api_client, create_user, create_otp):
         """api-optimization v0.9.0: reset confirmation issues tokens + user
         so the client is signed in immediately instead of following up

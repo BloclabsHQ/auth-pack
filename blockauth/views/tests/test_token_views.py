@@ -76,6 +76,14 @@ class TestAuthRefreshTokenView:
         response = api_client.post(REFRESH_URL, {})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_refresh_is_limited(self, api_client):
+        statuses = []
+        for _ in range(31):
+            response = api_client.post(REFRESH_URL, {})
+            statuses.append(response.status_code)
+        assert statuses[0] == status.HTTP_400_BAD_REQUEST
+        assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS
+
     def test_refresh_rotates_token(self, api_client, create_user):
         """New refresh token should be different from old one (rotation)."""
         user = create_user()
