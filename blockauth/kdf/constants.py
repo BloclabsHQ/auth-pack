@@ -224,7 +224,9 @@ class SecurityConstants:
 
     # Key requirements
     MIN_PASSWORD_LENGTH = 8  # Minimum password length
-    MIN_ITERATIONS = 1000  # Minimum KDF iterations
+    MIN_ITERATIONS = 1000  # v1 floor
+    V1_RECORDED_ITERATIONS = 100000  # iterations recorded for v1 reads
+    V2_MIN_ITERATIONS = 600000  # minimum for v2 PBKDF2 writes
 
     # Encryption requirements
     AES_KEY_LENGTH = 32  # AES-256 key length in bytes

@@ -43,48 +43,52 @@ from .constants import ErrorMessages, KDFAlgorithms, SecurityConstants, Security
 logger = logging.getLogger(__name__)
 
 
-def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str) -> str:
-    """
-    Securely derive private key from email + salt using PBKDF2
+def _iterations_for_version(version: str) -> int:
+    """Iteration count for a derivation version. v1 is read-only."""
+    if version == "v1":
+        return SecurityConstants.V1_RECORDED_ITERATIONS
+    if version == "v2":
+        return SecurityConstants.V2_MIN_ITERATIONS
+    raise ValueError(f"Unsupported derivation version: {version}")
 
-    This is a shared utility function to avoid code duplication.
+
+def _derive_private_key_secure(email: str, salt: str, platform_master_salt: str, version: str = "v2") -> str:
+    """
+    Securely derive private key from email + salt using PBKDF2.
+
+    Writes default to version v2. Pass version v1 only to read material
+    derived before that change.
 
     Args:
         email: User email address
         salt: User-specific salt
         platform_master_salt: Platform master salt
+        version: Derivation version. v2 for writes, v1 for reads.
 
     Returns:
         Private key as hex string with 0x prefix
     """
     email = email.lower().strip()
     kdf_input = f"{email}:{salt}:{platform_master_salt}"
+    iterations = _iterations_for_version(version)
 
-    # Use PBKDF2 for secure key derivation
     try:
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-        # Use platform master salt as the salt for PBKDF2
-        salt_bytes = platform_master_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
+        salt_bytes = platform_master_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]
 
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
-            length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
+            length=SecurityConstants.AES_KEY_LENGTH,
             salt=salt_bytes,
-            iterations=100000,  # High iteration count for security
+            iterations=iterations,
         )
         key_material = kdf.derive(kdf_input.encode())
         return "0x" + key_material.hex()
 
-    except ImportError:
-        # Fallback to hashlib if cryptography not available (less secure)
-        blockauth_logger.warning(
-            "cryptography library not available, using SHA-256 fallback",
-            sanitize_log_context({"function": "_derive_private_key_secure", "email": email}),
-        )
-        key_material = hashlib.sha256(kdf_input.encode()).digest()
-        return "0x" + key_material.hex()
+    except ImportError as exc:
+        raise ImportError("cryptography is required for key derivation") from exc
 
 
 def get_kdf_config():
@@ -113,7 +117,7 @@ def get_kdf_config():
 
         return {
             "algorithm": block_auth_settings.get("KDF_ALGORITHM", KDFAlgorithms.PBKDF2_SHA256),
-            "iterations": block_auth_settings.get("KDF_ITERATIONS", 100000),
+            "iterations": block_auth_settings.get("KDF_ITERATIONS", SecurityConstants.V2_MIN_ITERATIONS),
             "master_salt": block_auth_settings.get("KDF_MASTER_SALT", ""),
             "encryption_key": block_auth_settings.get("MASTER_ENCRYPTION_KEY", ""),
             "security_level": block_auth_settings.get("KDF_SECURITY_LEVEL", "MEDIUM"),
@@ -142,33 +146,45 @@ class BaseKDFService(ABC):
 class PBKDF2Service(BaseKDFService):
     """PBKDF2-based key derivation service"""
 
-    def __init__(self, iterations: int = 100000, hash_algorithm: str = "sha256"):
-        if iterations < SecurityConstants.MIN_ITERATIONS:
-            raise ValueError(f"Iterations must be at least {SecurityConstants.MIN_ITERATIONS}, got {iterations}")
+    def __init__(
+        self,
+        iterations: int = SecurityConstants.V2_MIN_ITERATIONS,
+        hash_algorithm: str = "sha256",
+        version: str = "v2",
+    ):
+        if version not in ("v1", "v2"):
+            raise ValueError(f"Unsupported derivation version: {version}")
+        floor = SecurityConstants.V2_MIN_ITERATIONS if version == "v2" else SecurityConstants.MIN_ITERATIONS
+        if iterations < floor:
+            raise ValueError(f"Iterations must be at least {floor}, got {iterations}")
         self.iterations = iterations
         self.hash_algorithm = hash_algorithm
+        self.version = version
 
         if hash_algorithm not in ["sha256", "sha512"]:
             raise ValueError(f"Unsupported hash algorithm: {hash_algorithm}")
 
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
-        """Derive private key using PBKDF2"""
+        """Derive private key using PBKDF2. Default version is v2."""
+        version = kwargs.get("version", self.version)
+        if version not in ("v1", "v2"):
+            raise ValueError(f"Unsupported derivation version: {version}")
         try:
-            # Normalize inputs
             email = email.lower().strip()
-            password = password.strip()
+            # v1 reads still trim passwords. v2 writes keep them unchanged.
+            if version == "v1":
+                password = password.strip()
 
-            # Create input string with platform master salt if available
             master_salt = kwargs.get("master_salt", "")
             kdf_input = f"{email}:{password}:{salt}:{master_salt}"
+            iterations = self.iterations if version == self.version else _iterations_for_version(version)
 
-            # Derive key material using PBKDF2
             key_material = hashlib.pbkdf2_hmac(
                 self.hash_algorithm,
                 kdf_input.encode("utf-8"),
                 salt.encode("utf-8"),
-                self.iterations,
-                dklen=SecurityConstants.AES_KEY_LENGTH,  # 32 bytes for private key
+                iterations,
+                dklen=SecurityConstants.AES_KEY_LENGTH,
             )
 
             return "0x" + key_material.hex()
@@ -178,7 +194,7 @@ class PBKDF2Service(BaseKDFService):
             raise ValueError(ErrorMessages.KEY_DERIVATION_FAILED)
 
     def verify_key(self, email: str, password: str, salt: str, expected_key: str, **kwargs) -> bool:
-        """Verify if credentials produce expected key"""
+        """Verify if credentials produce expected key. Pass version='v1' for old keys."""
         try:
             derived_key = self.derive_key(email, password, salt, **kwargs)
             return hmac.compare_digest(derived_key.lower(), expected_key.lower())
@@ -212,39 +228,50 @@ class Argon2Service(BaseKDFService):
             self.argon2_available = False
 
     def derive_key(self, email: str, password: str, salt: str, **kwargs) -> str:
-        """Derive private key using Argon2id"""
+        """Derive private key using Argon2id. Default version is v2."""
+        version = kwargs.get("version", "v2")
+        if version not in ("v1", "v2"):
+            raise ValueError(f"Unsupported derivation version: {version}")
         if not self.argon2_available:
-            # Fallback to PBKDF2
-            fallback_service = PBKDF2Service(iterations=100000)
+            if version == "v1":
+                fallback_service = PBKDF2Service(iterations=SecurityConstants.V1_RECORDED_ITERATIONS, version="v1")
+            else:
+                fallback_service = PBKDF2Service()
             return fallback_service.derive_key(email, password, salt, **kwargs)
 
         try:
             import argon2
+            from argon2.low_level import Type, hash_secret_raw
 
-            # Normalize inputs
             email = email.lower().strip()
-            password = password.strip()
+            if version == "v1":
+                password = password.strip()
 
-            # Create input string
             master_salt = kwargs.get("master_salt", "")
             kdf_input = f"{email}:{password}:{salt}:{master_salt}"
 
-            # Create Argon2 hasher
-            hasher = argon2.PasswordHasher(
+            if version == "v1":
+                hasher = argon2.PasswordHasher(
+                    time_cost=self.time_cost,
+                    memory_cost=self.memory_cost,
+                    parallelism=self.parallelism,
+                    hash_len=SecurityConstants.AES_KEY_LENGTH,
+                    type=argon2.Type.ID,
+                )
+                hash_result = hasher.hash(kdf_input, salt=salt.encode())
+                key_material = hash_result[-(SecurityConstants.AES_KEY_LENGTH * 2) :]
+                return "0x" + key_material
+
+            raw = hash_secret_raw(
+                secret=kdf_input.encode(),
+                salt=salt.encode(),
                 time_cost=self.time_cost,
                 memory_cost=self.memory_cost,
                 parallelism=self.parallelism,
                 hash_len=SecurityConstants.AES_KEY_LENGTH,
-                type=argon2.Type.ID,  # Argon2id variant
+                type=Type.ID,
             )
-
-            # Generate hash
-            hash_result = hasher.hash(kdf_input, salt=salt.encode())
-
-            # Extract key material (last 64 hex chars = 32 bytes)
-            key_material = hash_result[-(SecurityConstants.AES_KEY_LENGTH * 2) :]
-
-            return "0x" + key_material
+            return "0x" + raw.hex()
 
         except Exception as e:
             logger.error(f"Argon2 key derivation failed: {e}")
@@ -283,7 +310,7 @@ class PasswordlessKDFService:
         if len(self.platform_master_salt) < SecurityConstants.MIN_SALT_LENGTH:
             raise ValueError(f"Platform master salt must be at least {SecurityConstants.MIN_SALT_LENGTH} characters")
 
-    def create_user_wallet(self, email: str) -> Dict[str, str]:
+    def create_user_wallet(self, email: str, version: str = "v2") -> Dict[str, str]:
         """
         Create deterministic wallet for passwordless user
 
@@ -298,7 +325,7 @@ class PasswordlessKDFService:
             email_salt = self._generate_email_salt(email)
 
             # Derive private key from email + platform salt
-            private_key = self._derive_private_key(email, email_salt)
+            private_key = self._derive_private_key(email, email_salt, version=version)
 
             # Generate wallet address
             account = Account.from_key(private_key)
@@ -324,7 +351,7 @@ class PasswordlessKDFService:
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
 
-    def get_wallet_address(self, email: str) -> str:
+    def get_wallet_address(self, email: str, version: str = "v2") -> str:
         """
         Get wallet address for email (deterministic)
 
@@ -336,7 +363,7 @@ class PasswordlessKDFService:
         """
         try:
             email_salt = self._generate_email_salt(email)
-            private_key = self._derive_private_key(email, email_salt)
+            private_key = self._derive_private_key(email, email_salt, version=version)
             account = Account.from_key(private_key)
             address = account.address
 
@@ -357,9 +384,9 @@ class PasswordlessKDFService:
         salt_input = f"{email}:{self.platform_master_salt}"
         return hashlib.sha256(salt_input.encode()).hexdigest()
 
-    def _derive_private_key(self, email: str, salt: str) -> str:
+    def _derive_private_key(self, email: str, salt: str, version: str = "v2") -> str:
         """Derive private key from email + platform salt using PBKDF2"""
-        return _derive_private_key_secure(email, salt, self.platform_master_salt)
+        return _derive_private_key_secure(email, salt, self.platform_master_salt, version=version)
 
 
 class KeyDerivationService:
@@ -408,8 +435,10 @@ class KeyDerivationService:
         if self.algorithm == KDFAlgorithms.ARGON2ID:
             self.kdf_service = Argon2Service()
         elif self.algorithm == KDFAlgorithms.PBKDF2_SHA512:
+            self.iterations = max(SecurityConstants.V2_MIN_ITERATIONS, self.iterations)
             self.kdf_service = PBKDF2Service(self.iterations, "sha512")
         else:  # Default to PBKDF2_SHA256
+            self.iterations = max(SecurityConstants.V2_MIN_ITERATIONS, self.iterations)
             self.kdf_service = PBKDF2Service(self.iterations, "sha256")
 
         # Validate master salt if provided
@@ -463,19 +492,25 @@ class KeyDerivationService:
             # Return generic error message to prevent information disclosure
             raise ValueError("Wallet creation failed. Please try again.")
 
-    def derive_private_key(self, email: str, password: str, salt: str) -> str:
+    def derive_private_key(self, email: str, password: str, salt: str, version: str = None) -> str:
         """
-        Derive private key from user credentials
+        Derive private key from user credentials.
+
+        Writes use version v2. Pass version v1 only to read an older key.
 
         Args:
             email: User's email address
             password: User's password
             salt: User-specific salt
+            version: Derivation version. Defaults to the service version.
 
         Returns:
             32-byte private key as hex string
         """
-        return self.kdf_service.derive_key(email, password, salt, master_salt=self.master_salt)
+        kwargs = {"master_salt": self.master_salt}
+        if version is not None:
+            kwargs["version"] = version
+        return self.kdf_service.derive_key(email, password, salt, **kwargs)
 
     def verify_password(self, email: str, password: str, stored_salt: str, stored_address: str) -> bool:
         """
@@ -656,18 +691,11 @@ class KeyEncryptionService:
 
             return bytes.fromhex(encryption_key)
 
-        # Try environment variable fallback
         env_key = os.environ.get("MASTER_ENCRYPTION_KEY")
         if env_key:
             return self._get_or_create_key(env_key)
 
-        # Generate a new key with a warning (not suitable for production)
-        generated_key = os.urandom(SecurityConstants.AES_KEY_LENGTH)
-        logger.warning(
-            "No MASTER_ENCRYPTION_KEY configured. A temporary key has been generated. "
-            "Set MASTER_ENCRYPTION_KEY in BLOCK_AUTH_SETTINGS for persistent encryption."
-        )
-        return generated_key
+        raise ValueError(ErrorMessages.INVALID_ENCRYPTION_KEY)
 
 
 class KDFManager:
@@ -942,7 +970,9 @@ class KDFManager:
         del derived_key
         return decrypted_key
 
-    def decrypt_with_user_password(self, email: str, password: str, user_encrypted_key: str, user_salt: str) -> str:
+    def decrypt_with_user_password(
+        self, email: str, password: str, user_encrypted_key: str, user_salt: str, version: str = "v2"
+    ) -> str:
         """
         Decrypt private key using user password (for user operations)
 
@@ -957,7 +987,7 @@ class KDFManager:
         """
         try:
             # Recreate user encryption key
-            user_key = self._derive_user_encryption_key(email, password, user_salt)
+            user_key = self._derive_user_encryption_key(email, password, user_salt, version=version)
 
             # Decrypt private key
             private_key = self._decrypt_with_user_key(user_encrypted_key, user_key)
@@ -1079,39 +1109,33 @@ class KDFManager:
         wallet_hash = hashlib.sha256(wallet_input.encode()).hexdigest()
         return wallet_hash[: SecurityConstants.MIN_SALT_BYTES * 2]  # 16 characters for wallet ID
 
-    def _derive_user_encryption_key(self, email: str, password: str, user_salt: str) -> bytes:
-        """Derive user-specific encryption key using PBKDF2"""
+    def _derive_user_encryption_key(self, email: str, password: str, user_salt: str, version: str = "v2") -> bytes:
+        """Derive user-specific encryption key using PBKDF2. v1 reads use the recorded count."""
         key_input = f"{email}:{password}:{user_salt}:user_encryption"
+        iterations = _iterations_for_version(version)
 
-        # Use PBKDF2 for secure key derivation
         try:
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-            # Use user_salt as the salt for PBKDF2
-            salt_bytes = user_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]  # Use first 16 bytes as salt
+            salt_bytes = user_salt.encode()[: SecurityConstants.MIN_SALT_BYTES]
 
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
-                length=SecurityConstants.AES_KEY_LENGTH,  # 256 bits
+                length=SecurityConstants.AES_KEY_LENGTH,
                 salt=salt_bytes,
-                iterations=100000,  # High iteration count for security
+                iterations=iterations,
             )
-            key_material = kdf.derive(key_input.encode())
-            return key_material
+            return kdf.derive(key_input.encode())
 
-        except ImportError:
-            # Fallback to hashlib if cryptography not available (less secure)
-            blockauth_logger.warning(
-                "cryptography library not available, using SHA-256 fallback",
-                sanitize_log_context({"function": "_derive_user_encryption_key", "email": email}),
-            )
-            key_material = hashlib.sha256(key_input.encode()).digest()
-            return key_material
+        except ImportError as exc:
+            raise ImportError("cryptography is required for key derivation") from exc
 
-    def _encrypt_with_user_key(self, private_key: str, email: str, password: str, user_salt: str) -> str:
+    def _encrypt_with_user_key(
+        self, private_key: str, email: str, password: str, user_salt: str, version: str = "v2"
+    ) -> str:
         """Encrypt private key with user-derived key using AES-256-GCM"""
-        user_key = self._derive_user_encryption_key(email, password, user_salt)
+        user_key = self._derive_user_encryption_key(email, password, user_salt, version=version)
 
         try:
             # Import cryptography library
@@ -1178,9 +1202,9 @@ class KDFManager:
             # Return generic error message to prevent information disclosure
             raise ValueError("Decryption failed. Please try again.")
 
-    def _derive_private_key(self, email: str, salt: str) -> str:
+    def _derive_private_key(self, email: str, salt: str, version: str = "v2") -> str:
         """Derive private key from email + platform salt using PBKDF2"""
-        return _derive_private_key_secure(email, salt, self.platform_master_salt)
+        return _derive_private_key_secure(email, salt, self.platform_master_salt, version=version)
 
 
 class MultipleWalletService:
