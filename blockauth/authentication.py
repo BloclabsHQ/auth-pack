@@ -81,6 +81,10 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed("Invalid token type. Only access tokens are allowed")
         if token_blacklist.is_blacklisted(payload.get("jti")):
             raise AuthenticationFailed("Invalid token.")
+        # A missing family claim stays valid (SEC-02).
+        family = payload.get("family")
+        if token_blacklist.is_family_revoked(family):
+            raise AuthenticationFailed("Invalid token.")
         issued_at = payload.get("iat")
         predates = token_blacklist.token_predates_revocation
         if predates(payload.get("user_id"), issued_at):
