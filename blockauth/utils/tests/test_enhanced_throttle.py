@@ -9,10 +9,20 @@ Covers:
 - Daily limits
 """
 
+import threading
+
 import pytest
 from django.core.cache import cache
 
-from blockauth.utils.rate_limiter import EnhancedThrottle
+from blockauth.utils.rate_limiter import (
+    EnhancedThrottle,
+    OTPThrottle,
+    RequestThrottle,
+)
+from blockauth.views.basic_auth_views import (
+    BasicAuthLoginView,
+    PasswordlessLoginConfirmView,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -288,3 +298,157 @@ class TestFailClosedOnCacheOutage:
         throttle = EnhancedThrottle(rate=(5, 60), fail_closed=True)
         # Uses the real LocMemCache from settings — probe should succeed.
         assert throttle.allow_request(FakeRequest(), "totp_verify") is True
+
+
+def _run_pair(work_a, work_b):
+    """Run two callables on separate threads; return [result_a, result_b]."""
+    results = [None, None]
+    errors = []
+
+    def runner(index, work):
+        try:
+            results[index] = work()
+        except Exception as exc:  # surfaced in the main thread below
+            errors.append(exc)
+
+    threads = []
+    for index, work in enumerate((work_a, work_b)):
+        threads.append(threading.Thread(target=runner, args=(index, work)))
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    still_running = any(thread.is_alive() for thread in threads)
+    assert not still_running, "worker thread did not finish"
+    assert errors == []
+    return results
+
+
+class BarrierCache:
+    """Dict-backed cache whose first two get() calls rendezvous, so two
+    in-flight checks on one shared instance interleave."""
+
+    def __init__(self):
+        self.store = {}
+        self._barrier = threading.Barrier(2)
+        self._lock = threading.Lock()
+        self._gets = 0
+
+    def get(self, key, default=None):
+        with self._lock:
+            self._gets += 1
+            rendezvous = self._gets <= 2
+        if rendezvous:
+            self._barrier.wait(timeout=10)
+        return self.store.get(key, default)
+
+    def set(self, key, value, timeout=None):
+        self.store[key] = value
+
+    def delete(self, key):
+        self.store.pop(key, None)
+
+
+class TestRequestThrottleThreadIsolation:
+    """Each thread keeps its own bucket and wait (SEC-11)."""
+
+    def test_concurrent_requests_keep_separate_buckets_and_wait(self):
+        throttle = RequestThrottle(rate=(2, 60))
+        throttle.cache = BarrierCache()
+        throttle.timer = lambda: 1_000_000.0
+        subject = "thread_isolation"
+
+        def check(identifier):
+            request = FakeRequest(identifier=identifier)
+            allowed = throttle.allow_request(request, subject)
+            return allowed, throttle.wait()
+
+        results = _run_pair(
+            lambda: check("a@test.com"),
+            lambda: check("b@test.com"),
+        )
+
+        assert results == [(True, 30.0), (True, 30.0)]
+        store = throttle.cache.store
+        assert len(store) == 2
+        for identifier in ("a@test.com", "b@test.com"):
+            histories = []
+            for key, value in store.items():
+                if identifier in key:
+                    histories.append(value)
+            assert len(histories) == 1 and len(histories[0]) == 1
+
+
+class TestEnhancedThrottleThreadIsolation:
+    def test_block_reason_and_wait_are_per_thread(self):
+        throttle = EnhancedThrottle(
+            rate=(100, 60),
+            max_failures=2,
+            cooldown_minutes=15,
+        )
+        subject = "thread_block_reason"
+        blocked = FakeRequest(identifier="blocked@test.com")
+        throttle.record_failure(blocked, subject)
+        throttle.record_failure(blocked, subject)
+
+        gate = threading.Barrier(2)
+
+        def check(request):
+            allowed = throttle.allow_request(request, subject)
+            # Read back only after both checks ran on the shared instance.
+            gate.wait(timeout=10)
+            return allowed, throttle.get_block_reason(), throttle.wait()
+
+        blocked_result, allowed_result = _run_pair(
+            lambda: check(blocked),
+            lambda: check(FakeRequest(identifier="ok@test.com")),
+        )
+
+        assert blocked_result[0] is False and blocked_result[1] == "cooldown"
+        assert blocked_result[2] is not None
+        assert allowed_result == (True, None, None)
+
+
+class TestOTPThrottleThreadIsolation:
+    def test_rate_limit_type_is_per_thread(self):
+        now = 1767225600.0
+        throttle = OTPThrottle(rate=(5, 60), daily_limit=1)
+        throttle.timer = lambda: now
+        subject = "otp_thread_isolation"
+        day_start = int(now // 86400) * 86400
+        cache.set(f"otp_daily_daily@test.com_{subject}_{day_start}", 1, 86400)
+
+        gate = threading.Barrier(2)
+
+        def check(identifier):
+            request = FakeRequest(identifier=identifier)
+            allowed = throttle.allow_request(request, subject)
+            gate.wait(timeout=10)
+            return allowed, throttle.get_error_message()
+
+        daily_result, ok_result = _run_pair(
+            lambda: check("daily@test.com"),
+            lambda: check("ok@test.com"),
+        )
+
+        assert daily_result[0] is False
+        assert "Daily limit exceeded" in daily_result[1]
+        assert ok_result[0] is True
+        assert "Daily limit exceeded" not in ok_result[1]
+
+
+class TestLoginThrottlesFailClosed:
+    def test_login_throttles_deny_on_degraded_cache(self):
+        for view, subject in (
+            (BasicAuthLoginView, "basic_login"),
+            (PasswordlessLoginConfirmView, "passwordless_login"),
+        ):
+            throttle = view.login_throttle
+            assert throttle.fail_closed is True
+            original_cache = throttle.cache
+            throttle.cache = SilentlyDegradedCache()
+            try:
+                assert throttle.allow_request(FakeRequest(), subject) is False
+                assert throttle.get_block_reason() == "cache_unavailable"
+            finally:
+                throttle.cache = original_cache

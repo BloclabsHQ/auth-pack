@@ -329,7 +329,12 @@ class BasicAuthLoginView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = BasicLoginSerializer
     authentication_classes = []
-    login_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
+    login_throttle = EnhancedThrottle(
+        rate=(10, 60),
+        max_failures=5,
+        cooldown_minutes=15,
+        fail_closed=True,
+    )
 
     @extend_schema(**basic_login_docs)
     def post(self, request):
@@ -457,7 +462,12 @@ class PasswordlessLoginConfirmView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordlessLoginConfirmationSerializer
     authentication_classes = []
-    login_throttle = EnhancedThrottle(rate=(10, 60), max_failures=5, cooldown_minutes=15)
+    login_throttle = EnhancedThrottle(
+        rate=(10, 60),
+        max_failures=5,
+        cooldown_minutes=15,
+        fail_closed=True,
+    )
 
     @extend_schema(**passwordless_confirm_docs)
     def post(self, request):

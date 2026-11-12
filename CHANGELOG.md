@@ -22,6 +22,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- Per-request throttle fields stay with the calling thread. `wait()`, `get_block_reason()`, and `get_error_message()` keep their existing callers. Login and passwordless-confirm throttles deny the request when the cache is unavailable (SEC-11). Cache key formats are unchanged.
 - JWT decode requires the `exp`, `iat`, `type`, and `jti` claims. Only HS256, HS384, HS512, RS256, RS384, RS512, ES256, ES384, ES512, PS256, PS384, and PS512 are accepted. A symmetric signing key shorter than 32 characters prevents boot when `DEBUG` is False and logs a warning when `DEBUG` is True. The boot check uses the same key that signing uses. A token with no `type` claim is rejected.
 - Key derivation writes version `v2`. PBKDF2 writes use at least 600000 iterations and keep password whitespace. Version `v1` still verifies keys derived at the recorded 100000 iterations, including trimmed passwords. Argon2 writes return a raw 32-byte key. A missing encryption key is rejected. Re-derive and re-encrypt under `v2`, then drop `v1` material. Passwordless deterministic addresses stay on version `v1` unless the caller passes `v2`. Password-derived `v1` material can be checked through `verify_password`, `get_wallet_address`, and `verify_and_decrypt_key`.
 - Email and phone identifiers are normalized on input. Email lookups match existing rows regardless of case. `blockauth_duplicate_identifiers` reports colliding accounts and writes nothing.

@@ -1,6 +1,7 @@
 import ipaddress
 import math
 import os
+import threading
 import time
 import uuid
 from typing import Optional
@@ -161,9 +162,35 @@ class RequestThrottle(BaseThrottle):
         if rate is None:
             rate = get_config("REQUEST_LIMIT")
         self.num_requests, self.duration = rate
+        # Per-request fields stay with the calling thread (SEC-11).
+        self._local = threading.local()
         self.history = None
         self.now = None
         self.key = None
+
+    @property
+    def key(self):
+        return getattr(self._local, "key", None)
+
+    @key.setter
+    def key(self, value):
+        self._local.key = value
+
+    @property
+    def history(self):
+        return getattr(self._local, "history", None)
+
+    @history.setter
+    def history(self, value):
+        self._local.history = value
+
+    @property
+    def now(self):
+        return getattr(self._local, "now", None)
+
+    @now.setter
+    def now(self, value):
+        self._local.now = value
 
     def get_cache_key(self, request, subject):
         identifier = request.data.get("identifier")
@@ -301,8 +328,26 @@ class EnhancedThrottle(BaseThrottle):
         self.max_failures = max_failures
         self.cooldown_minutes = cooldown_minutes
         self.fail_closed = fail_closed
+        # Per-request fields stay with the calling thread (SEC-11).
+        self._local = threading.local()
         self._block_reason = None
         self._wait = None
+
+    @property
+    def _block_reason(self):
+        return getattr(self._local, "_block_reason", None)
+
+    @_block_reason.setter
+    def _block_reason(self, value):
+        self._local._block_reason = value
+
+    @property
+    def _wait(self):
+        return getattr(self._local, "_wait", None)
+
+    @_wait.setter
+    def _wait(self, value):
+        self._local._wait = value
 
     def _get_identifier(self, request):
         """Get user identifier from request."""
@@ -502,11 +547,21 @@ class OTPThrottle(RequestThrottle):
         self.cache = default_cache
         self.timer = time.time
         self.num_requests, self.duration = rate
+        # Per-request fields stay with the calling thread (SEC-11).
+        self._local = threading.local()
         self.history = None
         self.now = None
         self.key = None
         self.daily_limit = daily_limit
         self._rate_limit_type = None
+
+    @property
+    def _rate_limit_type(self):
+        return getattr(self._local, "_rate_limit_type", None)
+
+    @_rate_limit_type.setter
+    def _rate_limit_type(self, value):
+        self._local._rate_limit_type = value
 
     def allow_request(self, request, subject):
         """Enhanced allow_request with additional OTP-specific checks."""
