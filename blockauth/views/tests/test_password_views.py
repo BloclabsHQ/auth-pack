@@ -2,15 +2,19 @@
 Tests for password views: PasswordResetView, PasswordResetConfirmView, PasswordChangeView.
 """
 
+import time
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
 
-from blockauth.models.otp import OTPSubject
+from blockauth.models.otp import OTP, OTPSubject, otp_code_digest
+from blockauth.utils.token import Token, generate_auth_token
 
 PASSWORD_RESET_URL = reverse("password-reset")
 PASSWORD_RESET_CONFIRM_URL = reverse("password-reset-confirm")
 PASSWORD_CHANGE_URL = reverse("change-password")
+REFRESH_URL = reverse("refresh-token")
 
 # Test credentials (not real secrets)
 STRONG_PASS = "TestP@ss123!"
@@ -159,6 +163,50 @@ class TestPasswordResetConfirmView:
         payload = Token().decode_token(response.data["access"])
         assert str(payload["user_id"]) == str(user.id)
 
+    def test_reset_revokes_old_tokens(self, api_client, create_user):
+        user = create_user(email="reset@test.com", password=STRONG_PASS)
+        token = Token()
+        old_access, old_refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        time.sleep(1.1)
+        OTP.objects.create(
+            identifier="reset@test.com",
+            code=otp_code_digest("ABC123"),
+            subject=OTPSubject.PASSWORD_RESET,
+        )
+        response = api_client.post(
+            PASSWORD_RESET_CONFIRM_URL,
+            {
+                "identifier": "reset@test.com",
+                "code": "ABC123",
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {old_access}")
+        denied = api_client.post(PASSWORD_CHANGE_URL, {}, format="json")
+        assert denied.status_code == status.HTTP_401_UNAUTHORIZED
+        refreshed = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": old_refresh},
+            format="json",
+        )
+        assert refreshed.status_code == status.HTTP_403_FORBIDDEN
+        fresh_access = response.data["access"]
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {fresh_access}")
+        fresh = api_client.post(PASSWORD_CHANGE_URL, {}, format="json")
+        assert fresh.status_code == status.HTTP_400_BAD_REQUEST
+        new_refresh = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": response.data["refresh"]},
+            format="json",
+        )
+        assert new_refresh.status_code == status.HTTP_200_OK
+
 
 @pytest.mark.django_db
 class TestPasswordChangeView:
@@ -283,3 +331,56 @@ class TestPasswordChangeView:
         assert user_payload["id"] == str(user.id)
         payload = Token().decode_token(response.data["access"])
         assert str(payload["user_id"]) == str(user.id)
+
+    def test_change_revokes_old_tokens(self, api_client, create_user):
+        user = create_user(email="change@test.com", password=STRONG_PASS)
+        other = create_user(email="other@test.com", password=STRONG_PASS)
+        token = Token()
+        old_access, old_refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(user.id),
+        )
+        other_access, other_refresh = generate_auth_token(
+            token_class=token,
+            user_id=str(other.id),
+        )
+        time.sleep(1.1)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {old_access}")
+        changed = api_client.post(
+            PASSWORD_CHANGE_URL,
+            {
+                "old_password": STRONG_PASS,
+                "new_password": STRONG_PASS_NEW,
+                "confirm_password": STRONG_PASS_NEW,
+            },
+            format="json",
+        )
+        assert changed.status_code == status.HTTP_200_OK
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {old_access}")
+        denied = api_client.post(PASSWORD_CHANGE_URL, {}, format="json")
+        assert denied.status_code == status.HTTP_401_UNAUTHORIZED
+        refreshed = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": old_refresh},
+            format="json",
+        )
+        assert refreshed.status_code == status.HTTP_403_FORBIDDEN
+        fresh_access = changed.data["access"]
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {fresh_access}")
+        fresh = api_client.post(PASSWORD_CHANGE_URL, {}, format="json")
+        assert fresh.status_code == status.HTTP_400_BAD_REQUEST
+        new_refresh = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": changed.data["refresh"]},
+            format="json",
+        )
+        assert new_refresh.status_code == status.HTTP_200_OK
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {other_access}")
+        untouched = api_client.post(PASSWORD_CHANGE_URL, {}, format="json")
+        assert untouched.status_code == status.HTTP_400_BAD_REQUEST
+        other_ok = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": other_refresh},
+            format="json",
+        )
+        assert other_ok.status_code == status.HTTP_200_OK

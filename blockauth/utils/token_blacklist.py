@@ -13,6 +13,8 @@ Design decisions:
 - ``is_blacklisted()`` is intentionally a simple cache lookup (O(1)).
 """
 
+import time
+
 from django.core.cache import cache as default_cache
 
 from blockauth.utils.config import get_config
@@ -52,6 +54,7 @@ def is_blacklisted(jti: str, cache=None) -> bool:
 
 _FAMILY_HEAD_PREFIX = "jwt_family_head_"
 _FAMILY_REVOKED_PREFIX = "jwt_family_revoked_"
+_USER_STAMP_PREFIX = "tokens_valid_after:"
 
 
 def _ttl(ttl_seconds: int) -> int:
@@ -94,3 +97,32 @@ def revoke_family(family: str, cache=None) -> None:
     if head:
         blacklist_token(head, ttl_seconds, cache=_cache)
     _cache.set(f"{_FAMILY_REVOKED_PREFIX}{family}", True, _ttl(ttl_seconds))
+
+
+def revoke_user_tokens(user_id, cache=None) -> None:
+    """Reject this user's tokens issued before now (SEC-02).
+
+    The stamp lasts for the refresh lifetime. Call it before minting
+    the replacement pair so that pair stays valid.
+    """
+    if not user_id:
+        return
+    _cache = cache or default_cache
+    lifetime = get_config("REFRESH_TOKEN_LIFETIME")
+    stamp = int(time.time())
+    _cache.set(
+        f"{_USER_STAMP_PREFIX}{user_id}",
+        stamp,
+        _ttl(int(lifetime.total_seconds())),
+    )
+
+
+def token_predates_revocation(user_id, iat, cache=None) -> bool:
+    """True when ``iat`` is earlier than the user's stamp (SEC-02)."""
+    if not user_id or iat is None:
+        return False
+    _cache = cache or default_cache
+    stamp = _cache.get(f"{_USER_STAMP_PREFIX}{user_id}")
+    if stamp is None:
+        return False
+    return int(iat) < int(stamp)
