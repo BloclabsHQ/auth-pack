@@ -17,6 +17,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- Setting a first password on an account with no usable password now requires a password-reset code or a configured step-up receipt. Signup, reset, and change also run Django's password validators, and a changed password must differ from the current one.
 - TOTP backup codes now default to 16 hex characters. Codes saved before this change no longer verify; regenerate them after upgrade. `TOTP_CONFIG.ENCRYPTION_KEY` is now required for backup codes, also when a custom encryption service is passed.
 
 ---

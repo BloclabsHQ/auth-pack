@@ -36,6 +36,7 @@ Django Integration:
 import re
 from typing import List
 
+from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
 
@@ -89,6 +90,25 @@ def validate_password(password: str) -> List[str]:
         return []
 
     return [PASSWORD_VALIDATION_ERROR]
+
+
+def account_has_password(user) -> bool:
+    """True when the account can authenticate with a stored password."""
+    encoded = getattr(user, "password", "") or ""
+    return bool(encoded) and user.has_usable_password()
+
+
+def django_password_errors(password: str, user=None) -> List[str]:
+    """Return messages from Django's AUTH_PASSWORD_VALIDATORS.
+
+    An empty list means those validators accepted the password. The user
+    argument is optional; signup has no user row yet.
+    """
+    try:
+        django_validate_password(password, user=user)
+    except ValidationError as exc:
+        return [str(message) for message in exc.messages]
+    return []
 
 
 def is_valid_password(password: str) -> bool:

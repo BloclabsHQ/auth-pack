@@ -118,6 +118,19 @@ class TestSignUpView:
         response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": "weak"})
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_signup_rejects_common_password(self, api_client, tmp_path, settings):
+        """SEC-12: a complexity-valid common password is rejected at signup."""
+        password_list = tmp_path / "common-passwords.txt"
+        password_list.write_text("password123!\n", encoding="utf-8")
+        settings.AUTH_PASSWORD_VALIDATORS = [
+            {
+                "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+                "OPTIONS": {"password_list_path": str(password_list)},
+            }
+        ]
+        response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": "Password123!"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
     def test_signup_missing_fields(self, api_client):
         response = api_client.post(SIGNUP_URL, {})
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)

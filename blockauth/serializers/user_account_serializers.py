@@ -9,13 +9,25 @@ from blockauth.models.otp import OTP, OTPSubject
 from blockauth.serializers.otp_serializers import OTPRequestSerializer, OTPVerifySerializer
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.generics import get_password_help_text
-from blockauth.utils.validators import BlockAuthPasswordValidator, is_valid_phone_number
+from blockauth.utils.validators import (
+    BlockAuthPasswordValidator,
+    account_has_password,
+    django_password_errors,
+    is_valid_phone_number,
+)
 
 _User = get_block_auth_user_model()
 logger = logging.getLogger(__name__)
 
 # Single instance of password validator to avoid duplicate error messages
 _password_validator = BlockAuthPasswordValidator()
+
+
+def _reject_django_password(password: str, user, field: str) -> None:
+    errors = django_password_errors(password, user)
+    if errors:
+        raise ValidationError(detail={field: errors}, code=4007)
+
 
 """account basic auth related serializers"""
 
@@ -45,6 +57,7 @@ class SignUpRequestSerializer(OTPRequestSerializer):
                 detail={"identifier": "Unable to complete registration with the provided information."},
                 code=4002,
             )
+        _reject_django_password(data["password"], None, "password")
         return data
 
 
@@ -197,6 +210,8 @@ class PasswordResetConfirmationEmailSerializer(OTPVerifySerializer):
                 detail={"new_password": "Passwords do not match. Please make sure both passwords are identical."},
                 code=4007,
             )
+        query = {"email": data["identifier"]} if data.get("email") else {"phone_number": data["identifier"]}
+        _reject_django_password(data["new_password"], _User.objects.filter(**query).first(), "new_password")
         return data
 
 
@@ -206,6 +221,7 @@ class PasswordChangeSerializer(serializers.Serializer):
         write_only=True, validators=[_password_validator.validate], help_text=format_lazy(get_password_help_text())
     )
     confirm_password = serializers.CharField(write_only=True, help_text=format_lazy(get_password_help_text()))
+    otp_code = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     def validate(self, data):
         if data["new_password"] != data["confirm_password"]:
@@ -214,12 +230,17 @@ class PasswordChangeSerializer(serializers.Serializer):
                 code=4007,
             )
 
-        if self.context["request"].user.password and not self.context["request"].user.check_password(
-            data["old_password"]
-        ):
+        user = self.context["request"].user
+        if account_has_password(user) and not user.check_password(data["old_password"]):
             raise ValidationError(
                 detail={"old_password": "Current password is incorrect. Please try again."}, code=4005
             )
+        if account_has_password(user) and user.check_password(data["new_password"]):
+            raise ValidationError(
+                detail={"new_password": "New password must differ from the current password."},
+                code=4007,
+            )
+        _reject_django_password(data["new_password"], user, "new_password")
         return data
 
 

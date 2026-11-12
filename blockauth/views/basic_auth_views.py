@@ -44,6 +44,7 @@ from blockauth.serializers.user_account_serializers import (
     SignUpRequestSerializer,
     SignUpResendOTPSerializer,
 )
+from blockauth.stepup.receipt import ReceiptValidationError, ReceiptValidator
 from blockauth.utils.auth_state import build_user_payload, ensure_user_active, issue_auth_tokens
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode
@@ -51,6 +52,7 @@ from blockauth.utils.generics import model_to_json, sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
 from blockauth.utils.rate_limiter import EnhancedThrottle, OTPThrottle, RequestThrottle
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
+from blockauth.utils.validators import account_has_password
 
 logger = logging.getLogger(__name__)
 _User = get_block_auth_user_model()
@@ -766,6 +768,31 @@ class PasswordResetConfirmView(APIView):
             raise APIException()
 
 
+def _first_password_proof(request, user, otp_code) -> bool:
+    """True when a passwordless account presented a reset code or a receipt."""
+    identifier = user.email or user.phone_number
+    if otp_code and identifier:
+        try:
+            OTP.validate_otp(identifier, OTPSubject.PASSWORD_RESET, otp_code)
+            return True
+        except ValidationError:
+            pass
+    secret = get_config("STEPUP_RECEIPT_SECRET")
+    token = request.headers.get("X-TOTP-Receipt")
+    if not secret or not token or len(str(secret)) < 32:
+        return False
+    validator = ReceiptValidator(
+        secret=str(secret),
+        expected_audience=get_config("STEPUP_RECEIPT_AUDIENCE") or "default",
+        expected_scope=get_config("STEPUP_RECEIPT_SCOPE") or "mpc",
+    )
+    try:
+        validator.validate(token, expected_subject=str(user.id))
+    except ReceiptValidationError:
+        return False
+    return True
+
+
 class PasswordChangeView(APIView):
     """
     Change password as a logged-in user
@@ -793,6 +820,11 @@ class PasswordChangeView(APIView):
             serializer.is_valid(raise_exception=True)
             data = serializer.validated_data
             user = request.user
+            if not account_has_password(user) and not _first_password_proof(request, user, data.get("otp_code")):
+                raise ValidationError(
+                    detail={"otp_code": "A password reset code or step-up receipt is required to set a password."},
+                    code=4007,
+                )
 
             # Change user password
             user.set_password(data["new_password"])

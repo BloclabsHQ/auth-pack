@@ -98,6 +98,10 @@ DEFAULTS = {
     "OIDC_VERIFIER_LEEWAY_SECONDS": 60,
     # SocialIdentity refresh-token-at-rest (base64-encoded 32 bytes)
     "SOCIAL_IDENTITY_ENCRYPTION_KEY": None,
+    # Step-up receipt for setting a first password. Unset means not configured.
+    "STEPUP_RECEIPT_SECRET": None,
+    "STEPUP_RECEIPT_AUDIENCE": "default",
+    "STEPUP_RECEIPT_SCOPE": "mpc",
 }
 
 
