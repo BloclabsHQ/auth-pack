@@ -8,7 +8,11 @@ in different scenarios and frameworks.
 # Example 1: Basic KDF Usage in Django
 # In your Django views or services
 
+import logging
+
 from django.http import JsonResponse
+
+logger = logging.getLogger(__name__)
 
 
 def create_user_with_wallet(request):
@@ -43,8 +47,9 @@ def create_user_with_wallet(request):
 
         return JsonResponse({"success": True, "wallet_address": wallet_data["wallet_address"]})
 
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("create_user_with_wallet failed")
+        return JsonResponse({"error": "Request failed"}, status=500)
 
 
 def verify_user_password(request):
@@ -74,8 +79,9 @@ def verify_user_password(request):
         else:
             return JsonResponse({"error": "Invalid password"}, status=401)
 
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("verify_user_password failed")
+        return JsonResponse({"error": "Request failed"}, status=500)
 
 
 # Example 2: Using KDF Manager for Complete Wallet Management
@@ -164,8 +170,9 @@ async def create_wallet(user_data: UserCreate):
 
         return WalletResponse(wallet_address=wallet_data["wallet_address"], success=True)
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("create_wallet failed")
+        raise HTTPException(status_code=500, detail="Request failed")
 
 
 # Example 4: Flask Integration
@@ -206,8 +213,9 @@ def create_wallet_flask():
 
         return jsonify({"success": True, "wallet_address": wallet_data["wallet_address"]})
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        logger.exception("create_wallet_flask failed")
+        return jsonify({"error": "Request failed"}), 500
 
 
 # Example 5: Custom User Model Integration
@@ -377,8 +385,15 @@ def create_bulk_wallets(users_data: list):
                 {"email": user_data["email"], "success": True, "wallet_address": wallet_data["wallet_address"]}
             )
 
-        except Exception as e:
-            results.append({"email": user_data["email"], "success": False, "error": str(e)})
+        except Exception:
+            logger.exception("create_bulk_wallets failed")
+            results.append(
+                {
+                    "email": user_data["email"],
+                    "success": False,
+                    "error": "Request failed",
+                }
+            )
 
     return results
 
