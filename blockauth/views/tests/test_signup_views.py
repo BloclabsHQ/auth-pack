@@ -5,7 +5,7 @@ Tests for signup views: SignUpView, SignUpResendOTPView, SignUpConfirmView.
 from unittest.mock import patch
 
 import pytest
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import PBKDF2PasswordHasher, make_password
 from django.urls import reverse
 from rest_framework import status
 
@@ -136,6 +136,31 @@ class TestSignUpView:
         assert existing.status_code == fresh.status_code
         assert existing.data == fresh.data
         assert not OTP.objects.filter(identifier="exists@test.com").exists()
+
+    def test_signup_hashes_existing_and_new(self, api_client, create_user):
+        create_user(email="exists@test.com", is_verified=True)
+        real_encode = PBKDF2PasswordHasher.encode
+
+        def _count(path):
+            calls = {"n": 0}
+
+            def spy(self, password, salt, iterations=None):
+                calls["n"] += 1
+                return real_encode(self, password, salt, iterations)
+
+            with patch.object(PBKDF2PasswordHasher, "encode", spy):
+                response = api_client.post(SIGNUP_URL, path, format="json")
+            assert response.status_code == status.HTTP_200_OK
+            return calls["n"]
+
+        existing = {
+            "identifier": "exists@test.com",
+            "method": "email",
+            "verification_type": "otp",
+            "password": _TEST_PW,
+        }
+        fresh = {**_SIGNUP_REQUEST, "password": _TEST_PW}
+        assert _count(existing) == _count(fresh) == 1
 
     def test_signup_weak_password(self, api_client):
         response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "password": "weak"})
