@@ -71,6 +71,8 @@ class JWTTokenManager:
             "iat": get_current_time(),
             "type": token_type,
         }
+        if extra_claims.get("family"):
+            base_claims["family"] = extra_claims["family"]
 
         # Collect custom claims from all registered providers
         custom_claims = {}
@@ -133,6 +135,7 @@ class JWTTokenManager:
             claims = self.decode_token(token)
             # Remove base claims to get only custom claims
             base_claim_keys = {"user_id", "jti", "exp", "iat", "type"}
+            base_claim_keys.add("family")
             custom_claims = {k: v for k, v in claims.items() if k not in base_claim_keys}
             return custom_claims
         except Exception as e:
@@ -156,6 +159,7 @@ class JWTTokenManager:
         # Prepare user data
         user_data = {
             "email": getattr(user, "email", None),
+            "family": secrets.token_urlsafe(16),
         }
 
         # Generate access token

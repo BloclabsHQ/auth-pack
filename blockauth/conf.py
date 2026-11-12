@@ -45,6 +45,7 @@ DEFAULTS = {
         "PASSWORDLESS_LOGIN": True,  # Enable passwordless login with OTP
         "WALLET_LOGIN": True,  # Enable wallet-based authentication
         "TOKEN_REFRESH": True,  # Enable JWT token refresh
+        "TOKEN_LOGOUT": True,  # Revoke the current refresh family
         # Password management
         "PASSWORD_RESET": True,  # Enable password reset functionality
         "PASSWORD_CHANGE": True,  # Enable password change for authenticated users

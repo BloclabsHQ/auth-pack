@@ -236,6 +236,14 @@ class Token(AbstractToken):
             raise AuthenticationFailed("Invalid token.")
 
 
+def _with_family(user_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Copy claims and ensure one family id for the pair (SEC-02)."""
+    data = dict(user_data or {})
+    if not data.get("family"):
+        data["family"] = secrets.token_urlsafe(16)
+    return data
+
+
 def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dict[str, Any] = None) -> Tuple[str, str]:
     """
     Generate both access and refresh tokens for a user.
@@ -271,16 +279,19 @@ def generate_auth_token(token_class: AbstractToken, user_id: str, user_data: Dic
             "refresh": refresh_token
         }
     """
-    # Generate access token with shorter lifetime
+    data = _with_family(user_data)
     access_token = token_class.generate_token(
-        user_id=user_id, token_type="access", token_lifetime=get_config("ACCESS_TOKEN_LIFETIME"), user_data=user_data
+        user_id=user_id,
+        token_type="access",
+        token_lifetime=get_config("ACCESS_TOKEN_LIFETIME"),
+        user_data=data,
     )
-
-    # Generate refresh token with longer lifetime (minimal payload)
     refresh_token = token_class.generate_token(
-        user_id=user_id, token_type="refresh", token_lifetime=get_config("REFRESH_TOKEN_LIFETIME")
+        user_id=user_id,
+        token_type="refresh",
+        token_lifetime=get_config("REFRESH_TOKEN_LIFETIME"),
+        user_data={"family": data["family"]},
     )
-
     return access_token, refresh_token
 
 
@@ -332,19 +343,23 @@ def generate_auth_token_with_custom_claims(
 
         # Verify user exists before generating custom-claims tokens
         user_model = get_block_auth_user_model()
+        data = _with_family(user_data)
         if not user_model.objects.filter(id=user_id).exists():
             logger.warning("User %s not found, falling back to basic token generation", user_id)
-            return generate_auth_token(token_class, user_id, user_data)
+            return generate_auth_token(token_class, user_id, data)
 
         access_token = jwt_manager.generate_token(
             user_id=user_id,
             token_type="access",
             token_lifetime=get_config("ACCESS_TOKEN_LIFETIME"),
-            user_data=user_data,
+            user_data=data,
         )
 
         refresh_token = jwt_manager.generate_token(
-            user_id=user_id, token_type="refresh", token_lifetime=get_config("REFRESH_TOKEN_LIFETIME")
+            user_id=user_id,
+            token_type="refresh",
+            token_lifetime=get_config("REFRESH_TOKEN_LIFETIME"),
+            user_data={"family": data["family"]},
         )
 
         return access_token, refresh_token

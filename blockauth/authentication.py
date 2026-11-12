@@ -7,6 +7,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.token import AUTH_TOKEN_CLASS
+from blockauth.utils.token_blacklist import is_blacklisted
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,8 @@ class JWTAuthentication(BaseAuthentication):
 
         if payload.get("type") != "access":
             raise AuthenticationFailed("Invalid token type. Only access tokens are allowed")
+        if is_blacklisted(payload.get("jti")):
+            raise AuthenticationFailed("Invalid token.")
 
         user = self._get_user(payload)
         # Attach claims to user object for easy access

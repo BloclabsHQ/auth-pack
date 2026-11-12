@@ -87,6 +87,7 @@ def get_feature_documentation() -> dict:
         Features.PASSWORDLESS_LOGIN: "Enable passwordless login with OTP",
         Features.WALLET_LOGIN: "Enable wallet-based authentication",
         Features.TOKEN_REFRESH: "Enable JWT token refresh functionality",
+        Features.TOKEN_LOGOUT: "Revoke the current refresh family",
         Features.PASSWORD_RESET: "Enable password reset functionality",
         Features.PASSWORD_CHANGE: "Enable password change for authenticated users",
         Features.EMAIL_CHANGE: "Enable email change functionality",

@@ -80,6 +80,13 @@ app is directly internet-facing, or to the number of trusted proxy hops. For
 brute-force-critical subjects the throttle fails **closed** if the cache backend
 is unavailable.
 
+## Token revocation
+
+Logout and reuse of an already-rotated refresh token are stored in the Django
+cache. Entries expire when the token would have expired. Revocation applies on
+every worker only when that cache is shared. A per-process cache applies only
+on the worker that wrote the entry (SEC-02).
+
 ## Input Validation
 
 - Email: Django `validate_email` + format normalization
