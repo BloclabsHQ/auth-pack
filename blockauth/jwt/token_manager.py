@@ -7,6 +7,7 @@ import jwt
 from rest_framework.exceptions import AuthenticationFailed
 
 from blockauth.utils.config import get_block_auth_user_model, get_config
+from blockauth.utils.token import _REQUIRED_CLAIMS
 
 from .interfaces import CustomClaimsProvider
 
@@ -101,7 +102,12 @@ class JWTTokenManager:
     def decode_token(self, token: str) -> Dict[str, Any]:
         """Decode and validate JWT token"""
         try:
-            claims = jwt.decode(token, self.verification_key, algorithms=[self.algorithm])
+            claims = jwt.decode(
+                token,
+                self.verification_key,
+                algorithms=[self.algorithm],
+                options={"require": _REQUIRED_CLAIMS},
+            )
 
             # Validate custom claims with providers
             for provider in self._claims_providers:

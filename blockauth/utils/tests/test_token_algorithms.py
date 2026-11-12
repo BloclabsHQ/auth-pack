@@ -17,7 +17,15 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from django.core.exceptions import ImproperlyConfigured
+from django.utils import timezone
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.test import APIRequestFactory
 
+from blockauth.apps import validate_jwt_secret
+from blockauth.authentication import JWTAuthentication
+from blockauth.conf import auth_settings
+from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.token import _ASYMMETRIC_ALGORITHMS, Token, _resolve_keys
 
 TEST_HS256_SECRET = os.environ.get("TEST_JWT_SECRET", "test-hs256-secret-key-for-unit-tests")
@@ -211,3 +219,78 @@ class TestTokenRS256:
         payload = token.decode_token(encoded)
         assert payload["email"] == "test@example.com"
         assert payload["tier"] == "enterprise"
+
+
+def _signed_token(user_id, **claims):
+    payload = {"user_id": str(user_id), "iat": timezone.now(), "jti": "test-jti"}
+    payload.update(claims)
+    return jwt.encode(payload, get_config("SECRET_KEY"), algorithm="HS256")
+
+
+@pytest.mark.django_db
+def test_signed_token_without_exp_is_rejected():
+    """SEC-10: a signed token without exp does not authenticate."""
+    User = get_block_auth_user_model()
+    user = User(email="jwt-exp@example.com", is_verified=True)
+    user.set_password("TestP@ss123!")
+    user.save()
+    token = _signed_token(user.id, type="access")
+    request = APIRequestFactory().get("/", HTTP_AUTHORIZATION=f"Bearer {token}")
+    with pytest.raises(AuthenticationFailed):
+        JWTAuthentication().authenticate(request)
+
+
+@pytest.mark.django_db
+def test_signed_token_without_type_is_rejected():
+    """SEC-18: a signed token without type is rejected, not an unhandled error."""
+    User = get_block_auth_user_model()
+    user = User(email="jwt-type@example.com", is_verified=True)
+    user.set_password("TestP@ss123!")
+    user.save()
+    token = _signed_token(user.id, exp=timezone.now() + timedelta(minutes=5))
+    request = APIRequestFactory().get("/", HTTP_AUTHORIZATION=f"Bearer {token}")
+    with pytest.raises(AuthenticationFailed):
+        JWTAuthentication().authenticate(request)
+
+
+def test_none_algorithm_is_rejected():
+    """SEC-10: ALGORITHM none is not accepted by key resolution."""
+    with pytest.raises(ImproperlyConfigured):
+        _resolve_keys("none")
+
+
+def test_short_secret_refuses_boot_when_debug_false(settings):
+    """SEC-10: a 10-character symmetric secret does not boot when DEBUG is False."""
+    settings.DEBUG = False
+    block = dict(settings.BLOCK_AUTH_SETTINGS)
+    block["SECRET_KEY"] = "1234567890"
+    block.pop("JWT_SECRET_KEY", None)
+    settings.BLOCK_AUTH_SETTINGS = block
+    auth_settings.SECRET_KEY = "1234567890"
+    try:
+        with pytest.raises(ImproperlyConfigured):
+            validate_jwt_secret()
+    finally:
+        del auth_settings.SECRET_KEY
+
+
+def test_empty_jwt_secret_key_refuses_boot_when_debug_false(settings):
+    """SEC-10: empty JWT_SECRET_KEY is the signing key.
+
+    A long SECRET_KEY and DEBUG=False still refuse boot.
+    """
+    settings.DEBUG = False
+    settings.SECRET_KEY = "x" * 50
+    block = dict(settings.BLOCK_AUTH_SETTINGS)
+    block["JWT_SECRET_KEY"] = ""
+    block["SECRET_KEY"] = "x" * 50
+    settings.BLOCK_AUTH_SETTINGS = block
+    auth_settings.JWT_SECRET_KEY = ""
+    auth_settings.SECRET_KEY = "x" * 50
+    try:
+        assert _resolve_keys("HS256")[0] == ""
+        with pytest.raises(ImproperlyConfigured):
+            validate_jwt_secret()
+    finally:
+        del auth_settings.JWT_SECRET_KEY
+        del auth_settings.SECRET_KEY
