@@ -47,7 +47,8 @@ BLOCK_AUTH_SETTINGS = {
     'ROTATE_REFRESH_TOKENS': True,  # Blacklist old refresh token on rotation
 
     # --- Wallet Settings ---
-    'WALLET_MESSAGE_TTL': 300,  # Signed messages expire after 5 minutes
+    # WALLET_MESSAGE_TTL is unused. Nonce lifetime is the Django setting
+    # WALLET_LOGIN_NONCE_TTL_SECONDS (default 300 seconds).
 
     # --- Feature Flags ---
     'FEATURES': {

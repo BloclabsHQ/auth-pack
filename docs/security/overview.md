@@ -29,7 +29,7 @@ BlockAuth is designed with security as a core principle. This page summarizes th
 - Signature malleability protection (s-value check)
 - Zero address rejection
 - Message size limits (DoS prevention)
-- Replay protection via TTL (`WALLET_MESSAGE_TTL`)
+- Replay protection via single-use nonces (`WALLET_LOGIN_NONCE_TTL_SECONDS`)
 
 ## KDF Security
 

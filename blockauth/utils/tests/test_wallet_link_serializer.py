@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from blockauth.serializers.wallet_serializers import WalletLinkSerializer, WalletLoginSerializer
+from blockauth.serializers.wallet_serializers import WalletLinkSerializer
 from blockauth.services.wallet_login_service import WalletLoginError
 from blockauth.utils.custom_exception import WalletConflictError
 
@@ -139,69 +139,3 @@ class TestBusinessRules:
             mock_user_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
             s = WalletLinkSerializer(data=_make_data(), context={"request": request})
             assert s.is_valid(), s.errors
-
-
-class TestWalletLoginSerializerInvalidAddress:
-    def test_invalid_address_is_invalid_and_has_wallet_address_in_errors(self):
-        s = WalletLoginSerializer(
-            data={
-                "wallet_address": "notvalid",
-                "message": json.dumps(
-                    {
-                        "nonce": "test-nonce-0000-1111-2222",
-                        "timestamp": int(time.time()),
-                        "body": "Login to TestApp",
-                    }
-                ),
-                "signature": "0x" + "a" * 130,
-            }
-        )
-        assert not s.is_valid()
-        assert "wallet_address" in s.errors
-
-
-class TestWalletLoginSerializerErrorCodes:
-    def test_invalid_signature_error_code_is_string(self):
-        """verify_signature returning False yields code INVALID_SIGNATURE (not 4009)."""
-        data = {
-            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12",
-            "message": '{"nonce": "abc", "timestamp": 9999999999, "body": "Login"}',
-            "signature": "0x" + "a" * 130,
-        }
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.return_value = False
-            s = WalletLoginSerializer(data=data)
-            s.is_valid()
-            error = s.errors.get("signature", [])
-            assert len(error) > 0
-            assert error[0].code == "INVALID_SIGNATURE"
-
-    def test_value_error_code_is_int(self):
-        """ValueError from replay/timestamp checks yields numeric code 4009."""
-        data = {
-            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12",
-            "message": '{"nonce": "abc", "timestamp": 9999999999, "body": "Login"}',
-            "signature": "0x" + "a" * 130,
-        }
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.side_effect = ValueError("Nonce already used.")
-            s = WalletLoginSerializer(data=data)
-            s.is_valid()
-            error = s.errors.get("message", [])
-            assert len(error) > 0
-            assert error[0].code == 4009
-
-    def test_unexpected_exception_code_is_string(self):
-        """Unexpected exceptions during verification yield code INVALID_SIGNATURE."""
-        data = {
-            "wallet_address": "0xabcdef1234567890abcdef1234567890abcdef12",
-            "message": '{"nonce": "abc", "timestamp": 9999999999, "body": "Login"}',
-            "signature": "0x" + "a" * 130,
-        }
-        with patch("blockauth.serializers.wallet_serializers.WalletAuthenticator") as mock_auth:
-            mock_auth.return_value.verify_signature.side_effect = RuntimeError("unexpected")
-            s = WalletLoginSerializer(data=data)
-            s.is_valid()
-            error = s.errors.get("signature", [])
-            assert len(error) > 0
-            assert error[0].code == "INVALID_SIGNATURE"

@@ -22,27 +22,6 @@ VALID_WALLET = "0x" + "a1" * 20  # 42 char wallet address
 @pytest.mark.django_db
 class TestWalletAuthLoginView:
 
-    @patch("blockauth.serializers.wallet_serializers.WalletAuthenticator")
-    def test_wallet_login_returns_tokens(self, mock_auth_cls, api_client):
-        mock_auth = MagicMock()
-        mock_auth.verify_signature.return_value = True
-        mock_auth_cls.return_value = mock_auth
-
-        response = api_client.post(
-            WALLET_LOGIN_URL,
-            {
-                "wallet_address": VALID_WALLET,
-                "message": "Sign in to BlockAuth\nNonce: abc123\nTimestamp: 2025-01-01T00:00:00Z",
-                "signature": "0x" + "ab" * 65,
-            },
-        )
-        # Should succeed or fail based on serializer validation
-        # The exact behavior depends on WalletLoginSerializer internals
-        assert response.status_code in (
-            status.HTTP_200_OK,
-            status.HTTP_400_BAD_REQUEST,  # If serializer validation fails
-        )
-
     def test_wallet_login_user_payload_full_shape(self, api_client, create_user):
         """Issue #131: wallet-login pins the same {is_active, date_joined,
         wallets} keys as basic-login / passwordless-login. SIWE verification

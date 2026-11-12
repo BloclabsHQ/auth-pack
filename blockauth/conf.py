@@ -72,9 +72,9 @@ DEFAULTS = {
     # other util classes
     "DEFAULT_NOTIFICATION_CLASS": "blockauth.notification.DummyNotification",
     "BLOCK_AUTH_LOGGER_CLASS": "blockauth.utils.logger.DummyLogger",
-    # Wallet replay protection for the pre-SIWE authenticator
-    # (``WALLET_MESSAGE_TTL``). Wallet link uses the SIWE nonce TTL.
-    # The SIWE login flow uses top-level Django settings ``WALLET_LOGIN_*``.
+    # Unused. Login and link nonce lifetime is the Django setting
+    # ``WALLET_LOGIN_NONCE_TTL_SECONDS``. Kept so existing settings dicts
+    # that still include ``WALLET_MESSAGE_TTL`` do not need a code change.
     "WALLET_MESSAGE_TTL": 300,
     # Refresh token rotation
     "ROTATE_REFRESH_TOKENS": True,  # Blacklist old refresh token on rotation
