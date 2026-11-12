@@ -51,7 +51,7 @@ from blockauth.utils.oauth_state import (
 )
 from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
-from blockauth.utils.rate_limiter import EnhancedThrottle
+from blockauth.utils.rate_limiter import IPThrottle
 from blockauth.utils.social import social_login_data
 
 logger = logging.getLogger(__name__)
@@ -215,7 +215,7 @@ def clear_linkedin_callback_cookies(response, samesite: str | None = None) -> No
 
 
 # Per IP, same window as the public callback default (SEC-04).
-_CALLBACK_THROTTLE = EnhancedThrottle(rate=(30, 60))
+_CALLBACK_THROTTLE = IPThrottle(rate=(30, 60))
 
 
 def _limited(request):

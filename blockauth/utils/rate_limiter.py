@@ -520,6 +520,13 @@ class EnhancedThrottle(BaseThrottle):
         return self._wait
 
 
+class IPThrottle(EnhancedThrottle):
+    """Bucket on the client IP only (SEC-04)."""
+
+    def _get_identifier(self, request):
+        return None
+
+
 class OTPThrottle(RequestThrottle):
     """
     Enhanced throttling specifically for OTP operations with additional security measures.

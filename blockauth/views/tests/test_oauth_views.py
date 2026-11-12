@@ -266,6 +266,19 @@ class TestGoogleAuthCallbackView:
             last = api_client.get(url).status_code
         assert last == status.HTTP_429_TOO_MANY_REQUESTS
 
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("google-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
 
 @pytest.fixture
 def facebook_settings():
@@ -381,6 +394,19 @@ class TestFacebookAuthCallbackView:
         last = None
         for _ in range(31):
             last = api_client.get(url).status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("facebook-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
         assert last == status.HTTP_429_TOO_MANY_REQUESTS
 
 
@@ -536,6 +562,19 @@ class TestLinkedInAuthCallbackView:
         last = None
         for _ in range(31):
             last = api_client.get(url).status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("linkedin-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
         assert last == status.HTTP_429_TOO_MANY_REQUESTS
 
 

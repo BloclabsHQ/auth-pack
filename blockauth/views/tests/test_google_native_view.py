@@ -147,3 +147,16 @@ def test_native_verify_is_limited(google_settings, client):
         )
         last = response.status_code
     assert last == 429
+
+
+@pytest.mark.django_db
+def test_native_verify_limit_ignores_identifier(google_settings, client):
+    last = None
+    for i in range(31):
+        response = client.post(
+            "/google/native/verify/",
+            data=json.dumps({"identifier": f"user-{i}"}),
+            content_type="application/json",
+        )
+        last = response.status_code
+    assert last == 429

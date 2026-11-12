@@ -36,7 +36,7 @@ from blockauth.utils.jwt import (
     OIDCVerifierConfig,
 )
 from blockauth.utils.logger import blockauth_logger
-from blockauth.utils.rate_limiter import EnhancedThrottle
+from blockauth.utils.rate_limiter import IPThrottle
 from blockauth.utils.social import social_login_data
 from blockauth.views.google_native_serializers import (
     GoogleNativeIdTokenVerifyRequestSerializer,
@@ -109,7 +109,7 @@ def _build_google_native_verifier() -> OIDCTokenVerifier:
 
 
 # Per IP, same window as the public native verify default (SEC-04).
-_NATIVE_THROTTLE = EnhancedThrottle(rate=(30, 60))
+_NATIVE_THROTTLE = IPThrottle(rate=(30, 60))
 
 
 def _limited(request):
