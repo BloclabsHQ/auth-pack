@@ -23,6 +23,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- Password reset confirm, legacy signup confirm, wallet email verification, and social login match an existing email regardless of case (SEC-08).
 - An access token is rejected when its family is revoked. A token with no family claim is unchanged (SEC-02).
 - `makemigrations` no longer reports pending changes for `blockauth`. The models now match the existing migrations, so no new migration or schema change is needed.
 - A password change or reset rejects access and refresh tokens issued earlier. The pair returned by that response stays valid. The record lasts for the refresh lifetime and needs the shared cache (SEC-02).

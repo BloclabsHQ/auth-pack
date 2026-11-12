@@ -293,7 +293,8 @@ class SignUpConfirmView(APIView):
                 OTP.validate_otp(identifier=identifier, code=code, subject=OTPSubject.WALLET_EMAIL_VERIFICATION)
 
                 # Find the user by email and update verification status
-                user = _User.objects.get(email=identifier)
+                lookup = user_identifier_lookup(identifier, email=True)
+                user = _User.objects.get(**lookup)
                 user.is_verified = True
                 user.save()
 
@@ -321,7 +322,8 @@ class SignUpConfirmView(APIView):
                 else:
                     # Legacy path: user row was created at signup time (pre-fix OTPs).
                     if email:
-                        user = _User.objects.get(email=email)
+                        lookup = user_identifier_lookup(email, email=True)
+                        user = _User.objects.get(**lookup)
                     else:
                         user = _User.objects.get(phone_number=phone_number)
                     user.is_verified = True
@@ -835,7 +837,8 @@ class PasswordResetConfirmView(APIView):
 
             email, phone_number, method = data.get("email"), data.get("phone_number"), None
             if email:
-                user = _User.objects.get(email=email)
+                lookup = user_identifier_lookup(email, email=True)
+                user = _User.objects.get(**lookup)
                 context = {"identifier": email}
                 method = "email"
             else:
