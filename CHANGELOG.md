@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-11
+
+### Fixed
+
+- The `POST /token/logout/` OpenAPI operationId is now `token_logout`. The 0.19.0 name `logout` collided with a consumer's own logout operation.
+
 ## [0.19.0] - 2026-11-11
 
 ### Removed
