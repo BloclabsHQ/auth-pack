@@ -9,6 +9,8 @@ from blockauth.constants import ConfigKeys
 USER_SETTINGS = getattr(settings, "BLOCK_AUTH_SETTINGS", dict())
 
 DEFAULTS = {
+    # Default access-token lifetime is 3600 seconds (1 hour).
+    # High-security deployments should use 15 minutes or less.
     "ACCESS_TOKEN_LIFETIME": timedelta(seconds=3600),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ALGORITHM": "HS256",

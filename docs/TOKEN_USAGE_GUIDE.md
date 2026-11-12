@@ -5,7 +5,7 @@ This guide explains how to use BlockAuth's token generation and decoding functio
 ## Overview
 
 BlockAuth uses JWT (JSON Web Tokens) for authentication. The token system provides:
-- **Access Tokens**: Short-lived tokens for API authentication (default: 1 hour)
+- **Access Tokens**: Short-lived tokens for API authentication (default: 3600 seconds / 1 hour; 15 minutes or less for high-security deployments)
 - **Refresh Tokens**: Long-lived tokens for obtaining new access tokens (default: 1 day)
 - **Configurable**: Customizable lifetimes, algorithms, and secret keys
 
@@ -532,7 +532,7 @@ BlockAuth implements a comprehensive JWT-based authentication system with access
 
 #### For Token Generation
 - Use strong, unique secret keys
-- Set appropriate token lifetimes
+- Set the access-token lifetime from the 3600-second default; use 15 minutes or less for high-security deployments
 - Include minimal necessary claims
 - Use HTTPS for all token transmission
 

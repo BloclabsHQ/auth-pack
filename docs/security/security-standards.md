@@ -32,7 +32,7 @@ This page summarizes the mandatory security standards for BlockAuth.
 - HS256 with 256-bit minimum secret key
 - Algorithm pinning on decode
 - Required claims: `exp`, `iat`, `user_id`, `type`
-- Access token lifetime: configurable (recommended <= 15 minutes for high-security)
+- Access token lifetime: default 3600 seconds (1 hour); 15 minutes or less for high-security deployments
 - Refresh token rotation with blacklisting
 
 ## Key Derivation Standards
