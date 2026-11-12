@@ -11,8 +11,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ## [0.19.0] - 2026-11-11
 
-### Added
-
 ### Removed
 
 - `WalletAuthenticator` and `WalletLoginSerializer` are removed (SEC-05). Login is `POST /login/wallet/challenge/`, then sign the returned plaintext and call `POST /login/wallet/`. Linking an additional wallet is `POST /wallet/link/challenge/`, then `POST /wallet/link/`. `WALLET_MESSAGE_TTL` no longer affects verification. Nonce lifetime is the Django setting `WALLET_LOGIN_NONCE_TTL_SECONDS`.
