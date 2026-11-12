@@ -57,6 +57,7 @@ from blockauth.utils.oauth_state import (
 )
 from blockauth.utils.outbound_http import get_social_outbound_timeout
 from blockauth.utils.pkce import generate_pkce_pair
+from blockauth.utils.rate_limiter import IPThrottle
 from blockauth.utils.social import social_login_data
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,24 @@ def clear_google_callback_cookies(response, samesite: str | None = None) -> None
     response.delete_cookie(GOOGLE_NONCE_COOKIE_NAME, samesite=samesite or "Lax")
 
 
+# Per IP, same window as the public callback default (SEC-04).
+_CALLBACK_THROTTLE = IPThrottle(rate=(30, 60))
+
+
+def _limited(request):
+    """429 before the token exchange, or None when the request is allowed."""
+    if _CALLBACK_THROTTLE.allow_request(request, "google_callback"):
+        return None
+    response = Response(
+        data={
+            "detail": "Rate limit exceeded. Please try again later.",
+        },
+        status=drf_status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+    clear_google_callback_cookies(response)
+    return response
+
+
 class GoogleAuthCallbackView(APIView):
     """Handle Google OAuth callback — verify state + PKCE + nonce + id_token.
 
@@ -276,6 +295,9 @@ class GoogleAuthCallbackView(APIView):
 
     @extend_schema(**google_auth_callback_schema)
     def get(self, request):
+        limited = _limited(request)
+        if limited is not None:
+            return limited
         code = request.query_params.get("code")
         if not code:
             raise ValidationError(social_authorization_code.value, 4020)

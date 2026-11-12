@@ -50,7 +50,12 @@ from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import ValidationErrorWithCode
 from blockauth.utils.generics import model_to_json, sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
-from blockauth.utils.rate_limiter import EnhancedThrottle, OTPThrottle, RequestThrottle
+from blockauth.utils.rate_limiter import (
+    EnhancedThrottle,
+    IPThrottle,
+    OTPThrottle,
+    RequestThrottle,
+)
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
 from blockauth.utils.validators import account_has_password, user_identifier_lookup
 
@@ -606,7 +611,7 @@ class AuthRefreshTokenView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RefreshTokenSerializer
     authentication_classes = []
-    refresh_throttle = EnhancedThrottle(rate=(30, 60))
+    refresh_throttle = IPThrottle(rate=(30, 60))
 
     @extend_schema(**refresh_token_docs)
     def post(self, request):

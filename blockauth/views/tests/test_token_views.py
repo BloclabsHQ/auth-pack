@@ -84,6 +84,17 @@ class TestAuthRefreshTokenView:
         assert statuses[0] == status.HTTP_400_BAD_REQUEST
         assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS
 
+    def test_refresh_limit_ignores_identifier(self, api_client):
+        last = None
+        for i in range(31):
+            response = api_client.post(
+                REFRESH_URL,
+                {"identifier": f"user-{i}"},
+                format="json",
+            )
+            last = response.status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
     def test_refresh_rotates_token(self, api_client, create_user):
         """New refresh token should be different from old one (rotation)."""
         user = create_user()

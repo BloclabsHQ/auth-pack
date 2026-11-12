@@ -259,6 +259,26 @@ class TestGoogleAuthCallbackView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json()["detail"] == "Google token endpoint unreachable"
 
+    def test_callback_is_limited(self, api_client):
+        url = reverse("google-login-callback")
+        last = None
+        for _ in range(31):
+            last = api_client.get(url).status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("google-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
 
 @pytest.fixture
 def facebook_settings():
@@ -368,6 +388,26 @@ class TestFacebookAuthCallbackView:
     def test_callback_missing_code(self, api_client):
         response = api_client.get(reverse("facebook-login-callback"))
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_callback_is_limited(self, api_client):
+        url = reverse("facebook-login-callback")
+        last = None
+        for _ in range(31):
+            last = api_client.get(url).status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("facebook-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
 
 
 @pytest.fixture(autouse=True)
@@ -516,6 +556,26 @@ class TestLinkedInAuthCallbackView:
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_post.assert_not_called()
+
+    def test_callback_is_limited(self, api_client):
+        url = reverse("linkedin-login-callback")
+        last = None
+        for _ in range(31):
+            last = api_client.get(url).status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_callback_limit_ignores_identifier(self, api_client):
+        url = reverse("linkedin-login-callback")
+        last = None
+        for i in range(31):
+            response = api_client.generic(
+                "GET",
+                url,
+                json.dumps({"identifier": f"user-{i}"}),
+                content_type="application/json",
+            )
+            last = response.status_code
+        assert last == status.HTTP_429_TOO_MANY_REQUESTS
 
 
 @pytest.mark.django_db
