@@ -45,6 +45,7 @@ from blockauth.passkey.views import (
 from blockauth.utils.config import is_social_auth_configured
 from blockauth.utils.feature_flags import is_feature_enabled
 from blockauth.views.basic_auth_views import (
+    AuthLogoutView,
     AuthRefreshTokenView,
     BasicAuthLoginView,
     EmailChangeConfirmView,
@@ -106,6 +107,9 @@ URL_PATTERN_MAPPINGS = {
     ],
     Features.TOKEN_REFRESH: [
         ("token/refresh/", AuthRefreshTokenView, URLNames.TOKEN_REFRESH),  # Refresh JWT tokens
+    ],
+    Features.TOKEN_LOGOUT: [
+        ("token/logout/", AuthLogoutView, URLNames.TOKEN_LOGOUT),
     ],
     # Password management endpoints
     Features.PASSWORD_RESET: [

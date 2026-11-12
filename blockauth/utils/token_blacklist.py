@@ -46,3 +46,43 @@ def is_blacklisted(jti: str, cache=None) -> bool:
         return False
     _cache = cache or default_cache
     return bool(_cache.get(f"{_BLACKLIST_PREFIX}{jti}"))
+
+
+_FAMILY_HEAD_PREFIX = "jwt_family_head_"
+_FAMILY_REVOKED_PREFIX = "jwt_family_revoked_"
+
+
+def _ttl(ttl_seconds: int) -> int:
+    return max(int(ttl_seconds) + 60, 60)
+
+
+def remember_family_head(
+    family: str,
+    jti: str,
+    ttl_seconds: int,
+    cache=None,
+) -> None:
+    """Store the current refresh ``jti`` for a family (SEC-02)."""
+    if not family or not jti:
+        return
+    _cache = cache or default_cache
+    _cache.set(f"{_FAMILY_HEAD_PREFIX}{family}", jti, _ttl(ttl_seconds))
+
+
+def is_family_revoked(family: str, cache=None) -> bool:
+    """True when the family has been revoked (SEC-02)."""
+    if not family:
+        return False
+    _cache = cache or default_cache
+    return bool(_cache.get(f"{_FAMILY_REVOKED_PREFIX}{family}"))
+
+
+def revoke_family(family: str, ttl_seconds: int, cache=None) -> None:
+    """Blacklist the current head and reject the family (SEC-02)."""
+    if not family:
+        return
+    _cache = cache or default_cache
+    head = _cache.get(f"{_FAMILY_HEAD_PREFIX}{family}")
+    if head:
+        blacklist_token(head, ttl_seconds, cache=_cache)
+    _cache.set(f"{_FAMILY_REVOKED_PREFIX}{family}", True, _ttl(ttl_seconds))

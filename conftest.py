@@ -58,6 +58,7 @@ def pytest_configure():
                 "PASSWORDLESS_LOGIN": True,
                 "WALLET_LOGIN": True,
                 "TOKEN_REFRESH": True,
+                "TOKEN_LOGOUT": True,
                 "PASSWORD_RESET": True,
                 "PASSWORD_CHANGE": True,
                 "EMAIL_CHANGE": True,

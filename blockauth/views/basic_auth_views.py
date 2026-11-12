@@ -57,6 +57,13 @@ from blockauth.utils.rate_limiter import (
     RequestThrottle,
 )
 from blockauth.utils.token import AUTH_TOKEN_CLASS, generate_auth_token
+from blockauth.utils.token_blacklist import (
+    blacklist_token,
+    is_blacklisted,
+    is_family_revoked,
+    remember_family_head,
+    revoke_family,
+)
 from blockauth.utils.validators import account_has_password, user_identifier_lookup
 
 logger = logging.getLogger(__name__)
@@ -77,6 +84,10 @@ _CONFIRM_THROTTLE = EnhancedThrottle(
     cooldown_minutes=15,
     fail_closed=True,
 )
+
+
+def _remaining_ttl(exp) -> int:
+    return max(int(exp) - int(timezone.now().timestamp()), 0)
 
 
 def _limited(throttle, request, subject):
@@ -635,11 +646,11 @@ class AuthRefreshTokenView(APIView):
                 )
                 raise AuthenticationFailed("Invalid token.")
 
-            # --- Refresh token rotation: reject blacklisted tokens ----------
-            from blockauth.utils.token_blacklist import is_blacklisted
-
             old_jti = payload.get("jti")
-            if is_blacklisted(old_jti):
+            family = payload.get("family")
+            remaining_ttl = _remaining_ttl(payload.get("exp", 0))
+            if is_blacklisted(old_jti) or is_family_revoked(family):
+                revoke_family(family, remaining_ttl)
                 blockauth_logger.warning(
                     "Blacklisted refresh token reuse attempted",
                     sanitize_log_context(request.data, {"jti": old_jti}),
@@ -658,21 +669,24 @@ class AuthRefreshTokenView(APIView):
                 from blockauth.utils.token import generate_auth_token_with_custom_claims
 
                 access_token, new_refresh_token = generate_auth_token_with_custom_claims(
-                    token_class=token, user_id=user_id
+                    token_class=token,
+                    user_id=user_id,
+                    user_data={"family": family} if family else None,
                 )
             except ImportError:
                 # Fall back to original implementation
                 access_token, new_refresh_token = generate_auth_token(token_class=token, user_id=user_id)
 
-            # --- Blacklist the old refresh token so it can't be reused ------
             if get_config("ROTATE_REFRESH_TOKENS") and old_jti:
-                import time
-
-                from blockauth.utils.token_blacklist import blacklist_token
-
-                exp = payload.get("exp", 0)
-                remaining_ttl = max(int(exp) - int(time.time()), 0)
                 blacklist_token(old_jti, remaining_ttl)
+                issued = token.decode_token(new_refresh_token)
+                lifetime = get_config("REFRESH_TOKEN_LIFETIME")
+                refresh_ttl = int(lifetime.total_seconds())
+                remember_family_head(
+                    issued.get("family"),
+                    issued.get("jti"),
+                    refresh_ttl,
+                )
 
             blockauth_logger.success(
                 "Refresh token successful", sanitize_log_context(request.data, {"user_id": user_id})
@@ -695,6 +709,31 @@ class AuthRefreshTokenView(APIView):
             blockauth_logger.error("Refresh token failed", sanitize_log_context(request.data, {"error": str(e)}))
             logger.error(f"Request failed: {e}", exc_info=True)
             raise APIException()
+
+
+class AuthLogoutView(APIView):
+    """Revoke the presented refresh family and access token (SEC-02)."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        refresh_token_value = request.data.get("refresh_token")
+        if not refresh_token_value:
+            raise ValidationError({"detail": "Refresh token is required."})
+        token = AUTH_TOKEN_CLASS()
+        payload = token.decode_token(refresh_token_value)
+        if payload.get("type") != "refresh":
+            raise AuthenticationFailed("Invalid token.")
+        if str(payload.get("user_id")) != str(request.user.id):
+            raise AuthenticationFailed("Invalid token.")
+        remaining = _remaining_ttl(payload.get("exp", 0))
+        revoke_family(payload.get("family"), remaining)
+        blacklist_token(payload.get("jti"), remaining)
+        if isinstance(request.auth, str):
+            access_payload = token.decode_token(request.auth)
+            access_ttl = _remaining_ttl(access_payload.get("exp", 0))
+            blacklist_token(access_payload.get("jti"), access_ttl)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PasswordResetView(APIView):

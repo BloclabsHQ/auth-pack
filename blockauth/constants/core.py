@@ -56,6 +56,7 @@ class Features:
     PASSWORDLESS_LOGIN = "PASSWORDLESS_LOGIN"  # OTP-based authentication
     WALLET_LOGIN = "WALLET_LOGIN"  # Web3 wallet authentication
     TOKEN_REFRESH = "TOKEN_REFRESH"  # JWT token refresh functionality
+    TOKEN_LOGOUT = "TOKEN_LOGOUT"  # Revoke the current refresh family
 
     # Password management features
     PASSWORD_RESET = "PASSWORD_RESET"  # Password reset via OTP
@@ -102,6 +103,7 @@ class Features:
             cls.PASSWORDLESS_LOGIN,
             cls.WALLET_LOGIN,
             cls.TOKEN_REFRESH,
+            cls.TOKEN_LOGOUT,
             cls.PASSWORD_RESET,
             cls.PASSWORD_CHANGE,
             cls.EMAIL_CHANGE,
@@ -236,6 +238,7 @@ class URLNames:
     WALLET_LOGIN = "wallet-login"
     WALLET_LOGIN_CHALLENGE = "wallet-login-challenge"
     TOKEN_REFRESH = "refresh-token"
+    TOKEN_LOGOUT = "token-logout"
 
     # Password
     PASSWORD_RESET = "password-reset"
