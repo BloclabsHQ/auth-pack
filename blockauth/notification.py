@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 
-from blockauth.models.otp import OTP
+from blockauth.models.otp import OTP, otp_code_digest
 from blockauth.utils.config import get_config
 from blockauth.utils.generics import sanitize_log_context
 from blockauth.utils.logger import blockauth_logger
@@ -77,7 +77,7 @@ def send_otp(data, subject, payload: dict | None = None):
 
         # Step 2: Generate new OTP
         code = OTP.generate_otp(get_config("OTP_LENGTH"))
-        OTP.objects.create(identifier=identifier, code=code, subject=subject, payload=payload)
+        OTP.objects.create(identifier=identifier, code=otp_code_digest(code), subject=subject, payload=payload)
 
         # Step 3: Prepare context for notification
         context = {**data, "code": code, "otp_subject": subject}
