@@ -56,40 +56,46 @@ class TestTOTPThrottles(unittest.TestCase):
     """Test rate limiting configurations."""
 
     def test_setup_throttle_configuration(self):
-        """Setup should have 3/hour rate limit."""
+        """Setup should have 10/hour rate limit (relaxed: minting is low-risk)."""
         throttle = TOTPThrottles.SETUP
-        self.assertEqual(throttle.num_requests, 3)
+        self.assertEqual(throttle.num_requests, 10)
         self.assertEqual(throttle.duration, 3600)  # 1 hour
+        self.assertEqual(throttle.daily_limit, 30)
 
     def test_verify_throttle_configuration(self):
-        """Verify should have 5/minute rate limit."""
+        """Verify should have 5/minute rate limit and fail closed."""
         throttle = TOTPThrottles.VERIFY
         self.assertEqual(throttle.num_requests, 5)
         self.assertEqual(throttle.duration, 60)
+        self.assertTrue(throttle.fail_closed)
 
     def test_confirm_throttle_configuration(self):
-        """Confirm should have 5/minute rate limit."""
+        """Confirm should have 5/minute rate limit and fail closed."""
         throttle = TOTPThrottles.CONFIRM
         self.assertEqual(throttle.num_requests, 5)
         self.assertEqual(throttle.duration, 60)
+        self.assertTrue(throttle.fail_closed)
 
     def test_disable_throttle_configuration(self):
-        """Disable should have 3/hour rate limit."""
+        """Disable should have 3/hour rate limit and fail closed."""
         throttle = TOTPThrottles.DISABLE
         self.assertEqual(throttle.num_requests, 3)
         self.assertEqual(throttle.duration, 3600)
+        self.assertTrue(throttle.fail_closed)
 
     def test_regenerate_backup_throttle_configuration(self):
-        """Regenerate backup codes should have 3/hour rate limit."""
+        """Regenerate backup codes should have 3/hour rate limit and fail closed."""
         throttle = TOTPThrottles.REGENERATE_BACKUP
         self.assertEqual(throttle.num_requests, 3)
         self.assertEqual(throttle.duration, 3600)
+        self.assertTrue(throttle.fail_closed)
 
     def test_status_throttle_configuration(self):
-        """Status should have 30/minute rate limit."""
+        """Status should have 30/minute rate limit and fail open (read-only)."""
         throttle = TOTPThrottles.STATUS
         self.assertEqual(throttle.num_requests, 30)
         self.assertEqual(throttle.duration, 60)
+        self.assertFalse(throttle.fail_closed)
 
 
 class TestRateLimitingBehavior(unittest.TestCase):
@@ -146,7 +152,41 @@ class TestRateLimitingBehavior(unittest.TestCase):
         response = view(request)
 
         self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], "rate_limit_exceeded")
+        self.assertEqual(response.data["error"], "throttled")
+
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_setup_throttle_sets_retry_after(self, mock_throttles):
+        """A throttled setup carries the remaining window as Retry-After."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = False
+        mock_throttle.wait.return_value = 1234
+        mock_throttles.SETUP = mock_throttle
+
+        request = self.factory.post("/totp/setup/", {})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPSetupView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response["Retry-After"], "1234")
+
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_verify_throttle_uses_unified_envelope(self, mock_throttles):
+        """The in-method throttle path must emit the same {error: throttled}/429
+        envelope as every other throttled path."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = False
+        mock_throttles.VERIFY = mock_throttle
+
+        request = self.factory.post("/totp/verify/", {"code": "123456"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPVerifyView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(response.data["error"], "throttled")
 
 
 class TestViewAuthentication(unittest.TestCase):
@@ -182,6 +222,89 @@ class TestViewAuthentication(unittest.TestCase):
         from rest_framework.permissions import IsAuthenticated
 
         self.assertIn(IsAuthenticated, view.permission_classes)
+
+
+class TestTOTPDisableView(unittest.TestCase):
+    """Test TOTP disable behavior through the public view."""
+
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.user = MockUser()
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_accepts_account_password_without_totp_code(self, mock_throttles, mock_get_service):
+        """Disable should accept account password as a generic recovery path."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"password": "correct_password"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_service.verify.assert_not_called()
+        mock_service.disable.assert_called_once_with(str(self.user.id))
+        mock_throttle.record_success.assert_called_once()
+        self.assertEqual(mock_throttle.record_success.call_args.args[1], TOTPSubject.DISABLE)
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_rejects_wrong_account_password(self, mock_throttles, mock_get_service):
+        """Wrong password should not disable TOTP."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"password": "wrong_password"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["error"], "invalid_password")
+        mock_service.disable.assert_not_called()
+        mock_throttle.record_failure.assert_called_once()
+        self.assertEqual(mock_throttle.record_failure.call_args.args[1], TOTPSubject.DISABLE)
+
+    @patch("blockauth.totp.views.get_totp_service")
+    @patch("blockauth.totp.views.TOTPThrottles")
+    def test_disable_accepts_verified_code(self, mock_throttles, mock_get_service):
+        """Disable should accept a TOTP or backup code verified by the service."""
+        mock_throttle = MagicMock()
+        mock_throttle.allow_request.return_value = True
+        mock_throttles.DISABLE = mock_throttle
+
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+
+        request = self.factory.post("/totp/disable/", {"code": "BACKUP42"})
+        force_authenticate(request, user=self.user)
+        request.META["REMOTE_ADDR"] = "127.0.0.1"
+        request.META["HTTP_USER_AGENT"] = "Test Agent"
+
+        response = TOTPDisableView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_service.verify.assert_called_once_with(
+            user_id=str(self.user.id),
+            code="BACKUP42",
+            ip_address="127.0.0.1",
+            user_agent="Test Agent",
+        )
+        mock_service.disable.assert_called_once_with(str(self.user.id))
+        mock_throttle.record_success.assert_called_once()
+        self.assertEqual(mock_throttle.record_success.call_args.args[1], TOTPSubject.DISABLE)
 
 
 class TestErrorResponses(unittest.TestCase):

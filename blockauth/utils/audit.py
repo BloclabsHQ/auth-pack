@@ -8,6 +8,8 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
+from blockauth.constants import REDACTION_STRING
+
 from .generics import sanitize_log_context
 from .logger import blockauth_logger
 
@@ -129,13 +131,13 @@ def audit_trail(
                         continue
                     if i < len(args):
                         if _is_sensitive(name):
-                            safe_args[name] = "[REDACTED]"
+                            safe_args[name] = REDACTION_STRING
                         else:
                             safe_args[name] = _sanitize_value(args[i])
 
                 for key, value in kwargs.items():
                     if _is_sensitive(key):
-                        safe_args[key] = "[REDACTED]"
+                        safe_args[key] = REDACTION_STRING
                     else:
                         safe_args[key] = _sanitize_value(value)
 
@@ -159,7 +161,7 @@ def audit_trail(
                     if isinstance(result, dict):
                         # Sanitize dict result
                         success_data["result"] = {
-                            k: "[REDACTED]" if _is_sensitive(k) else _sanitize_value(v) for k, v in result.items()
+                            k: REDACTION_STRING if _is_sensitive(k) else _sanitize_value(v) for k, v in result.items()
                         }
                     else:
                         success_data["result"] = _sanitize_value(result)

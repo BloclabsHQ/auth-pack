@@ -21,14 +21,14 @@ from blockauth.utils.validators import (
 class TestPasswordConstants:
     """Test password validation constants."""
 
-    def test_min_length_is_8(self):
-        assert PASSWORD_MIN_LENGTH == 8
+    def test_min_length_is_12(self):
+        assert PASSWORD_MIN_LENGTH == 12
 
     def test_max_length_is_128(self):
         assert PASSWORD_MAX_LENGTH == 128
 
     def test_validation_error_message_format(self):
-        assert "8-128 characters" in PASSWORD_VALIDATION_ERROR
+        assert "12-128 characters" in PASSWORD_VALIDATION_ERROR
         assert "uppercase" in PASSWORD_VALIDATION_ERROR
         assert "lowercase" in PASSWORD_VALIDATION_ERROR
         assert "number" in PASSWORD_VALIDATION_ERROR
@@ -41,11 +41,11 @@ class TestValidatePassword:
     def test_valid_password_returns_empty_list(self):
         """Valid passwords should return empty error list."""
         valid_passwords = [
-            "MyP@ssw0rd!",
-            "Str0ng!Pass",
-            "Test123!@#",
-            "Abcd1234!",
-            "P@ssword1",
+            "MyP@ssw0rd!23",
+            "Str0ng!Passw0rd",
+            "Test123!@#abc",
+            "Abcd1234!efgh",
+            "P@ssword12345",
         ]
         for password in valid_passwords:
             errors = validate_password(password)
@@ -66,8 +66,8 @@ class TestValidatePassword:
             assert errors[0] == PASSWORD_VALIDATION_ERROR
 
     def test_too_short_password(self):
-        """Passwords shorter than 8 characters should fail."""
-        errors = validate_password("Ab1!xyz")  # 7 chars
+        """Passwords shorter than 12 characters should fail."""
+        errors = validate_password("Ab1!xyzabcd")  # 11 chars
         assert len(errors) == 1
         assert errors[0] == PASSWORD_VALIDATION_ERROR
 
@@ -80,25 +80,25 @@ class TestValidatePassword:
 
     def test_missing_uppercase(self):
         """Passwords without uppercase letter should fail."""
-        errors = validate_password("password1!")
+        errors = validate_password("password1!2345")
         assert len(errors) == 1
         assert errors[0] == PASSWORD_VALIDATION_ERROR
 
     def test_missing_lowercase(self):
         """Passwords without lowercase letter should fail."""
-        errors = validate_password("PASSWORD1!")
+        errors = validate_password("PASSWORD1!2345")
         assert len(errors) == 1
         assert errors[0] == PASSWORD_VALIDATION_ERROR
 
     def test_missing_number(self):
         """Passwords without number should fail."""
-        errors = validate_password("Password!")
+        errors = validate_password("Password!abcde")
         assert len(errors) == 1
         assert errors[0] == PASSWORD_VALIDATION_ERROR
 
     def test_missing_symbol(self):
         """Passwords without symbol should fail."""
-        errors = validate_password("Password1")
+        errors = validate_password("Password12345")
         assert len(errors) == 1
         assert errors[0] == PASSWORD_VALIDATION_ERROR
 
@@ -137,13 +137,13 @@ class TestValidatePassword:
             "?",
         ]
         for symbol in symbols:
-            password = f"Password1{symbol}"
+            password = f"Password1abc{symbol}"
             errors = validate_password(password)
             assert errors == [], f"Symbol '{symbol}' should be valid, got errors: {errors}"
 
     def test_exact_min_length(self):
-        """Password with exactly 8 characters should be valid if other requirements met."""
-        errors = validate_password("Abcd12!@")  # Exactly 8 chars
+        """Password with exactly 12 characters should be valid if other requirements met."""
+        errors = validate_password("Abcd12!@efgh")  # Exactly 12 chars
         assert errors == []
 
     def test_exact_max_length(self):
@@ -157,14 +157,14 @@ class TestIsValidPassword:
     """Test the is_valid_password function."""
 
     def test_valid_password_returns_true(self):
-        assert is_valid_password("MyP@ssw0rd!") is True
-        assert is_valid_password("Str0ng!Pass") is True
+        assert is_valid_password("MyP@ssw0rd!23") is True
+        assert is_valid_password("Str0ng!Passw0rd") is True
 
     def test_invalid_password_returns_false(self):
         assert is_valid_password("weak") is False
         assert is_valid_password("password") is False
-        assert is_valid_password("Password1") is False  # missing symbol
-        assert is_valid_password("password1!") is False  # missing uppercase
+        assert is_valid_password("Password12345") is False  # missing symbol
+        assert is_valid_password("password1!2345") is False  # missing uppercase
 
 
 class TestBlockAuthPasswordValidator:
@@ -177,9 +177,9 @@ class TestBlockAuthPasswordValidator:
     def test_valid_password_does_not_raise(self):
         """Valid passwords should not raise ValidationError."""
         valid_passwords = [
-            "MyP@ssw0rd!",
-            "Str0ng!Pass",
-            "Test123!@#",
+            "MyP@ssw0rd!23",
+            "Str0ng!Passw0rd",
+            "Test123!@#abc",
         ]
         for password in valid_passwords:
             # Should not raise
@@ -200,12 +200,12 @@ class TestBlockAuthPasswordValidator:
     def test_validate_with_user_parameter(self):
         """Validator should accept optional user parameter (Django compatibility)."""
         # Should not raise with user=None
-        self.validator.validate("MyP@ssw0rd!", user=None)
+        self.validator.validate("MyP@ssw0rd!23", user=None)
 
     def test_get_help_text_returns_standard_message(self):
         """Help text should match the standard error message."""
         help_text = self.validator.get_help_text()
-        assert "8-128 characters" in help_text
+        assert "12-128 characters" in help_text
         assert "uppercase" in help_text
         assert "lowercase" in help_text
         assert "number" in help_text
@@ -259,11 +259,11 @@ class TestPasswordEdgeCases:
     def test_unicode_characters(self):
         """Unicode characters should not count as required character types."""
         # Has length, but uses unicode instead of ASCII
-        errors = validate_password("Pässwörd1!")
+        errors = validate_password("Pässwörd1!abc")
         # Should still be valid since it has ASCII uppercase, lowercase, number, symbol
         assert errors == []
 
     def test_password_with_spaces(self):
         """Password with spaces should be valid if other requirements met."""
-        errors = validate_password("My Pass1!")
+        errors = validate_password("My Passw0rd1!")
         assert errors == []

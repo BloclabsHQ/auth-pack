@@ -9,6 +9,11 @@ in logs to prevent sensitive data exposure.
 SENSITIVE_FIELDS = {
     # Authentication related
     "password",
+    "old_password",
+    "new_password",
+    "confirm_password",
+    "current_password",
+    "hashed_password",
     "token",
     "access",
     "refresh",
@@ -91,6 +96,19 @@ SENSITIVE_PATTERNS = [
     r".*private.*",
     r".*sensitive.*",
 ]
+
+# Keys that are matched by SENSITIVE_PATTERNS but are provably non-secret and
+# must pass through unredacted. These are legitimate log fields used by callers
+# (e.g. credential_id is a WebAuthn credential identifier in passkey/views.py;
+# authentication_type / authentication_types are enum display values like
+# "email" or "wallet"). None of these appear in SENSITIVE_FIELDS, so the
+# allowlist only counteracts the broad regex net — exact-field redaction remains
+# authoritative and is unaffected.
+NON_SENSITIVE_KEYS = {
+    "credential_id",
+    "authentication_type",
+    "authentication_types",
+}
 
 # Redaction string used for sensitive fields
 REDACTION_STRING = "***REDACTED***"
