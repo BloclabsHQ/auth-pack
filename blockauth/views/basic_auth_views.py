@@ -24,7 +24,7 @@ from blockauth.docs.auth_docs import (
     signup_resend_otp_docs,
 )
 from blockauth.enums import AuthenticationType
-from blockauth.models.otp import OTP, OTPSubject
+from blockauth.models.otp import OTP, OTPSubject, otp_code_digest
 from blockauth.notification import NotificationEvent, send_otp
 from blockauth.serializers.user_account_serializers import (
     AuthStateResponseSerializer,
@@ -210,13 +210,17 @@ class SignUpConfirmView(APIView):
             code = data["code"]
 
             # Check if wallet email verification OTP exists
+            code_digest = otp_code_digest(code)
             wallet_otp_exists = OTP.objects.filter(
-                identifier=identifier, code=code, subject=OTPSubject.WALLET_EMAIL_VERIFICATION, is_used=False
+                identifier=identifier,
+                code=code_digest,
+                subject=OTPSubject.WALLET_EMAIL_VERIFICATION,
+                is_used=False,
             ).exists()
 
             # Check if signup OTP exists
             signup_otp_exists = OTP.objects.filter(
-                identifier=identifier, code=code, subject=OTPSubject.SIGNUP, is_used=False
+                identifier=identifier, code=code_digest, subject=OTPSubject.SIGNUP, is_used=False
             ).exists()
 
             if wallet_otp_exists:

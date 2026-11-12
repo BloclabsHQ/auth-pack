@@ -54,12 +54,12 @@ def create_user(db):
 @pytest.fixture
 def create_otp(db):
     """Factory fixture to create OTP records."""
-    from blockauth.models.otp import OTP
+    from blockauth.models.otp import OTP, otp_code_digest
 
     def _create(identifier, subject, code="ABC123", payload=None):
         return OTP.objects.create(
             identifier=identifier,
-            code=code,
+            code=otp_code_digest(code),
             subject=subject,
             payload=payload,
         )

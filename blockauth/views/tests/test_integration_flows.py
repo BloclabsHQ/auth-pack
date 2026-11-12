@@ -8,27 +8,28 @@ hitting real endpoints with DRF's APIClient and creating real DB records.
 import pytest
 from django.urls import reverse
 
-from blockauth.models.otp import OTP, OTPSubject
-
 STRONG_PASS = "TestP@ss123!"
 STRONG_PASS_NEW = "NewStr0ng!Pass99"
 
 
-def _get_otp_code(identifier, subject=None):
-    """Retrieve the most recent OTP code from DB for an identifier."""
-    qs = OTP.objects.filter(identifier=identifier)
-    if subject:
-        qs = qs.filter(subject=subject)
-    otp = qs.order_by("-created_at").first()
-    assert otp is not None, f"No OTP found for {identifier}"
-    return otp.code
+@pytest.fixture
+def delivered_codes(monkeypatch):
+    """Capture the code handed to the notification, not the stored digest."""
+    found = {}
+
+    def notify(self, method, event, context):
+        if "code" in context:
+            found[context["identifier"]] = context["code"]
+
+    monkeypatch.setattr("blockauth.notification.DummyNotification.notify", notify)
+    return found
 
 
 @pytest.mark.django_db
 class TestSignupLoginRefreshFlow:
     """Flow: Signup -> Confirm OTP -> Login -> Refresh token."""
 
-    def test_full_signup_login_refresh(self, api_client):
+    def test_full_signup_login_refresh(self, api_client, delivered_codes):
         email = "signup-flow@test.com"
 
         # 1. Signup
@@ -40,7 +41,7 @@ class TestSignupLoginRefreshFlow:
         assert resp.status_code == 200, resp.data
 
         # 2. Confirm signup with OTP from DB
-        code = _get_otp_code(email, subject=OTPSubject.SIGNUP)
+        code = delivered_codes[email]
         resp = api_client.post(
             reverse("signup-confirm"),
             {"identifier": email, "code": code},
@@ -74,7 +75,7 @@ class TestSignupLoginRefreshFlow:
 class TestPasswordResetFlow:
     """Flow: Create user -> Request password reset -> Confirm with OTP -> Login with new password."""
 
-    def test_full_password_reset(self, api_client, create_user):
+    def test_full_password_reset(self, api_client, create_user, delivered_codes):
         email = "reset-flow@test.com"
         create_user(email=email, password=STRONG_PASS, is_verified=True)
 
@@ -87,7 +88,7 @@ class TestPasswordResetFlow:
         assert resp.status_code == 200, resp.data
 
         # 2. Confirm password reset with OTP + new password
-        code = _get_otp_code(email, subject=OTPSubject.PASSWORD_RESET)
+        code = delivered_codes[email]
         resp = api_client.post(
             reverse("password-reset-confirm"),
             {
@@ -114,7 +115,7 @@ class TestPasswordResetFlow:
 class TestPasswordlessLoginFlow:
     """Flow: Request passwordless OTP -> Confirm OTP -> Get tokens (user auto-created)."""
 
-    def test_full_passwordless_login(self, api_client):
+    def test_full_passwordless_login(self, api_client, delivered_codes):
         email = "passwordless@test.com"
 
         # 1. Request passwordless login OTP
@@ -126,7 +127,7 @@ class TestPasswordlessLoginFlow:
         assert resp.status_code == 200, resp.data
 
         # 2. Confirm OTP — user is created automatically
-        code = _get_otp_code(email, subject=OTPSubject.LOGIN)
+        code = delivered_codes[email]
         resp = api_client.post(
             reverse("passwordless-login-confirm"),
             {"identifier": email, "code": code},
@@ -148,7 +149,7 @@ class TestPasswordlessLoginFlow:
 class TestEmailChangeFlow:
     """Flow: Authenticated user -> Request email change -> Confirm with OTP -> Verify DB updated."""
 
-    def test_full_email_change(self, authenticated_client):
+    def test_full_email_change(self, authenticated_client, delivered_codes):
         old_email = "email-change@test.com"
         new_email = "new-email@test.com"
         client, user = authenticated_client(email=old_email, password=STRONG_PASS)
@@ -165,7 +166,7 @@ class TestEmailChangeFlow:
         assert resp.status_code == 200, resp.data
 
         # 2. Confirm email change with OTP sent to new email
-        code = _get_otp_code(new_email, subject=OTPSubject.EMAIL_CHANGE)
+        code = delivered_codes[new_email]
         resp = client.post(
             reverse("confirm-email-change"),
             {"identifier": new_email, "code": code},
