@@ -13,6 +13,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Changed
 
+- Releases now come from `main`. The `dev` branch is retired as a release branch; its changes through `0.18.2` are merged into `main`.
+
 ### Fixed
 
 ---
