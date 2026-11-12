@@ -4,6 +4,7 @@ import jwt as pyjwt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
+from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.token import AUTH_TOKEN_CLASS
 
@@ -98,6 +99,7 @@ class JWTAuthentication(BaseAuthentication):
         except Exception as e:
             logger.error(f"Error occurred while authenticating user: {e}")
             raise AuthenticationFailed("Authentication failed")
+        ensure_user_active(user)
         return user
 
     def authenticate_header(self, request):

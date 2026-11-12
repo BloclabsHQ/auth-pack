@@ -127,6 +127,15 @@ class BasicLoginSerializer(serializers.Serializer):
                 code=4005,
             )
 
+        # Inactive accounts get the same generic failure as bad
+        # credentials so the response is not an enumeration signal.
+        # Checked only after the password verifies.
+        if getattr(user, "is_active", True) is False:
+            raise ValidationError(
+                detail={"non_field_errors": "Invalid credentials. Please check your email/phone and password."},
+                code=4005,
+            )
+
         if not user.is_verified:
             raise ValidationError(
                 detail={

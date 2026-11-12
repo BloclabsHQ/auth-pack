@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from blockauth.enums import AuthenticationType
+from blockauth.utils.auth_state import ensure_user_active
 from blockauth.utils.config import get_block_auth_user_model, get_config
 from blockauth.utils.custom_exception import WalletConflictError
 from blockauth.utils.generics import model_to_json
@@ -73,6 +74,8 @@ class WalletLoginSerializer(serializers.Serializer):
             # Wallet doesn't exist, create new user
             user = _User.objects.create(wallet_address=wallet_address, is_verified=False)
             created = True
+
+        ensure_user_active(user)
 
         # Update last login and add authentication type
         user.last_login = timezone.now()
