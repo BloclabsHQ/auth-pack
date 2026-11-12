@@ -20,7 +20,11 @@ from typing import List, Optional, Tuple
 
 from blockauth.utils.audit import audit_trail
 
-from ..config import TOTPConfiguration, get_totp_config
+from ..config import (
+    TOTPConfiguration,
+    get_totp_config,
+    get_totp_encryption_key,
+)
 from ..constants import TOTPAlgorithm, TOTPStatus
 from ..exceptions import (
     TOTPAccountLockedError,
@@ -37,6 +41,17 @@ from ..exceptions import (
 from ..storage.base import ITOTP2FAStore, TOTP2FAData
 
 logger = logging.getLogger(__name__)
+
+_BACKUP_CODE_PEPPER_LABEL = b"blockauth-totp-backup-code-v1"
+
+
+def backup_code_pepper(encryption_key: str) -> bytes:
+    """Derive the backup-code pepper. Do not log the key or the pepper."""
+    return hmac.new(
+        encryption_key.encode("utf-8"),
+        _BACKUP_CODE_PEPPER_LABEL,
+        hashlib.sha256,
+    ).digest()
 
 
 # Algorithm mapping for HMAC
@@ -274,7 +289,7 @@ class TOTPService:
     # =========================================================================
 
     @classmethod
-    def generate_backup_codes(cls, count: int = 10, length: int = 8) -> List[str]:
+    def generate_backup_codes(cls, count: int = 10, length: int = 16) -> List[str]:
         """
         Generate backup codes for 2FA recovery.
 
@@ -299,19 +314,27 @@ class TOTPService:
     @staticmethod
     def hash_backup_code(code: str) -> str:
         """
-        Hash a backup code for secure storage.
+        Hash a backup code for storage.
 
-        Uses SHA-256 for hashing. Codes should be hashed, not encrypted,
-        since they are single-use and never need to be retrieved.
+        The digest is HMAC-SHA256. The pepper is derived from the configured
+        TOTP encryption key and is not logged.
 
         Args:
             code: Plain text backup code
 
         Returns:
-            SHA-256 hash of the code
+            Hex digest of the code
         """
         normalized = code.upper().replace("-", "").replace(" ", "")
-        return hashlib.sha256(normalized.encode()).hexdigest()
+        encryption_key = get_totp_encryption_key()
+        if not encryption_key:
+            raise TOTPEncryptionRequiredError()
+        pepper = backup_code_pepper(encryption_key)
+        return hmac.new(
+            pepper,
+            normalized.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
 
     def verify_backup_code(self, code: str, hashed_codes: List[str]) -> Optional[int]:
         """

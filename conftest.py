@@ -48,6 +48,9 @@ def pytest_configure():
             "KDF_ENABLED": True,
             "KDF_MASTER_SALT": "test-platform-master-salt-32-chars-min",
             "MASTER_ENCRYPTION_KEY": "0x" + "ab" * 32,
+            "TOTP_CONFIG": {
+                "ENCRYPTION_KEY": "totp-test-encryption-key",
+            },
             "PLATFORM_MASTER_SALT": "test-platform-master-salt-32-chars-min",
             "FEATURES": {
                 "SIGNUP": True,

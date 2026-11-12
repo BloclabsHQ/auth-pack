@@ -48,7 +48,9 @@ class TOTPVerifyRequestSerializer(serializers.Serializer):
     """Request serializer for TOTP verification."""
 
     code = serializers.CharField(
-        min_length=6, max_length=16, help_text="TOTP code or backup code"  # Allow for backup codes
+        min_length=6,
+        max_length=32,
+        help_text="TOTP code or 16-character backup code",
     )
 
     def validate_code(self, value):
@@ -79,7 +81,10 @@ class TOTPDisableRequestSerializer(serializers.Serializer):
     """Request serializer for TOTP disable."""
 
     code = serializers.CharField(
-        min_length=6, max_length=16, required=False, help_text="TOTP code or backup code for verification (recommended)"
+        min_length=6,
+        max_length=32,
+        required=False,
+        help_text="TOTP code or 16-character backup code",
     )
     password = serializers.CharField(required=False, help_text="User password as alternative verification")
 

@@ -17,6 +17,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
+- TOTP backup codes now default to 16 hex characters. Codes saved before this change no longer verify; regenerate them after upgrade.
+
 ---
 
 ## [0.18.2] - 2026-11-11
