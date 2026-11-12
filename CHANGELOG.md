@@ -22,7 +22,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ### Fixed
 
-- A login's access and refresh tokens share a `family` claim. Reuse of an already-rotated refresh token revokes that family, so the successor refresh token is rejected. `POST /token/logout/` revokes the presented refresh token's family and the presented access token. Revocation is stored in the cache and applies across workers only when the cache is shared (SEC-02).
+- A login's access and refresh tokens share a `family` claim. Reuse of an already-rotated refresh token revokes that family, so the successor refresh token is rejected. `POST /token/logout/` revokes the presented refresh token's family and the presented access token. Revocation is stored in the cache and applies across workers only when the cache is shared. A family revocation lasts for the full refresh lifetime (SEC-02).
 - An `X-Forwarded-For` value longer than 500 characters is ignored. The client IP falls back to `REMOTE_ADDR`. The header is not truncated (SEC-11).
 - Google, Facebook, and LinkedIn callbacks, Google native sign-in, and token refresh now return 429 after 30 requests per minute from the same client IP (SEC-04). The identifier field does not choose the bucket. Callback and native checks run before the provider token exchange or id_token verification. A callback 429 clears the callback cookies.
 - Signup, signup confirm, password-reset confirm, and email-change confirm now return 429 when their limit is reached (SEC-04). Confirm limits match TOTP confirm and deny when the cache is unavailable. Signup uses the same send limit as signup resend.

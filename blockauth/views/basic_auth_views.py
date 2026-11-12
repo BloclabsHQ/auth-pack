@@ -650,7 +650,7 @@ class AuthRefreshTokenView(APIView):
             family = payload.get("family")
             remaining_ttl = _remaining_ttl(payload.get("exp", 0))
             if is_blacklisted(old_jti) or is_family_revoked(family):
-                revoke_family(family, remaining_ttl)
+                revoke_family(family)
                 blockauth_logger.warning(
                     "Blacklisted refresh token reuse attempted",
                     sanitize_log_context(request.data, {"jti": old_jti}),
@@ -727,8 +727,8 @@ class AuthLogoutView(APIView):
         if str(payload.get("user_id")) != str(request.user.id):
             raise AuthenticationFailed("Invalid token.")
         remaining = _remaining_ttl(payload.get("exp", 0))
-        revoke_family(payload.get("family"), remaining)
         blacklist_token(payload.get("jti"), remaining)
+        revoke_family(payload.get("family"))
         if isinstance(request.auth, str):
             access_payload = token.decode_token(request.auth)
             access_ttl = _remaining_ttl(access_payload.get("exp", 0))

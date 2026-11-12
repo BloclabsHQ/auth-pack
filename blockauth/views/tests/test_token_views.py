@@ -2,6 +2,10 @@
 Tests for AuthRefreshTokenView.
 """
 
+import time
+from datetime import timedelta
+from unittest.mock import patch
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -130,6 +134,37 @@ class TestAuthRefreshTokenView:
             {"refresh_token": successor},
             format="json",
         )
+        assert again.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_revoked_family_outlives_old_token(self, api_client, create_user):
+        user = create_user()
+        token = Token()
+        short = token.generate_token(
+            user_id=str(user.id),
+            token_type="refresh",
+            token_lifetime=timedelta(seconds=5),
+            user_data={"family": "near-expiry"},
+        )
+        rotated = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": short},
+            format="json",
+        )
+        assert rotated.status_code == status.HTTP_200_OK
+        successor = rotated.data["refresh"]
+        replay = api_client.post(
+            REFRESH_URL,
+            {"refresh_token": short},
+            format="json",
+        )
+        assert replay.status_code == status.HTTP_403_FORBIDDEN
+        clock = "django.core.cache.backends.locmem.time.time"
+        with patch(clock, return_value=time.time() + 120):
+            again = api_client.post(
+                REFRESH_URL,
+                {"refresh_token": successor},
+                format="json",
+            )
         assert again.status_code == status.HTTP_403_FORBIDDEN
 
     def test_logout_rejects_presented_tokens(self, api_client, create_user):

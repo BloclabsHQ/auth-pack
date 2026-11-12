@@ -15,6 +15,8 @@ Design decisions:
 
 from django.core.cache import cache as default_cache
 
+from blockauth.utils.config import get_config
+
 _BLACKLIST_PREFIX = "jwt_blacklist_"
 
 
@@ -77,11 +79,17 @@ def is_family_revoked(family: str, cache=None) -> bool:
     return bool(_cache.get(f"{_FAMILY_REVOKED_PREFIX}{family}"))
 
 
-def revoke_family(family: str, ttl_seconds: int, cache=None) -> None:
-    """Blacklist the current head and reject the family (SEC-02)."""
+def revoke_family(family: str, cache=None) -> None:
+    """Blacklist the current head and reject the family (SEC-02).
+
+    The revoked flag and the head entry last for the full refresh
+    lifetime, not the remaining life of the presented token.
+    """
     if not family:
         return
     _cache = cache or default_cache
+    lifetime = get_config("REFRESH_TOKEN_LIFETIME")
+    ttl_seconds = int(lifetime.total_seconds())
     head = _cache.get(f"{_FAMILY_HEAD_PREFIX}{family}")
     if head:
         blacklist_token(head, ttl_seconds, cache=_cache)
