@@ -139,6 +139,20 @@ class TestSignUpView:
         response = api_client.post(SIGNUP_URL, {**_SIGNUP_REQUEST, "identifier": "not-an-email"})
         assert response.status_code in (status.HTTP_400_BAD_REQUEST, status.HTTP_429_TOO_MANY_REQUESTS)
 
+    def test_signup_is_limited(self, api_client):
+        payload = {
+            "identifier": "limit-signup@test.com",
+            "method": "email",
+            "verification_type": "otp",
+            "password": _TEST_PW,
+        }
+        statuses = []
+        for _ in range(6):
+            response = api_client.post(SIGNUP_URL, payload)
+            statuses.append(response.status_code)
+        assert statuses[0] == status.HTTP_200_OK
+        assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS
+
 
 @pytest.mark.django_db
 class TestSignUpResendOTPView:
@@ -328,3 +342,11 @@ class TestSignUpConfirmView:
         user = get_block_auth_user_model().objects.get(email="newtok@test.com")
         decoded = Token().decode_token(response.data["access"])
         assert str(decoded["user_id"]) == str(user.id)
+
+    def test_signup_confirm_is_limited(self, api_client):
+        payload = {"identifier": "limit-confirm@test.com", "code": "ABC123"}
+        statuses = []
+        for _ in range(6):
+            response = api_client.post(SIGNUP_CONFIRM_URL, payload)
+            statuses.append(response.status_code)
+        assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS

@@ -136,3 +136,12 @@ class TestEmailChangeConfirmView:
         # Access token decodes to the correct user
         payload = Token().decode_token(response.data["access"])
         assert str(payload["user_id"]) == str(user.id)
+
+    def test_email_change_confirm_is_limited(self, authenticated_client):
+        client, _user = authenticated_client(email="old-limit@test.com")
+        payload = {"identifier": "new-limit@test.com", "code": "ABC123"}
+        statuses = []
+        for _ in range(6):
+            response = client.post(EMAIL_CHANGE_CONFIRM_URL, payload)
+            statuses.append(response.status_code)
+        assert statuses[-1] == status.HTTP_429_TOO_MANY_REQUESTS

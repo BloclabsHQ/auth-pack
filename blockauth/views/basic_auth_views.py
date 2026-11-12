@@ -65,6 +65,28 @@ _User = get_block_auth_user_model()
 _build_user_payload = build_user_payload
 _issue_auth_tokens = issue_auth_tokens
 
+# Same rates as TOTP confirm (SEC-04).
+_CONFIRM_THROTTLE = EnhancedThrottle(
+    rate=(5, 60),
+    max_failures=5,
+    cooldown_minutes=15,
+    fail_closed=True,
+)
+
+
+def _limited(throttle, request, subject):
+    """429 for this view family, or None when the request is allowed."""
+    if throttle.allow_request(request, subject):
+        return None
+    if throttle.get_block_reason() == "cooldown":
+        detail = "Too many attempts. Please try again later."
+    else:
+        detail = "Rate limit exceeded. Please try again later."
+    return Response(
+        data={"detail": detail},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
 
 class SignUpView(APIView):
     """
@@ -74,9 +96,16 @@ class SignUpView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = SignUpRequestSerializer
     authentication_classes = []
+    rate_limit_handler = OTPThrottle(rate=(5, 60), daily_limit=20)
 
     @extend_schema(**signup_docs)
     def post(self, request):
+        subject = OTPSubject.SIGNUP
+        if not self.rate_limit_handler.allow_request(request, subject):
+            return Response(
+                data={"detail": self.rate_limit_handler.get_error_message()},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("User signup attempt", sanitize_log_context(request.data))
         try:
@@ -195,9 +224,13 @@ class SignUpConfirmView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = SignUpConfirmationSerializer
     authentication_classes = []
+    confirm_throttle = _CONFIRM_THROTTLE
 
     @extend_schema(**signup_confirm_docs)
     def post(self, request):
+        limited = _limited(self.confirm_throttle, request, "signup_confirm")
+        if limited is not None:
+            return limited
         serializer = self.serializer_class(data=request.data, context={"request": request})
         blockauth_logger.info("Verification confirmation attempt", sanitize_log_context(request.data))
         try:
@@ -234,6 +267,7 @@ class SignUpConfirmView(APIView):
                 user.save()
 
                 blockauth_logger.success("Wallet email verified", sanitize_log_context(request.data, {"user": user.id}))
+                self.confirm_throttle.record_success(request, "signup_confirm")
                 return Response({"message": "Email verified successfully."}, status=status.HTTP_200_OK)
             elif signup_otp_exists:
                 # Regular signup confirmation
@@ -282,6 +316,7 @@ class SignUpConfirmView(APIView):
                         token_class=AUTH_TOKEN_CLASS(), user_id=str(user.id)
                     )
 
+                self.confirm_throttle.record_success(request, "signup_confirm")
                 blockauth_logger.success("User signup confirmed", sanitize_log_context(request.data, {"user": user.id}))
                 # issue #131: route through build_user_payload so signup-confirm
                 # emits the same {is_active, date_joined, wallets} shape as the
@@ -304,6 +339,7 @@ class SignUpConfirmView(APIView):
         except AuthenticationFailed:
             raise
         except ValidationError as e:
+            self.confirm_throttle.record_failure(request, "signup_confirm")
             blockauth_logger.warning(
                 "Verification confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail})
             )
@@ -570,9 +606,13 @@ class AuthRefreshTokenView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = RefreshTokenSerializer
     authentication_classes = []
+    refresh_throttle = EnhancedThrottle(rate=(30, 60))
 
     @extend_schema(**refresh_token_docs)
     def post(self, request):
+        limited = _limited(self.refresh_throttle, request, "token_refresh")
+        if limited is not None:
+            return limited
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Refresh token attempt", sanitize_log_context(request.data))
         if not serializer.is_valid():
@@ -711,9 +751,14 @@ class PasswordResetConfirmView(APIView):
     permission_classes = (AllowAny,)
     serializer_class = PasswordResetConfirmationEmailSerializer
     authentication_classes = []
+    confirm_throttle = _CONFIRM_THROTTLE
 
     @extend_schema(**password_reset_confirm_docs)
     def post(self, request):
+        subject = "password_reset_confirm"
+        limited = _limited(self.confirm_throttle, request, subject)
+        if limited is not None:
+            return limited
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Password reset confirmation attempt", sanitize_log_context(request.data))
         try:
@@ -764,6 +809,7 @@ class PasswordResetConfirmView(APIView):
             # forcing them to follow up with /login/basic/ is pure
             # ceremony.
             access_token, refresh_token = _issue_auth_tokens(user)
+            self.confirm_throttle.record_success(request, subject)
             blockauth_logger.success("Password reset confirmed", sanitize_log_context(request.data, {"user": user.id}))
             response_serializer = AuthStateResponseSerializer(
                 {
@@ -776,6 +822,7 @@ class PasswordResetConfirmView(APIView):
         except AuthenticationFailed:
             raise
         except ValidationError as e:
+            self.confirm_throttle.record_failure(request, subject)
             blockauth_logger.warning(
                 "Password reset confirmation validation failed",
                 sanitize_log_context(request.data, {"errors": e.detail}),
@@ -965,9 +1012,14 @@ class EmailChangeConfirmView(APIView):
 
     permission_classes = (IsAuthenticated,)
     serializer_class = EmailChangeConfirmationSerializer
+    confirm_throttle = _CONFIRM_THROTTLE
 
     @extend_schema(**email_change_confirm_docs)
     def post(self, request):
+        subject = "email_change_confirm"
+        limited = _limited(self.confirm_throttle, request, subject)
+        if limited is not None:
+            return limited
         serializer = self.serializer_class(data=request.data)
         blockauth_logger.info("Email change confirmation attempt", sanitize_log_context(request.data))
         try:
@@ -996,6 +1048,7 @@ class EmailChangeConfirmView(APIView):
             # value. The issuance path re-reads the user from the DB by id,
             # so the post-commit state is what lands in the claims.
             access_token, refresh_token = _issue_auth_tokens(user)
+            self.confirm_throttle.record_success(request, subject)
             blockauth_logger.success("Email change confirmed", sanitize_log_context(request.data, {"user": user.id}))
             auth_state = AuthStateResponseSerializer(
                 {
@@ -1009,6 +1062,7 @@ class EmailChangeConfirmView(APIView):
                 status=status.HTTP_200_OK,
             )
         except ValidationError as e:
+            self.confirm_throttle.record_failure(request, subject)
             blockauth_logger.warning(
                 "Email change confirmation validation failed", sanitize_log_context(request.data, {"errors": e.detail})
             )
