@@ -1,7 +1,8 @@
 """Django AppConfig for BlockAuth.
 
 ``ready()`` runs startup validation that would otherwise only surface at the
-first wallet login request -- we want a non-DEBUG deployment with an empty
+first wallet login request -- we want a non-DEBUG deployment that enables
+wallet login or wallet linking with an empty
 ``WALLET_LOGIN_EXPECTED_DOMAINS`` list to fail to boot, not to silently
 accept SIWE challenges against a host extracted from the dev URL
 (hardening #3 in issue #90).
@@ -103,6 +104,10 @@ def _wire_apple_revoke_signal() -> None:
 def validate_wallet_login_settings() -> None:
     """Refuse to start a non-DEBUG deployment with a missing SIWE allow-list.
 
+    The check applies only when the ``WALLET_LOGIN`` or ``WALLET_LINK``
+    feature is enabled; with both disabled no SIWE route is mounted and no
+    SIWE settings are needed.
+
     ``WALLET_LOGIN_EXPECTED_DOMAINS`` must be explicitly configured in
     production so SIWE messages are bound to a known set of domains. An
     empty list falls back to the dev-only behavior of extracting the host
@@ -128,6 +133,18 @@ def validate_wallet_login_settings() -> None:
     # WSGI/ASGI boots (no ``manage.py <cmd>`` argv).
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     if command in _OFFLINE_MANAGEMENT_COMMANDS:
+        return
+
+    # Only the wallet login and wallet link routes reach the SIWE service.
+    # When neither is mounted there is nothing to bind to an allow-list. This
+    # uses the same predicate that mounts the routes, so a feature key that is
+    # missing counts as enabled and validation cannot be skipped while a SIWE
+    # route is served. Imported here to avoid loading ``blockauth.conf`` while
+    # Django is still loading apps.
+    from blockauth.constants import Features
+    from blockauth.utils.feature_flags import is_feature_enabled
+
+    if not (is_feature_enabled(Features.WALLET_LOGIN) or is_feature_enabled(Features.WALLET_LINK)):
         return
 
     domains = getattr(settings, "WALLET_LOGIN_EXPECTED_DOMAINS", ())

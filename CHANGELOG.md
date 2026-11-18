@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html) — pre-1
 
 ## [Unreleased]
 
+### Fixed
+
+- Startup validation of `WALLET_LOGIN_EXPECTED_DOMAINS` now runs only when the `WALLET_LOGIN` or `WALLET_LINK` feature is enabled. A non-DEBUG deployment with both disabled boots without SIWE settings. A missing feature key still counts as enabled, so validation is unchanged for every other configuration.
+
 ## [0.19.1] - 2026-11-11
 
 ### Fixed
