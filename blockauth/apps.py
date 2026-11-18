@@ -2,7 +2,7 @@
 
 ``ready()`` runs startup validation that would otherwise only surface at the
 first wallet login request -- we want a non-DEBUG deployment that enables
-wallet login or wallet linking with an empty
+wallet login or wallet linking with an empty or unusable
 ``WALLET_LOGIN_EXPECTED_DOMAINS`` list to fail to boot, not to silently
 accept SIWE challenges against a host extracted from the dev URL
 (hardening #3 in issue #90).
@@ -105,8 +105,10 @@ def validate_wallet_login_settings() -> None:
     """Refuse to start a non-DEBUG deployment with a missing SIWE allow-list.
 
     The check applies only when the ``WALLET_LOGIN`` or ``WALLET_LINK``
-    feature is enabled; with both disabled no SIWE route is mounted and no
-    SIWE settings are needed.
+    feature is enabled; with both disabled the package mounts no SIWE route
+    and no SIWE settings are needed. Consumers that mount the wallet views in
+    their own URLconf must keep a feature enabled or configure the allow-list
+    themselves.
 
     ``WALLET_LOGIN_EXPECTED_DOMAINS`` must be explicitly configured in
     production so SIWE messages are bound to a known set of domains. An
@@ -119,10 +121,11 @@ def validate_wallet_login_settings() -> None:
     if getattr(settings, "DEBUG", False):
         return
 
-    # A skip flag lets deployments that are wiring things up in stages (for
-    # example, a consumer that is rolling out the new endpoints behind a
-    # feature flag) silence the check without turning DEBUG on. Prefer to
-    # leave it off in real production.
+    # A skip flag lets deployments whose wallet routes are enabled but whose
+    # domains are not ready yet silence the check without turning DEBUG on.
+    # Prefer to leave it off in real production, and to disable the
+    # ``WALLET_LOGIN`` and ``WALLET_LINK`` features when no wallet route is
+    # needed.
     if getattr(settings, "WALLET_LOGIN_SKIP_STARTUP_VALIDATION", False):
         return
 
@@ -136,15 +139,17 @@ def validate_wallet_login_settings() -> None:
         return
 
     # Only the wallet login and wallet link routes reach the SIWE service.
-    # When neither is mounted there is nothing to bind to an allow-list. This
-    # uses the same predicate that mounts the routes, so a feature key that is
-    # missing counts as enabled and validation cannot be skipped while a SIWE
-    # route is served. Imported here to avoid loading ``blockauth.conf`` while
-    # Django is still loading apps.
+    # When the package mounts neither there is nothing to bind to an
+    # allow-list. This uses the same predicate that mounts the routes, so a
+    # feature key that is missing counts as enabled. Imported here because
+    # ``blockauth.conf`` snapshots ``BLOCK_AUTH_SETTINGS`` on first import and
+    # this module is imported during app loading.
     from blockauth.constants import Features
+    from blockauth.services.wallet_login_service import _canonical_authority
     from blockauth.utils.feature_flags import is_feature_enabled
 
     if not (is_feature_enabled(Features.WALLET_LOGIN) or is_feature_enabled(Features.WALLET_LINK)):
+        logger.debug("SIWE allow-list validation skipped: WALLET_LOGIN and WALLET_LINK features are disabled")
         return
 
     domains = getattr(settings, "WALLET_LOGIN_EXPECTED_DOMAINS", ())
@@ -153,9 +158,10 @@ def validate_wallet_login_settings() -> None:
             "WALLET_LOGIN_EXPECTED_DOMAINS must be configured as a non-empty "
             "iterable of allowed SIWE domains when DEBUG is False. Set it to "
             "the exact host(s) you expect SIWE messages to bind to -- for "
-            "example ('app.example.com',). Set "
+            "example ('app.example.com',). If no wallet route is needed, "
+            "disable the WALLET_LOGIN and WALLET_LINK features. Set "
             "WALLET_LOGIN_SKIP_STARTUP_VALIDATION=True to silence this check "
-            "during a phased rollout."
+            "while wallet routes are enabled but domains are not ready yet."
         )
 
     if not isinstance(domains, (list, tuple, set, frozenset)):
@@ -163,7 +169,10 @@ def validate_wallet_login_settings() -> None:
             "WALLET_LOGIN_EXPECTED_DOMAINS must be a list, tuple or set; " f"got {type(domains).__name__}"
         )
 
-    bad = [d for d in domains if not isinstance(d, str) or not d.strip()]
+    # An entry must survive the same canonicalization WalletLoginService
+    # applies; otherwise the service drops it and the first challenge request
+    # fails with ``domain_not_allowed``.
+    bad = [d for d in domains if not isinstance(d, str) or not d.strip() or not _canonical_authority(d)]
     if bad:
         raise ImproperlyConfigured(f"WALLET_LOGIN_EXPECTED_DOMAINS contains invalid entries: {bad!r}")
 
