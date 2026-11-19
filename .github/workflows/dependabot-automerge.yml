@@ -1,0 +1,41 @@
+name: Dependabot Automerge
+
+# Patch and minor Dependabot updates merge after the exact head SHA passes the
+# required checks below. Majors, blocked names, and failed checks get one
+# comment and wait for a person. Policy lives in the shared helper.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  automerge:
+    # pull_request_target never checks out PR code here; the job only calls a
+    # SHA-pinned action with the built-in token.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]' && !github.event.pull_request.draft
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON) }}
+    timeout-minutes: 40
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: BloclabsHQ/github-actions/dependabot-automerge@59bdcc7dd373382e51111bbfc20cd548a8035555
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-number: ${{ github.event.pull_request.number }}
+          event-actor: ${{ github.actor }}
+          expected-head-sha: ${{ github.event.pull_request.head.sha }}
+          expected-repository: ${{ github.repository }}
+          expected-base-branch: main
+          allow-semver-minor: "true"
+          comment-when-held: "true"
+          required-checks: |
+            test
