@@ -13,12 +13,14 @@ from datetime import timedelta
 from io import StringIO
 
 import pytest
+from django.apps import apps
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.utils import timezone
 
 from blockauth.apps import validate_wallet_login_settings
+from blockauth.conf import auth_settings
 from blockauth.models.wallet_login_nonce import WalletLoginNonce
 
 # =============================================================================
@@ -134,6 +136,106 @@ class TestStartupValidation:
         settings.WALLET_LOGIN_EXPECTED_DOMAINS = ("app.example.com",)
         settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
         monkeypatch.setattr("sys.argv", ["manage.py", "migrate"])
+        validate_wallet_login_settings()
+
+    # ---- SIWE domains are only required when a SIWE-backed feature is on ----
+    #
+    # Only the WALLET_LOGIN and WALLET_LINK routes reach the SIWE service. A
+    # deployment with both disabled must boot without SIWE settings. The
+    # tests patch ``auth_settings.FEATURES`` so the real ``is_feature_enabled``
+    # path (the one that mounts routes) is exercised. They call
+    # ``validate_wallet_login_settings`` directly; that ``ready()`` invokes it
+    # is covered by ``test_ready_runs_wallet_settings_validation``. Patching
+    # ``FEATURES`` replaces the snapshot ``blockauth.conf`` takes of
+    # ``BLOCK_AUTH_SETTINGS["FEATURES"]``, so that settings read is not
+    # exercised here.
+
+    @staticmethod
+    def _serving_boot_without_domains(settings, monkeypatch, features):
+        settings.DEBUG = False
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ()
+        settings.WALLET_LOGIN_SKIP_STARTUP_VALIDATION = False
+        monkeypatch.setattr("sys.argv", ["gunicorn", "myapp.wsgi:application"])
+        monkeypatch.setattr(auth_settings, "FEATURES", features)
+
+    def test_wallet_features_disabled_skips_domain_check(self, settings, monkeypatch):
+        self._serving_boot_without_domains(settings, monkeypatch, {"WALLET_LOGIN": False, "WALLET_LINK": False})
+        # Must not raise.
+        validate_wallet_login_settings()
+
+    def test_wallet_login_enabled_still_requires_domains(self, settings, monkeypatch):
+        self._serving_boot_without_domains(settings, monkeypatch, {"WALLET_LOGIN": True, "WALLET_LINK": False})
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    def test_wallet_link_enabled_still_requires_domains(self, settings, monkeypatch):
+        self._serving_boot_without_domains(settings, monkeypatch, {"WALLET_LOGIN": False, "WALLET_LINK": True})
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    @pytest.mark.parametrize("enabled_feature", ["WALLET_LOGIN", "WALLET_LINK"])
+    @pytest.mark.parametrize(
+        "domains, message",
+        [
+            ("app.example.com", "list, tuple or set"),
+            (("app.example.com", ""), "invalid entries"),
+            (("app.example.com", "   "), "invalid entries"),
+        ],
+    )
+    def test_enabled_wallet_feature_rejects_malformed_domains(
+        self, settings, monkeypatch, enabled_feature, domains, message
+    ):
+        features = {"WALLET_LOGIN": False, "WALLET_LINK": False, enabled_feature: True}
+        self._serving_boot_without_domains(settings, monkeypatch, features)
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = domains
+        with pytest.raises(ImproperlyConfigured, match=message):
+            validate_wallet_login_settings()
+
+    @pytest.mark.parametrize("enabled_feature", ["WALLET_LOGIN", "WALLET_LINK"])
+    @pytest.mark.parametrize(
+        "domain",
+        ["https://x.com", "x.com/path", ":5173", "example.com:abc", "user@example.com"],
+    )
+    def test_enabled_wallet_feature_rejects_domains_the_service_would_drop(
+        self, settings, monkeypatch, enabled_feature, domain
+    ):
+        """An entry ``WalletLoginService`` discards must fail at boot, not on the first challenge."""
+        features = {"WALLET_LOGIN": False, "WALLET_LINK": False, enabled_feature: True}
+        self._serving_boot_without_domains(settings, monkeypatch, features)
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = ("app.example.com", domain)
+        with pytest.raises(ImproperlyConfigured, match="invalid entries"):
+            validate_wallet_login_settings()
+
+    @pytest.mark.parametrize("domain", ["app.example.com", "App.Example.com:8443", "localhost:5173", "[::1]:5173"])
+    def test_enabled_wallet_feature_accepts_valid_authorities(self, settings, monkeypatch, domain):
+        self._serving_boot_without_domains(settings, monkeypatch, {"WALLET_LOGIN": True, "WALLET_LINK": True})
+        settings.WALLET_LOGIN_EXPECTED_DOMAINS = (domain,)
+        # Must not raise.
+        validate_wallet_login_settings()
+
+    def test_skipped_check_logs_that_wallet_features_are_disabled(self, settings, monkeypatch, caplog):
+        self._serving_boot_without_domains(settings, monkeypatch, {"WALLET_LOGIN": False, "WALLET_LINK": False})
+        with caplog.at_level("DEBUG", logger="blockauth.apps"):
+            validate_wallet_login_settings()
+        assert "SIWE allow-list validation skipped" in caplog.text
+
+    def test_ready_runs_wallet_settings_validation(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("blockauth.apps.validate_wallet_login_settings", lambda: calls.append(True))
+        apps.get_app_config("blockauth").ready()
+        assert calls == [True]
+
+    @pytest.mark.parametrize("features", [{}, {"SIGNUP": True}, {"WALLET_LOGIN": False}, {"WALLET_LINK": False}])
+    def test_unset_wallet_features_default_to_enabled(self, settings, monkeypatch, features):
+        """A missing key counts as enabled, exactly as it does when routes mount."""
+        self._serving_boot_without_domains(settings, monkeypatch, features)
+        with pytest.raises(ImproperlyConfigured, match="non-empty"):
+            validate_wallet_login_settings()
+
+    def test_wallet_email_add_alone_does_not_require_domains(self, settings, monkeypatch):
+        features = {"WALLET_LOGIN": False, "WALLET_LINK": False, "WALLET_EMAIL_ADD": True}
+        self._serving_boot_without_domains(settings, monkeypatch, features)
+        # Must not raise.
         validate_wallet_login_settings()
 
 
